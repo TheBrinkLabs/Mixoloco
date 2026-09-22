@@ -1,0 +1,113 @@
+rules_version = '2';
+
+// Weekly league data model — adapted from Capitle's own firestore.rules
+// (same players/leagueRooms/leagueMeta shape), simplified for Mixoloco's
+// single game mode:
+//
+//   players/{uid}                      — profile + tier/room pointer
+//   players/{uid}/scores/{weekId}      — ONE doc per (uid, week): this
+//                                         week's best single-run score,
+//                                         not a sum across several docs
+//                                         (there's only one game mode
+//                                         here, and leagues rank on your
+//                                         highest score in the week, not
+//                                         a cumulative total).
+//   players/{uid}/weekHistory/{weekId} — frozen results + credits
+//                                         awarded, written by the
+//                                         rollover job only.
+//   leagueRooms/{roomId}               — room roster + metadata
+//   leagueMeta/*                       — current-week pointer + rollover log
+//
+// Everything that must be tamper-proof (tier, roomId, pendingJoin,
+// weekHistory, leagueRooms, leagueMeta) is written ONLY by the weekly/
+// daily GitHub Actions jobs via the Firebase Admin SDK, which bypasses
+// these rules entirely — so "allow write: if false" here correctly locks
+// out every client without blocking those jobs.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedInAs(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /players/{uid} {
+      allow read: if true; // leaderboard needs to read every room member's profile/tier
+
+      allow create: if isSignedInAs(uid)
+        && request.resource.data.keys().hasAll(
+             ['nickname', 'nicknameLower', 'tier', 'roomId', 'pendingJoin', 'createdAt', 'updatedAt'])
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() > 0
+        && request.resource.data.nickname.size() <= 20
+        && request.resource.data.tier == 'bronze'   // can only ever self-create as bronze
+        && request.resource.data.roomId == null
+        && request.resource.data.pendingJoin == true
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // Clients may only ever touch this allow-listed set of fields —
+      // tier/roomId/createdAt are frozen from the client's point of view,
+      // changeable only by the rollover/daily-join jobs' Admin SDK
+      // writes, which bypass rules. pendingJoin is the one exception: a
+      // client may flip it false -> true, but ONLY when the rollover job
+      // has already parked them (roomId null, pendingJoin already false
+      // — the state it sets when pruning an inactive player). That's "I'm
+      // playing again, please re-queue me," not a way to self-assign
+      // into a room or bypass tier placement.
+      allow update: if isSignedInAs(uid)
+        && request.resource.data.updatedAt == request.time
+        && (
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+               ['nickname', 'nicknameLower', 'updatedAt', 'lastActiveAt'])
+             || (
+                  resource.data.roomId == null
+                  && resource.data.pendingJoin == false
+                  && request.resource.data.pendingJoin == true
+                  && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+                       ['pendingJoin', 'updatedAt', 'lastActiveAt'])
+                )
+           );
+
+      allow delete: if false;
+
+      match /scores/{weekId} {
+        allow read: if true; // needed to score rooms + show a live leaderboard
+
+        // First score of the week for this player.
+        allow create: if isSignedInAs(uid)
+          && request.resource.data.weekId == weekId
+          && request.resource.data.bestScore is int
+          && request.resource.data.bestScore >= 0
+          && request.resource.data.bestScore <= 5000000 // generous sanity ceiling, not real anti-cheat
+          && request.resource.data.updatedAt == request.time;
+
+        // A later run this week may only ever raise bestScore — "leaders
+        // are based on your highest score" is enforced here, not just by
+        // client-side transaction logic (see LeagueRepository.submitWeeklyScore).
+        allow update: if isSignedInAs(uid)
+          && request.resource.data.weekId == weekId
+          && request.resource.data.bestScore is int
+          && request.resource.data.bestScore > resource.data.bestScore
+          && request.resource.data.bestScore <= 5000000
+          && request.resource.data.updatedAt == request.time;
+
+        allow delete: if false;
+      }
+
+      match /weekHistory/{weekId} {
+        allow read: if true;
+        allow write: if false; // rollover job only
+      }
+    }
+
+    match /leagueRooms/{roomId} {
+      allow read: if true;
+      allow write: if false; // rollover job only
+    }
+
+    match /leagueMeta/{document=**} {
+      allow read: if true;
+      allow write: if false; // rollover job only
+    }
+  }
+}

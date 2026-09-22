@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -38,6 +39,18 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // Unity Ads — the one network behind Unity LevelPlay mediation that
+    // needs no separate account (LevelPlay itself is a Unity product).
+    // Exact SDK/adapter version pairing per Unity's own published
+    // versions.json for this adapter release — same pairing already
+    // proven working in Capitle. Add Vungle/Meta/Mintegral adapters here
+    // later the same way if those accounts get set up for Mixoloco too
+    // (see Capitle's own build.gradle.kts for that exact pattern).
+    implementation("com.unity3d.ads:unity-ads:4.20.0")
+    implementation("com.unity3d.ads-mediation:unityads-adapter:5.12.0")
 }
 
 flutter {

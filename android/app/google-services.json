@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "727783490936",
+    "project_id": "mixoloco-dcb85",
+    "storage_bucket": "mixoloco-dcb85.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:727783490936:android:1635ad198e4020420b748d",
+        "android_client_info": {
+          "package_name": "com.brinklabs.mixoloco"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLBaFQVPICtmaMjqzwNzyVKeKIEAEN7go"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

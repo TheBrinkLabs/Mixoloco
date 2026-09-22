@@ -1,0 +1,28 @@
+name: Weekly League Rollover
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Monday 00:00 UTC
+  workflow_dispatch: {} # manual trigger — testing, backfill, or retrying a failed run
+
+jobs:
+  rollover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tools/league-rollover/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tools/league-rollover
+        run: npm ci
+
+      - name: Run rollover
+        working-directory: tools/league-rollover
+        run: node rollover.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

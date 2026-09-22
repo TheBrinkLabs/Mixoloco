@@ -1,6 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Unity LevelPlay (and Unity Ads, the network mediated behind it)
+         only make ad requests while actually connected when this is
+         granted; without it they'll still work but may attempt requests
+         with no network. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <application
-        android:label="mixoloco"
+        android:label="Mixoloco"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

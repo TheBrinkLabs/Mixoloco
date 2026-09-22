@@ -52,3 +52,12 @@ android/local.properties
 
 # Firebase Admin SDK service account — never committed
 *firebase-adminsdk*.json
+
+# Ad-hoc on-device QA screenshots and asset-processing scratch output —
+# real project assets always live under assets/, never loose at the repo
+# root, so anything matching these at the top level is throwaway.
+/*.png
+/*.jpg
+/*.jpeg
+/screencap_err.txt
+.asset_backup_*/

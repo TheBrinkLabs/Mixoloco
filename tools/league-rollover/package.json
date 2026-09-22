@@ -1,0 +1,15 @@
+{
+  "name": "mixoloco-league-rollover",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Weekly Mixoloco league rollover job — promotion/relegation, room reassignment, credit rewards. Runs via GitHub Actions (see .github/workflows/league-rollover.yml and league-daily-join.yml), never as part of the Flutter app build.",
+  "type": "commonjs",
+  "main": "rollover.js",
+  "scripts": {
+    "start": "node rollover.js",
+    "daily-join": "node assignNewJoiners.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}
