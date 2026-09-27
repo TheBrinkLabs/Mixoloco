@@ -149,9 +149,9 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     }
   }
 
-  void _useAlcoholFree() {
-    if (ref.read(gameStateProvider.notifier).spendCredits(kAlcoholFreeCost)) {
-      _game.clearAlcoholic();
+  void _useMiniShots() {
+    if (ref.read(gameStateProvider.notifier).spendCredits(kMiniShotsCost)) {
+      _game.clearMiniShots();
     }
   }
 
@@ -203,8 +203,22 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
   /// Every [kAdBreakScoreThreshold] points, a short MREC ad break — the
   /// physics world pauses underneath while it's up so nothing keeps
   /// falling/merging out of view, then resumes once dismissed.
+  ///
+  /// [_showingAdBreak] is already true (set by the caller before this
+  /// runs) for this whole method, including the wait below — blockInput
+  /// already covers that flag, so the player can't start a new throw
+  /// during the wait either; the staged item just sits there untouched
+  /// until [MixolocoGame.resumeEngine] at the end, same as it would
+  /// during the ad itself.
   Future<void> _runAdBreak(AppLocale locale) async {
     if (!mounted) return;
+    // Let any in-flight merge/cocktail-reveal animation finish playing
+    // out first, rather than freezing the engine mid-burst — a merge
+    // crossing the score threshold shouldn't cut its own explosion short.
+    while (_game.isAnimating) {
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+    }
     _game.pauseEngine();
     await showAdBreakScreen(context, locale);
     if (!mounted) return;
@@ -226,7 +240,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     ref.read(gameStateProvider.notifier).enterLevel(2);
     _game.switchToLevel(2);
     ref.read(audioSettingsProvider.notifier).playGameMusic(rooftop: true);
-    await showLevelUpOverlay(context, locale);
+    await showLevelUpOverlay(context, locale, level: 2);
     if (!mounted) return;
     ref.read(gameStateProvider.notifier).acknowledgeLevelUpCelebration();
     _game.resumeEngine();
@@ -239,6 +253,11 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     final locale = ref.watch(localeProvider);
     final screenSize = MediaQuery.sizeOf(context);
     final rooftop = board.level >= 2;
+    // Level 3's own table/header-board art hasn't landed yet (more to
+    // come) — reuses the rooftop's for now via [rooftop] above, but the
+    // background photo itself is ready (see backgroundAssetPathForLevel),
+    // so it swaps in as soon as a run ever reaches level 3.
+    final backgroundAssetPath = backgroundAssetPathForLevel(board.level);
     final geometry = BoardGeometry.of(screenSize, rooftop: rooftop);
     if (!geometry.isValid) return const SizedBox.shrink();
 
@@ -315,7 +334,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
       canPop: _allowPop,
       child: Scaffold(
         body: BarBackdrop(
-          backgroundAssetPath: rooftop ? 'assets/images/rooftop_background.png' : 'assets/images/beach_background.png',
+          backgroundAssetPath: backgroundAssetPath,
           shakeTrigger: _tableShakeSignal,
           rooftop: rooftop,
           child: Stack(
@@ -398,10 +417,10 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
                 child: _ActionButton(
                   asset: 'assets/images/alcohol_free.png',
                   size: actionTileSize,
-                  label: tr(locale, 'alcohol_free_label'),
-                  cost: kAlcoholFreeCost,
-                  enabled: board.credits >= kAlcoholFreeCost,
-                  onTap: _useAlcoholFree,
+                  label: tr(locale, 'mini_shots_label'),
+                  cost: kMiniShotsCost,
+                  enabled: board.credits >= kMiniShotsCost,
+                  onTap: _useMiniShots,
                 ),
               ),
               Positioned(
@@ -1130,6 +1149,9 @@ class _MenuListRow extends StatelessWidget {
   }
 }
 
+/// Deliberately light dim — per feedback the table/board behind should
+/// stay "quite visible" rather than the old opaque-feeling card overlay,
+/// since the whole point is the player can still see how the game ended.
 class _GameOverOverlay extends StatelessWidget {
   final BoardState board;
   final VoidCallback onHome;
@@ -1141,51 +1163,51 @@ class _GameOverOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withValues(alpha: 0.55),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(tr(locale, 'game_over'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textLight)),
-                const SizedBox(height: 6),
-                Text('${tr(locale, 'score_label')}: ${board.score}', style: const TextStyle(fontSize: 16, color: AppColors.textMuted)),
-                Text('${tr(locale, 'cocktails_made_label')}: ${board.cocktailsMade}', style: const TextStyle(fontSize: 16, color: AppColors.textMuted)),
-                const SizedBox(height: 18),
-                GestureDetector(
-                  onTap: onPlayAgain,
-                  child: Container(
-                    width: 200,
-                    height: 50,
-                    decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(16)),
-                    child: Center(
-                      child: Text(tr(locale, 'play_again'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
-                    ),
+        color: Colors.black.withValues(alpha: 0.28),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Text(
+                '${tr(locale, 'score_label')}: ${board.score}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textLight,
+                  shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+                ),
+              ),
+              Text(
+                '${tr(locale, 'cocktails_made_label')}: ${board.cocktailsMade}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textLight,
+                  shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: onPlayAgain,
+                child: Container(
+                  width: 180,
+                  height: 44,
+                  decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(14)),
+                  child: Center(
+                    child: Text(tr(locale, 'play_again'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
                   ),
                 ),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: onHome,
-                  child: Container(
-                    width: 200,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                    ),
-                    child: Center(
-                      child: Text(tr(locale, 'home'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textLight)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 18),
+              GestureDetector(
+                onTap: onHome,
+                child: Image.asset('assets/images/game_over.png', width: MediaQuery.of(context).size.width * 0.78),
+              ),
+              // Clears the table's own front-face Next/Order cards docked
+              // at the very bottom (see the Positioned pair above in
+              // GameScreen.build) — plain bottom SafeArea padding alone
+              // isn't enough since those cards aren't a system inset.
+              const SizedBox(height: 110),
+            ],
           ),
         ),
       ),

@@ -1,22 +1,52 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:video_player/video_player.dart';
 import '../i18n/strings.dart';
 import '../services/locale_provider.dart';
 import '../theme/app_theme.dart';
+import 'banner_ad_widget.dart';
 
 const _capitlePlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.brinklabs.capitle';
+
+/// How close to the very end counts as "finished" — video_player's
+/// position updates don't always land exactly on duration (the last
+/// reported position can sit a frame or two short), so waiting for an
+/// exact match can leave Continue stuck just short of unlocking.
+const _completionTolerance = Duration(milliseconds: 300);
 
 /// Stands in for the real rewarded "clear shots and continue" ad (see
 /// GameScreen._watchAdToContinue) when it isn't available — not
 /// configured yet, or no fill. Rather than leaving the continue-offer
-/// as a dead end, this plays a short YouTube video in its place, with
-/// the same "minimum watch, then continue" shape as the MREC ad break
-/// (see ad_break_screen.dart). Returns true once the player's watched
-/// long enough to continue, false if they back out early — the caller
-/// treats a false the same as declining the offer outright.
+/// as a dead end, this plays a short Capitle video in its place. Unlike
+/// the MREC ad break's fixed minimum-watch timer, Continue only unlocks
+/// once the video has actually finished playing — this is standing in
+/// for a real rewarded ad, which the same way requires watching the
+/// whole thing, not a skippable placeholder. Returns true once that
+/// happens, false if the player backs out early — the caller treats a
+/// false the same as declining the offer outright.
+///
+/// Used to embed a YouTube Short via WebView instead — dropped after a
+/// field report showed "This video is unavailable — Error code: 152-4"
+/// for every user, which turned out to be YouTube itself refusing to
+/// embed that video (152 means the uploader/platform has embedding
+/// disabled for it — common for Shorts specifically), not a WebView
+/// config issue the way an earlier fix attempt assumed. A locally
+/// bundled video file sidesteps that category of problem entirely —
+/// same approach already proven working for the MREC/banner Capitle
+/// ads (see video_mrec_ad.dart, banner_ad_widget.dart's _CapitleBanner).
+///
+/// Plays assets/videos/continue_fallback_capitle.mp4 (720x1280, a "99%
+/// Fail" geography-challenge clip) at a moderate boxed size, not
+/// stretched full-bleed to fill the screen — confirmed on-device that
+/// scaling this same file up to fill the whole portrait frame is what
+/// breaks rendering (leaves the texture a flat grey indefinitely, even
+/// though decode/duration/position all genuinely advance); the identical
+/// file plays back fine at a small MREC-card size. Sized to the video's
+/// own 9:16 aspect rather than force-cropped into a square/landscape box
+/// the way the MREC fallback's 300x250 card is. The whole video is the
+/// tap target for Capitle's Play Store listing — no separate CTA button
+/// — matching how a real video ad's click-through normally works.
 Future<bool> showContinueFallbackVideo(BuildContext context, AppLocale locale) async {
   final result = await Navigator.of(context).push<bool>(
     MaterialPageRoute(fullscreenDialog: true, builder: (_) => _ContinueFallbackVideoScreen(locale: locale)),
@@ -24,81 +54,74 @@ Future<bool> showContinueFallbackVideo(BuildContext context, AppLocale locale) a
   return result ?? false;
 }
 
-class _ContinueFallbackVideoScreen extends StatefulWidget {
+class _ContinueFallbackVideoScreen extends ConsumerStatefulWidget {
   final AppLocale locale;
   const _ContinueFallbackVideoScreen({required this.locale});
 
   @override
-  State<_ContinueFallbackVideoScreen> createState() => _ContinueFallbackVideoScreenState();
+  ConsumerState<_ContinueFallbackVideoScreen> createState() => _ContinueFallbackVideoScreenState();
 }
 
-class _ContinueFallbackVideoScreenState extends State<_ContinueFallbackVideoScreen> {
-  // https://www.youtube.com/shorts/UKKli--cBoM
-  static const _videoId = 'UKKli--cBoM';
-  static const _minWatchSeconds = 8;
-
-  late final WebViewController _controller;
+class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackVideoScreen> {
+  late final VideoPlayerController _controller;
+  bool _ready = false;
   bool _canContinue = false;
-  int _secondsRemaining = _minWatchSeconds;
-  Timer? _countdownTimer;
-
-  static const _embedHtml = '''
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<style>html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden;}
-iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0;}</style>
-</head>
-<body>
-<iframe src="https://www.youtube.com/embed/$_videoId?autoplay=1&playsinline=1&rel=0&controls=1"
-  allow="autoplay; encrypted-media" allowfullscreen></iframe>
-</body>
-</html>
-''';
+  int _secondsRemaining = 0;
 
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black);
-    // Android WebView blocks autoplaying media without a user gesture by
-    // default — the embed URL's autoplay=1 param can't override that on
-    // its own, so this needs to be turned off explicitly.
-    final platform = _controller.platform;
-    if (platform is AndroidWebViewController) {
-      platform.setMediaPlaybackRequiresUserGesture(false);
-    }
-    // Loading the bare /embed/ URL directly (loadRequest) gives
-    // YouTube's player no real page origin to validate the request
-    // against, which is what was showing as "video configuration
-    // error" — wrapping it in a minimal HTML page with an explicit
-    // baseUrl gives it one, which is the standard fix for embedding
-    // YouTube reliably inside a WebView.
-    _controller.loadHtmlString(_embedHtml, baseUrl: 'https://www.youtube.com');
-    // The countdown runs on our own timer rather than anything the
-    // embedded player reports — same reasoning as the MREC ad break:
-    // there's no reliable "did they actually watch" signal to hook into
-    // for an arbitrary embedded page, so this is a product-level stand-in
-    // for that, not a real playback-completion check.
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      if (_secondsRemaining <= 1) {
-        timer.cancel();
+    // GameScreen (the only real caller — see _watchAdToContinue) already
+    // hides the persistent banner for as long as it's mounted, so this
+    // is normally redundant — but it's not safe to rely on that: this
+    // widget is also reachable in isolation (e.g. a debug/test entry
+    // point that skips GameScreen), where nothing else would have
+    // hidden it, and the banner ends up sitting over the Continue
+    // button. Deliberately does NOT restore it to `bottom` on dispose
+    // — this screen pops back to GameScreen, which still wants it
+    // hidden for the rest of the run; only GameScreen's own dispose
+    // should ever bring it back.
+    ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
+    _controller = VideoPlayerController.asset('assets/videos/continue_fallback_capitle.mp4');
+    _controller
+      ..setVolume(0)
+      ..initialize().then((_) {
+        if (!mounted) return;
         setState(() {
-          _secondsRemaining = 0;
-          _canContinue = true;
+          _ready = true;
+          _secondsRemaining = _controller.value.duration.inSeconds;
         });
-      } else {
-        setState(() => _secondsRemaining--);
-      }
-    });
+        _controller.play();
+      }).catchError((_) {
+        // A broken/unplayable video shouldn't trap the player on a dead
+        // screen with no way forward — same "never leave a hard stop"
+        // reasoning as every other ad-fallback in this chain.
+        if (!mounted) return;
+        setState(() => _canContinue = true);
+      });
+    _controller.addListener(_onVideoTick);
+  }
+
+  void _onVideoTick() {
+    if (!mounted || !_ready || _canContinue) return;
+    final position = _controller.value.position;
+    final duration = _controller.value.duration;
+    if (duration == Duration.zero) return;
+
+    final remainingMs = (duration - position).inMilliseconds;
+    final remainingSeconds = (remainingMs / 1000).ceil().clamp(0, duration.inSeconds);
+    if (remainingSeconds != _secondsRemaining) {
+      setState(() => _secondsRemaining = remainingSeconds);
+    }
+    if (remainingMs <= _completionTolerance.inMilliseconds) {
+      setState(() => _canContinue = true);
+    }
   }
 
   @override
   void dispose() {
-    _countdownTimer?.cancel();
+    _controller.removeListener(_onVideoTick);
+    _controller.dispose();
     super.dispose();
   }
 
@@ -125,32 +148,29 @@ iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0;}</style>
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.textMuted),
                 ),
               ),
-              GestureDetector(
-                onTap: _openPlayStore,
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(color: AppColors.surface2, borderRadius: BorderRadius.circular(12)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Color(0xFF00D2FF), Color(0xFF00F076), Color(0xFFFFCF00), Color(0xFFFF3A44)],
-                          stops: [0.0, 0.4, 0.65, 1.0],
-                        ).createShader(bounds),
-                        child: const Icon(Icons.play_arrow_rounded, size: 18, color: Colors.white),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Capitle — get it on Google Play',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textMuted),
-                      ),
-                    ],
+              Expanded(
+                child: Center(
+                  child: GestureDetector(
+                    onTap: _openPlayStore,
+                    child: Container(
+                      width: 320,
+                      height: 320 * 16 / 9,
+                      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
+                      clipBehavior: Clip.antiAlias,
+                      child: _ready
+                          ? FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: _controller.value.size.width,
+                                height: _controller.value.size.height,
+                                child: VideoPlayer(_controller),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
                   ),
                 ),
               ),
-              Expanded(child: WebViewWidget(controller: _controller)),
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: GestureDetector(

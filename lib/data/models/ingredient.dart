@@ -43,8 +43,12 @@ enum DebrisType { glass, peel, leaf }
 /// contact size *and* the rendered art shrink together with no gap
 /// introduced (the render size is always derived from the same radius
 /// passed into the physics body — see IngredientBodyComponent). Default
-/// 1.0; only rum and cranberry currently deviate (0.95, "5% smaller"
-/// per feedback that they read a touch large next to their neighbors).
+/// 1.0 — every Level 1 ingredient is already 5% smaller than its
+/// original size via kBaseRadiusMeters' own global factor (see
+/// mixoloco_game.dart), so 1.0 here already means "the standard 5%
+/// smaller." Only rum currently deviates on top of that, at 0.9684,
+/// landing it at an effective 8% smaller overall per feedback it still
+/// read a touch large next to its neighbors even at the standard rate.
 ///
 /// [displayScaleX] is a second, *horizontal-only* correction on top of
 /// that — needed because [displayScale] alone only calibrates the single
@@ -60,17 +64,95 @@ enum DebrisType { glass, peel, leaf }
 /// closes that gap directly. Measured per-ingredient the same precise
 /// way (scratchpad/art_tool/measure_geomean.dart:
 /// `contentHalfHeight / contentHalfWidth`, i.e. how much narrower the
-/// content is than it is tall), capped at 1.7 — raised from an original
-/// 1.45 per feedback that items should actually touch (a very slight
-/// overlap is fine, a gap isn't), but 1.7 is itself a deliberate ceiling,
-/// not every ingredient's true ratio: removing the cap entirely made the
-/// most extreme cases (soda 2.73x, champagne/prosecco 3.4x+) stretch
-/// dramatically enough to change the glass's actual shape, which was a
-/// worse outcome than the small residual gap those specific items still
-/// have at 1.7x. 1.7 itself is empirically chosen, not derived — it's
-/// where vodka/rum/blue curaçao (already right at ~1.65x) read as a
-/// perfectly natural "slightly wider glass" rather than a visibly
-/// stretched one.
+/// content is than it is tall), capped at 1.7 for most ingredients —
+/// raised from an original 1.45 per feedback that items should actually
+/// touch (a very slight overlap is fine, a gap isn't), but 1.7 is itself
+/// a deliberate ceiling, not every ingredient's true ratio: an early
+/// attempt at removing the cap entirely stretched everything by its own
+/// raw measured value, including cases dominated by a source photo's own
+/// asymmetric padding or off-center garnish rather than the glass's true
+/// proportions, and those specific cases changed shape dramatically. 1.7
+/// itself is empirically chosen, not derived — it's where vodka/rum/blue
+/// curaçao (already right at ~1.65x) read as a perfectly natural
+/// "slightly wider glass" rather than a visibly stretched one.
+///
+/// jug/pineapple were exactly that failure mode: both photos had badly
+/// asymmetric transparent padding (the jug's decorative umbrella
+/// garnish pulled its own visual weight upward and sideways; the
+/// pineapple glass had a large empty gap above its rim), which the old
+/// farthest-point/aspect-ratio measurement couldn't tell apart from the
+/// glass's own true shape — re-centering both source images tight to
+/// their actual content (see tools/center_ingredient_art.dart) resolved
+/// almost all of the visible mismatch on its own, and their true ratios
+/// measured out to 1.73/1.67 respectively once centered correctly —
+/// close enough to the standard cap that no real exception was needed.
+/// soda's centering was already correct — its true ratio (2.73) was
+/// tried uncapped once, but per feedback it read as short and fat rather
+/// than the tall narrow glass it should be, so it's back to the standard
+/// 1.7 cap. The lesson holds generally: a narrow tall glass keeping a
+/// small residual gap at 1.7 reads better than a fully "correct" but
+/// visibly squat/stretched one — this is why tonic (similarly narrow)
+/// stays at the standard cap too.
+///
+/// champagne/prosecco are the extreme end of this problem — their true
+/// ratio (~3.45) is so far past the 1.7 cap that even the capped render
+/// only reaches about half the width needed to touch a same-tier
+/// neighbor, reading as a genuinely large gap rather than a small
+/// residual one, and both are shaped nothing like a simple cylinder (a
+/// bottle's narrow neck vs. wide body; a flute's wide bowl, thin stem,
+/// wide foot) — no single width-stretch factor fits a shape whose width
+/// varies that dramatically top to bottom without distorting it exactly
+/// like soda's rejected uncap. Per feedback, these two instead get a
+/// [Ingredient.collisionProfile]: a compound Box2D shape built from
+/// several stacked circles that actually hugs the bottle/flute silhouette
+/// instead of one oversized bounding circle, so neighbors can nestle into
+/// the real narrow stem/neck the same way they would against the real
+/// art — closing the gap by fixing the collision shape instead of
+/// stretching the art, so both stay at their natural, undistorted
+/// proportions (displayScaleX back to 1.0).
+/// One circle in a compound Box2D collision shape — see
+/// [Ingredient.collisionProfile] and [Ingredient.extraCircles]. [offsetX],
+/// [offsetY], and [radius] are all fractions of the body's nominal tier
+/// radius (not raw meters), so the same profile scales correctly whatever
+/// radius that tier resolves to. [offsetY] follows the game's own Y-down
+/// convention (matching TableBoundaryComponent/game-over line): negative
+/// is toward the far/serving edge (top of screen), positive toward the
+/// near/staging edge (bottom) — e.g. a bottle's neck is a small radius at
+/// a negative offsetY, its wide base a larger radius at a positive one.
+/// [offsetX] defaults to 0 (centered) — every compound-profile shape so
+/// far has been left/right symmetric; only an off-center appendage like
+/// tonic's straw (see [Ingredient.extraCircles]) needs it non-zero. Since
+/// this offset is in the body's own local space, it rotates along with
+/// the body (and the art, which Flame rotates to match) rather than
+/// staying screen-locked — exactly what an appendage fixed to the glass
+/// needs.
+class CollisionCircle {
+  const CollisionCircle({this.offsetX = 0.0, required this.offsetY, required this.radius});
+  final double offsetX;
+  final double offsetY;
+  final double radius;
+}
+
+/// A vertical capsule (a line segment with a radius, i.e. a true
+/// rounded-rectangle/cylinder shape) as a collision shape — the correct
+/// fit for a simple uniform-width glass (soda, tonic) rather than
+/// champagne/prosecco's varying-width compound circles, since a cylinder
+/// doesn't need multiple different-sized circles to approximate it, just
+/// one shape whose ends are already rounded. [halfLength], [radius], and
+/// [offsetY] are all fractions of the body's nominal tier radius, same
+/// convention as [CollisionCircle]. [offsetY] defaults to 0 (the capsule
+/// centered on the body, correct whenever the glass itself is centered
+/// in its own source image) — tonic needs it non-zero because its straw
+/// pulls the image's own bounding box upward off the glass body's true
+/// center (see its entry and [Ingredient.extraCircles]). See
+/// [Ingredient.collisionCapsule].
+class CollisionCapsule {
+  const CollisionCapsule({required this.halfLength, required this.radius, this.offsetY = 0.0});
+  final double halfLength;
+  final double radius;
+  final double offsetY;
+}
+
 class Ingredient {
   final String id;
   final String label;
@@ -83,15 +165,45 @@ class Ingredient {
   final double sizeMultiplier;
   final int tier;
 
-  /// Whether this ingredient counts toward the Alcohol-Free purchase's
-  /// clear-the-table effect (see MixolocoGame.clearAlcoholic). A flag
-  /// rather than a hardcoded id list at the call site — the rooftop
-  /// chain alone adds five more alcoholic ingredients (Gin, Whisky,
-  /// Vermouth, Coffee Liqueur, Melon Liqueur) on top of the beach
-  /// chain's three (Vodka, Rum, Blue Curaçao), and a per-ingredient flag
-  /// scales to that without the clearing logic needing to know the full
-  /// list by name.
+  /// A compound collision shape (several stacked circles) approximating
+  /// this ingredient's true silhouette instead of one bounding circle —
+  /// see the class doc's champagne/prosecco paragraph for why. Null (the
+  /// default, and every ingredient except those two) keeps the plain
+  /// single circle of the tier's nominal radius.
+  final List<CollisionCircle>? collisionProfile;
+
+  /// A capsule collision shape for a simple, uniform-width cylinder glass
+  /// — see [CollisionCapsule] and soda/tonic's entries. Mutually exclusive
+  /// with [collisionProfile] in practice (nothing currently sets both).
+  final CollisionCapsule? collisionCapsule;
+
+  /// Extra circles added on top of whichever primary shape above is
+  /// active (capsule, profile, or the plain default circle) — for a
+  /// protruding appendage that isn't part of the glass's own main body,
+  /// like tonic's straw sticking up out of one side of the rim. Unlike
+  /// [collisionProfile], these can (and typically do, for an off-center
+  /// appendage) set a non-zero [CollisionCircle.offsetX].
+  final List<CollisionCircle>? extraCircles;
+
+  /// Whether this ingredient counts toward the rewarded-ad "clear all
+  /// shots" continue's clear-the-table effect (see
+  /// MixolocoGame.clearAlcoholic/clearAlcoholicAndResume) — the mid-game
+  /// purchase that used to share this same flag was replaced by Slam
+  /// Mini-Shots' own, narrower [isMiniShot] flag. A flag rather than a
+  /// hardcoded id list at the call site — the rooftop chain alone adds
+  /// five more alcoholic ingredients (Gin, Whisky, Vermouth, Coffee
+  /// Liqueur, Melon Liqueur) on top of the beach chain's three (Vodka,
+  /// Rum, Blue Curaçao), and a per-ingredient flag scales to that
+  /// without the clearing logic needing to know the full list by name.
   final bool isAlcoholic;
+
+  /// Whether this ingredient counts toward the Slam Mini-Shots purchase's
+  /// clear-the-table effect (see MixolocoGame.clearMiniShots) — a much
+  /// narrower list than [isAlcoholic] (just Vodka, Melon Liqueur, Gin,
+  /// Coffee Liqueur, the actual shot-glass drinks, not every alcoholic
+  /// ingredient), so it gets its own flag rather than overloading that
+  /// one.
+  final bool isMiniShot;
 
   const Ingredient({
     required this.id,
@@ -105,6 +217,10 @@ class Ingredient {
     this.displayScaleX = 1.0,
     this.sizeMultiplier = 1.0,
     this.isAlcoholic = false,
+    this.isMiniShot = false,
+    this.collisionProfile,
+    this.collisionCapsule,
+    this.extraCircles,
   });
 }
 
@@ -155,6 +271,7 @@ const kEvolutionChain = [
     displayScale: 1.044,
     displayScaleX: 1.652,
     isAlcoholic: true,
+    isMiniShot: true,
   ),
   Ingredient(
     id: 'mint',
@@ -203,7 +320,12 @@ const kEvolutionChain = [
     assetPath: 'assets/images/ingredient_rum.png',
     displayScale: 1.046,
     displayScaleX: 1.654,
-    sizeMultiplier: 0.95,
+    // Every Level 1 ingredient is already 5% smaller than its original
+    // size via kBaseRadiusMeters' own global 0.95 factor (see
+    // mixoloco_game.dart) — rum additionally deviates on top of that,
+    // per feedback it should end up 8% smaller overall rather than the
+    // standard 5%: 0.95 (global) * 0.9684 (this) ≈ 0.92.
+    sizeMultiplier: 0.9684,
     isAlcoholic: true,
   ),
   Ingredient(
@@ -225,7 +347,19 @@ const kEvolutionChain = [
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_soda.png',
     displayScale: 1.103,
-    displayScaleX: 1.7,
+    // Simple uniform-width cylinder — a capsule collision shape (see
+    // CollisionCapsule) matches its true footprint exactly, closing the
+    // touching gap without needing displayScaleX to stretch (and distort)
+    // the art the way the rejected uncap attempt did.
+    //
+    // First pass measured this against the source PNG's *content* height
+    // (559x1526, minus its own 34/92px symmetric padding) instead of the
+    // *raw* canvas height that BoxFit.contain actually scales against —
+    // both radius and halfLength came out wrong (radius too big,
+    // halfLength too short, since dividing by the smaller content height
+    // inflates the per-pixel scale factor), reading as too big a gap
+    // above/below. Recomputed against the raw 627x1710 canvas instead.
+    collisionCapsule: CollisionCapsule(halfLength: 0.950, radius: 0.462),
   ),
   Ingredient(
     id: 'orange',
@@ -259,7 +393,6 @@ const kEvolutionChain = [
     assetPath: 'assets/images/ingredient_cranberry.png',
     displayScale: 1.030,
     displayScaleX: 1.361,
-    sizeMultiplier: 0.95,
   ),
   Ingredient(
     id: 'pineapple',
@@ -269,8 +402,8 @@ const kEvolutionChain = [
     shape: GlassShape.tumbler,
     debris: DebrisType.peel,
     assetPath: 'assets/images/ingredient_pineapple.png',
-    displayScale: 1.050,
-    displayScaleX: 1.7,
+    displayScale: 1.075,
+    displayScaleX: 1.671,
   ),
   Ingredient(
     id: 'jug',
@@ -280,8 +413,8 @@ const kEvolutionChain = [
     shape: GlassShape.jug,
     debris: DebrisType.glass,
     assetPath: 'assets/images/cocktail_jug.png',
-    displayScale: 1.066,
-    displayScaleX: 1.7,
+    displayScale: 1.060,
+    displayScaleX: 1.729,
   ),
 ];
 
@@ -343,6 +476,7 @@ const kEvolutionChainLevel2 = [
     displayScale: 1.044,
     displayScaleX: 1.652,
     isAlcoholic: true,
+    isMiniShot: true,
   ),
   Ingredient(
     id: 'melon_liqueur',
@@ -355,6 +489,7 @@ const kEvolutionChainLevel2 = [
     displayScale: 0.893,
     displayScaleX: 1.575,
     isAlcoholic: true,
+    isMiniShot: true,
   ),
   Ingredient(
     id: 'blackberry',
@@ -378,6 +513,7 @@ const kEvolutionChainLevel2 = [
     displayScale: 0.840,
     displayScaleX: 1.517,
     isAlcoholic: true,
+    isMiniShot: true,
   ),
   Ingredient(
     id: 'gin',
@@ -387,9 +523,36 @@ const kEvolutionChainLevel2 = [
     shape: GlassShape.tumbler,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_gin.png',
-    displayScale: 1.044,
-    displayScaleX: 1.652,
+    // Art replaced (a cut-glass goblet, on a stem/foot rather than the
+    // old tumbler) — bg-removed and recentered the same way as jug/
+    // pineapple (see tools/center_ingredient_art.dart; original backed
+    // up to assets/images/.asset_backup_batch3/), displayScale
+    // remeasured against the new art, and given a compound
+    // collisionProfile like vermouth/prosecco/champagne rather than the
+    // old displayScaleX stretch — same bowl/stem/foot shape category.
+    displayScale: 0.992,
     isAlcoholic: true,
+    isMiniShot: true,
+    // The first pass placed the rim/foot circles at their literal
+    // measured height, each sized to the true rim/foot width — but a
+    // circle that wide, centered that close to the render's own top/
+    // bottom edge, pokes out past where the art actually ends (a circle
+    // extends [radius] in *every* direction, including past the rim
+    // where there's nothing above it). That read as an oversized
+    // invisible barrier above and below the glass — closer to plausible
+    // reach on the sides (where the art continues) than top/bottom
+    // (where it doesn't). Pulled both circles' centers in just enough
+    // that top/bottom reach lands exactly on the render's own edge
+    // instead of past it, trimming the foot's radius slightly too so it
+    // doesn't collide with the stem circle above it.
+    collisionProfile: [
+      CollisionCircle(offsetY: -0.59, radius: 0.68),
+      CollisionCircle(offsetY: -0.50, radius: 0.62),
+      CollisionCircle(offsetY: 0.07, radius: 0.56),
+      CollisionCircle(offsetY: 0.50, radius: 0.32),
+      CollisionCircle(offsetY: 0.63, radius: 0.21),
+      CollisionCircle(offsetY: 0.85, radius: 0.42),
+    ],
   ),
   Ingredient(
     id: 'lime',
@@ -409,8 +572,26 @@ const kEvolutionChainLevel2 = [
     shape: GlassShape.martini,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_vermouth.png',
+    // Wide martini-style bowl on a thin stem and foot — same shape
+    // category as prosecco/champagne (see the class doc's paragraph on
+    // those), so it gets a compound collisionProfile instead of the
+    // displayScaleX stretch: its overall content ratio (1.72) happened
+    // to land right at the standard 1.7 cap, which hid how badly a
+    // uniform stretch would have distorted the thin stem specifically.
     displayScale: 0.970,
-    displayScaleX: 1.7,
+    // Pulled the rim/foot circles in from their literal measured height
+    // — see the matching comment on gin's collisionProfile for why a
+    // wide circle centered right at the render's own top/bottom edge
+    // overshoots past it (an oversized barrier above/below the glass,
+    // even though the sides read fine).
+    collisionProfile: [
+      CollisionCircle(offsetY: -0.55, radius: 0.69),
+      CollisionCircle(offsetY: -0.50, radius: 0.64),
+      CollisionCircle(offsetY: 0.00, radius: 0.52),
+      CollisionCircle(offsetY: 0.45, radius: 0.24),
+      CollisionCircle(offsetY: 0.70, radius: 0.12),
+      CollisionCircle(offsetY: 0.85, radius: 0.39),
+    ],
     isAlcoholic: true,
   ),
   Ingredient(
@@ -433,7 +614,27 @@ const kEvolutionChainLevel2 = [
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_tonic.png',
     displayScale: 1.065,
-    displayScaleX: 1.7,
+    // Simple uniform-width cylinder for the glass body — see soda's
+    // collisionCapsule comment for the raw-vs-content scale bug this
+    // also had. On top of that fix, this one also needs its own
+    // [CollisionCapsule.offsetY]: the straw sticking up out of the rim
+    // makes the source PNG's overall bounding box (which centering is
+    // based on) taller above the glass than below it, so the glass
+    // body's own true center sits lower than the image's center — this
+    // capsule targets the glass rim specifically (~16% down the content,
+    // where the width profile actually reaches the glass's full
+    // diameter) as its top, rather than the image's own top (which is
+    // the straw tip, not the glass).
+    collisionCapsule: CollisionCapsule(halfLength: 0.418, radius: 0.603, offsetY: 0.194),
+    // The straw pokes up out of one side of the rim, well above the
+    // glass's own capsule body — without this, neighbors could get close
+    // enough to visually overlap that exposed tip (a gap on that side,
+    // mirror image of vermouth/gin's earlier top/bottom overshoot bug).
+    // Measured the same width-band way as the compound profiles, but
+    // this one needs a real offsetX too since the straw sits well off
+    // to one side rather than centered. Same raw-vs-content scale fix as
+    // the capsule above.
+    extraCircles: [CollisionCircle(offsetX: 0.357, offsetY: -1.022, radius: 0.077)],
   ),
   Ingredient(
     id: 'whisky',
@@ -443,8 +644,20 @@ const kEvolutionChainLevel2 = [
     shape: GlassShape.tumbler,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_whisky.png',
-    displayScale: 1.434,
-    displayScaleX: 1.559,
+    // displayScale/displayScaleX were stale — calibrated against a
+    // previous, more padded version of this art. The current source PNG
+    // is already tightly cropped to its own content (symmetric padding,
+    // 38px sides/52px top-bottom on a 707x978 canvas) with a mild,
+    // simple taper (no waist/stem), so it needed a full remeasure rather
+    // than a tweak: 1.434 rendered it roughly 40% oversized relative to
+    // its actual physics circle — the "enormous glass, undersized-
+    // looking collision barrier" symptom was really just this stale
+    // scale inflating the art alone, not the collision shape being
+    // wrong. Its true content ratio (874/631 = 1.385) is comfortably
+    // under the standard 1.7 cap, so it's used directly, uncapped, same
+    // as vodka/rum/blue curaçao.
+    displayScale: 1.003,
+    displayScaleX: 1.385,
     isAlcoholic: true,
   ),
   Ingredient(
@@ -456,8 +669,20 @@ const kEvolutionChainLevel2 = [
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_prosecco.png',
     displayScale: 0.993,
-    displayScaleX: 1.7,
+    // 15% bigger, same as champagne — see its own sizeMultiplier comment.
+    sizeMultiplier: 1.15,
     isAlcoholic: true,
+    // Flute silhouette, top to bottom: wide bowl, narrow stem, wide foot
+    // — see the class doc's champagne/prosecco paragraph. Derived from
+    // scratchpad/asset_tool/profile_shape.dart's width-band measurement
+    // of the (already tightly cropped, zero-padding) source art.
+    collisionProfile: [
+      CollisionCircle(offsetY: -0.95, radius: 0.27),
+      CollisionCircle(offsetY: -0.55, radius: 0.34),
+      CollisionCircle(offsetY: -0.15, radius: 0.28),
+      CollisionCircle(offsetY: 0.45, radius: 0.07),
+      CollisionCircle(offsetY: 0.95, radius: 0.37),
+    ],
   ),
   Ingredient(
     id: 'champagne',
@@ -468,8 +693,22 @@ const kEvolutionChainLevel2 = [
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_champagne.png',
     displayScale: 0.996,
-    displayScaleX: 1.7,
+    // 15% bigger overall per feedback it still read a touch small —
+    // sizeMultiplier (not displayScale) since this should grow the
+    // actual physics footprint and render together, not just how much
+    // of the same circle the art fills.
+    sizeMultiplier: 1.15,
     isAlcoholic: true,
+    // Bottle silhouette, top to bottom: narrow neck/cork, tapering
+    // shoulder, wide constant-width body — see the class doc's
+    // champagne/prosecco paragraph. Derived the same way as prosecco's
+    // profile above.
+    collisionProfile: [
+      CollisionCircle(offsetY: -0.85, radius: 0.13),
+      CollisionCircle(offsetY: -0.45, radius: 0.20),
+      CollisionCircle(offsetY: 0.00, radius: 0.32),
+      CollisionCircle(offsetY: 0.75, radius: 0.37),
+    ],
   ),
 ];
 

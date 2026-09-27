@@ -19,16 +19,13 @@ int scoreForMerge(int tier) => 10 * (1 << tier);
 int scoreForCocktail(CocktailRecipe recipe) => recipe.price * 10;
 
 /// Credits awarded for reaching a new highest evolution tier, ever.
-const kTierUnlockReward = 100;
-
-/// Credits awarded each time a cocktail order is completed.
-const kCocktailCreditReward = 100;
+const kTierUnlockReward = 200;
 
 /// Credits awarded for every [kScoreCreditThreshold] points of score
 /// reached within a single game — a repeatable, per-run milestone
 /// (unlike the once-ever highest-tier reward), so it resets each game
 /// along with the score itself.
-const kScoreCreditThreshold = 10000;
+const kScoreCreditThreshold = 20000;
 const kScoreCreditReward = 100;
 
 /// Score interval between MREC ad breaks within a single run — every
@@ -52,9 +49,10 @@ const kShakerCost = 100;
 /// Mega-Shake button.
 const kMegaShakeCost = 400;
 
-/// Credits to clear every vodka, rum, and blue curaçao item currently on
-/// the table from the Alcohol-Free button.
-const kAlcoholFreeCost = 300;
+/// Credits to clear every Vodka, Melon Liqueur, Gin, and Coffee Liqueur
+/// item currently on the table from the Slam Mini-Shots button (see
+/// Ingredient.isMiniShot) — replaced the old, broader Alcohol-Free button.
+const kMiniShotsCost = 500;
 
 /// Sentinel default for [BoardState.copyWith]'s [order] param, so passing
 /// `order: null` explicitly clears the active order (buying nothing sets
@@ -450,16 +448,13 @@ class GameStateNotifier extends Notifier<BoardState> {
 
   void registerCocktailComplete(CocktailRecipe recipe) {
     if (state.gameOver) return;
-    final newCredits = state.credits + kCocktailCreditReward;
     // No more auto-cycling to a new order — the starter's a one-off, and
     // every order after it has to be bought from the Cocktail Menu.
     state = state.copyWith(
       cocktailsMade: state.cocktailsMade + 1,
       order: null,
-      credits: newCredits,
       completedCocktailIds: {...state.completedCocktailIds, recipe.id},
     );
-    saveCredits(newCredits);
     _addScore(scoreForCocktail(recipe));
     _checkLevelUp();
   }
@@ -599,26 +594,32 @@ class GameStateNotifier extends Notifier<BoardState> {
   void registerGameOver() {
     if (state.gameOver) return;
     state = state.copyWith(gameOver: true);
-    // Fire-and-forget — the high-scores screen reloads from disk itself,
-    // so nothing here needs to await this write.
-    recordScore(state.score);
-
-    // Also fire-and-forget, and silently skipped if there's no signed-in
-    // uid yet (offline cold start, Firebase not set up, or the player
-    // has never opened the league screen to sign in at all) — league
-    // features treat a missing uid as "unavailable for now," same as
-    // AuthService's own doc comment. submitWeeklyScore only actually
-    // raises the stored value if this run beat the week's existing best.
-    final uid = authService.uid;
-    if (uid != null && state.score > 0) {
-      ref.read(leagueRepositoryProvider).submitWeeklyScore(uid: uid, score: state.score).catchError((e) {});
+    // Only record once the once-per-game continue offer is no longer in
+    // play — the first time a run hits the table-full line,
+    // continueOfferUsed is still false and GameScreen is about to show
+    // the watch-ad-to-continue overlay (see showContinueOffer there), so
+    // the player might keep playing and this score isn't final yet.
+    // Recording it anyway was the bug: accepting the offer un-ends the
+    // game (see continueAfterAd) and this method fires again later with
+    // the real final score, leaving two high-score entries for what was
+    // one session. The "decline" path finalizes via declineContinue
+    // below instead, since registerGameOver never runs a second time
+    // there. This branch is what finalizes the "accepted, then genuinely
+    // ran out of table" path, where continueOfferUsed is already true by
+    // the time this second call comes through.
+    if (state.continueOfferUsed) {
+      _finalizeScore();
     }
   }
 
   /// Declines the once-per-game ad-continue offer — game stays over, but
-  /// the offer itself won't be shown again this game.
+  /// the offer itself won't be shown again this game. This is what
+  /// actually finalizes the score for a run that ends here (see
+  /// registerGameOver's own doc comment for the other, "accepted the
+  /// offer" finalization path).
   void declineContinue() {
     state = state.copyWith(continueOfferUsed: true);
+    _finalizeScore();
   }
 
   /// Accepts the ad-continue offer — called once the (placeholder) ad
@@ -627,6 +628,21 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// game and marks the offer used.
   void continueAfterAd() {
     state = state.copyWith(gameOver: false, continueOfferUsed: true);
+  }
+
+  /// Records the local high score and submits this run's league score —
+  /// called exactly once per game, at whichever point the run is truly,
+  /// finally over (see registerGameOver/declineContinue). Both writes
+  /// are fire-and-forget: the high-scores screen reloads from disk
+  /// itself, and league submission silently no-ops without a signed-in
+  /// uid (offline cold start, Firebase not set up, or the player's never
+  /// opened the league screen — see AuthService's own doc comment).
+  void _finalizeScore() {
+    recordScore(state.score);
+    final uid = authService.uid;
+    if (uid != null && state.score > 0) {
+      ref.read(leagueRepositoryProvider).submitWeeklyScore(uid: uid, score: state.score).catchError((e) {});
+    }
   }
 
   /// Snapshots whatever's currently on the table so it can be restored

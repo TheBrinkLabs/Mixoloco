@@ -22,6 +22,17 @@ const kTableNearFraction = 1.0;
 /// screen.
 const kTableScale = 1.26;
 
+/// The scene photo for [level] — beach (1), rooftop (2), safari (3 and,
+/// until further levels get their own art, anything beyond it too).
+/// Shared by GameScreen (the live table) and LevelUpOverlay (the
+/// between-levels "ready" screen), so both always agree on which photo a
+/// given level shows.
+String backgroundAssetPathForLevel(int level) {
+  if (level >= 3) return 'assets/images/safari_background.png';
+  if (level >= 2) return 'assets/images/rooftop_background.png';
+  return 'assets/images/beach_background.png';
+}
+
 /// The tropical sunset beach-bar scene behind the menu/game screens — a
 /// real photo background (assets/images/beach_background.png) with the
 /// real table asset layered on top, positioned so its own base lines up
@@ -315,8 +326,10 @@ const _barTableTopFraction = 0.3385;
 /// by depth) uses this so the board's perspective is dramatic without
 /// crushing the far rows. Widened an extra 5% (0.68 -> 0.714) per
 /// feedback that the far end specifically felt tight, on top of the
-/// overall table stretch above (kTableScale).
-const kTableFarToNearWidthRatio = 0.714;
+/// overall table stretch above (kTableScale), then widened again
+/// (0.714 -> 0.76 -> 0.85) per feedback that visible table wood at the
+/// back corners still sat outside where items could actually reach.
+const kTableFarToNearWidthRatio = 0.85;
 
 /// Maps a y-fraction in the active table PNG's own local space (0 = top
 /// of image, 1 = bottom) to a fraction of the screen, using the same

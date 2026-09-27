@@ -24,12 +24,20 @@ import 'providers/game_state_provider.dart' show BoardState, PlacedItem;
 const kWorldWidthMeters = 4.0;
 
 /// Tier 0 (mint)'s radius, in meters — every later tier grows from this
-/// by [kTierGrowthFactor] per step. 5% smaller than the original 0.19,
-/// per feedback that Level 1 played a little too hard — since every
-/// tier's size is derived from this one constant (both chains share it),
-/// shrinking it here shrinks every ingredient on the table by the same
-/// 5%, giving the board more breathing room before it fills up.
-const kBaseRadiusMeters = 0.19 * 0.95;
+/// by [kTierGrowthFactor] per step. Two successive 5% cuts from the
+/// original 0.19 (first per feedback that Level 1 played a little too
+/// hard, then a further "another 5%" pass) — since every tier's size is
+/// derived from this one constant (both chains share it), shrinking it
+/// here shrinks every ingredient on the table by the same amount,
+/// giving the board more breathing room before it fills up.
+const kBaseRadiusMeters = 0.19 * 0.95 * 0.95;
+
+/// How much bigger Level 2 (rooftop) plays than Level 1, per tier — 1%
+/// for tier 0, 2% for tier 1, 3% for tier 2, and so on (tier index + 1,
+/// as a percent), rather than one flat factor across every tier. Started
+/// as a flat 5% for every tier per earlier feedback, then changed to
+/// this progressive step per further feedback.
+double _level2SizeMultiplier(int tier) => 1.0 + (tier + 1) * 0.01;
 
 /// Pulls items toward the far/serving edge (small y) — "the table slopes
 /// away from us," so a dropped item accelerates that direction on its
@@ -113,6 +121,14 @@ class MixolocoGame extends Forge2DGame {
   int _level;
   List<Ingredient> get _chain => _level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain;
 
+  /// The actual physics radius for [tier], including both
+  /// [Ingredient.sizeMultiplier] and — once on the rooftop — the
+  /// progressive per-tier Level 2 bump (see [_level2SizeMultiplier]). The
+  /// single source every radius computation below reads from, so the
+  /// level-2-is-bigger rule can't drift out of sync between them.
+  double _radiusForTier(int tier, Ingredient ingredient) =>
+      radiusForTier(tier, kBaseRadiusMeters) * ingredient.sizeMultiplier * (_level >= 2 ? _level2SizeMultiplier(tier) : 1.0);
+
   /// Items to recreate on the table as soon as the world's ready — a
   /// snapshot taken via [capturePlacedItems] the last time this screen
   /// was left, so leaving and coming back doesn't wipe the table.
@@ -171,6 +187,13 @@ class MixolocoGame extends Forge2DGame {
   bool _gameOverTriggered = false;
   bool _initialItemsSpawned = false;
   int _overflowStreak = 0;
+
+  /// How many merge-explosion/cocktail-reveal animations are currently
+  /// mid-flight — GameScreen's ad-break trigger waits for this to hit zero
+  /// before pausing the engine, so a score-threshold crossing mid-burst
+  /// doesn't freeze the table on a half-played explosion.
+  int _activeAnimations = 0;
+  bool get isAnimating => _activeAnimations > 0;
 
   final Set<IngredientBodyComponent> _liveBodies = {};
   final Map<IngredientBodyComponent, Set<IngredientBodyComponent>> _adjacency = {};
@@ -289,7 +312,7 @@ class MixolocoGame extends Forge2DGame {
         for (var j = i + 1; j < group.length; j++) {
           final b = group[j];
           if (b.consumed) continue;
-          final threshold = (a.radius + b.radius) * kIngredientVisualPad;
+          final threshold = (a.contactRadius + b.contactRadius) * kIngredientVisualPad;
           if (a.body.position.distanceTo(b.body.position) <= threshold) {
             _tryMerge(a, b);
             if (a.consumed) break;
@@ -359,7 +382,7 @@ class MixolocoGame extends Forge2DGame {
   }
 
   void _setStagedIngredient(Ingredient ingredient) {
-    staging.radius = radiusForTier(ingredient.tier, kBaseRadiusMeters) * ingredient.sizeMultiplier;
+    staging.radius = _radiusForTier(ingredient.tier, ingredient);
     staging.ingredient = ingredient;
   }
 
@@ -406,7 +429,7 @@ class MixolocoGame extends Forge2DGame {
     _busy = true;
     _cooldownRemaining = kThrowCooldown;
     final tier = ingredient.tier;
-    final radius = radiusForTier(tier, kBaseRadiusMeters) * ingredient.sizeMultiplier;
+    final radius = _radiusForTier(tier, ingredient);
     final spawnPos = Vector2(aimX, staging.spawnY - radius * 1.1);
     // A small nudge toward the far edge — every drop otherwise starts
     // from a dead stop, which (rarely) can leave it sitting almost
@@ -507,7 +530,7 @@ class MixolocoGame extends Forge2DGame {
     double laneAccelDuration = 0,
   }) {
     final ingredient = _chain[tier];
-    final radius = radiusForTier(tier, kBaseRadiusMeters) * ingredient.sizeMultiplier;
+    final radius = _radiusForTier(tier, ingredient);
     // A tiny random offset guarantees no two bodies are ever created at
     // *exactly* the same position — a drop landing on the same spot as
     // something already resting there, or a merge's result spawning
@@ -581,8 +604,14 @@ class MixolocoGame extends Forge2DGame {
     _removeBody(a);
     _removeBody(b);
     unawaited(_playMergeSound());
+    _activeAnimations++;
     world.add(
-      MergeExplosionComponent(position: midpoint, ingredient: ingredient, onSpawnReady: () => _spawnBody(tier: nextTier, position: midpoint)),
+      MergeExplosionComponent(
+        position: midpoint,
+        ingredient: ingredient,
+        onSpawnReady: () => _spawnBody(tier: nextTier, position: midpoint),
+        onFinished: () => _activeAnimations--,
+      ),
     );
     onMerge(mergedTier);
   }
@@ -671,7 +700,15 @@ class MixolocoGame extends Forge2DGame {
     }
     final center = Vector2(kWorldWidthMeters / 2, _worldHeight / 2);
     unawaited(_playCocktailSound());
-    world.add(CocktailRevealComponent(pieces: captured, center: center, cocktailAssetPath: order.assetPath, onComplete: () {}));
+    _activeAnimations++;
+    world.add(
+      CocktailRevealComponent(
+        pieces: captured,
+        center: center,
+        cocktailAssetPath: order.assetPath,
+        onComplete: () => _activeAnimations--,
+      ),
+    );
     onCocktailComplete(order);
   }
 
@@ -701,6 +738,12 @@ class MixolocoGame extends Forge2DGame {
     _gameOverTriggered = false;
     _overflowStreak = 0;
     _busy = false;
+    // Any merge-explosion/cocktail-reveal component just wiped above was
+    // removed directly, not through its own onFinished/onComplete — reset
+    // this alongside everything else rather than leaving it stuck above
+    // zero forever (which would hang GameScreen's ad-break wait, which
+    // polls isAnimating, indefinitely).
+    _activeAnimations = 0;
     // Every body a mid-flight shake's squish was tracking is gone now
     // (bodies removed above) — drop that state too rather than let a
     // restore loop over an empty/stale _liveBodies do nothing useful,
@@ -901,6 +944,18 @@ class MixolocoGame extends Forge2DGame {
   void clearAlcoholic() {
     for (final b in List.of(_liveBodies)) {
       if (b.ingredient.isAlcoholic) {
+        _removeBody(b);
+      }
+    }
+  }
+
+  /// Removes every item currently on the table that's one of the Slam
+  /// Mini-Shots ingredients (see Ingredient.isMiniShot: Vodka, Melon
+  /// Liqueur, Gin, Coffee Liqueur) — the mid-game purchase that replaced
+  /// the old, broader Alcohol-Free button.
+  void clearMiniShots() {
+    for (final b in List.of(_liveBodies)) {
+      if (b.ingredient.isMiniShot) {
         _removeBody(b);
       }
     }

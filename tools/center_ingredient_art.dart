@@ -18,6 +18,7 @@ void main() {
     'rum_punch.png',
     'vodka_tonic.png',
     'cosmopolitan.png',
+    'cocktail_jug.png',
   };
   final files = dir.listSync().whereType<File>().where((file) {
     final name = file.uri.pathSegments.last;

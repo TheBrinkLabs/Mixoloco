@@ -73,11 +73,41 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
   bool consumed = false;
 
   /// Kept from [createBody] so [setPhysicsRadiusMultiplier] can recreate
-  /// the collision shape with the same material/density/contact settings
-  /// later — Box2D shapes are immutable once created, there's no
+  /// the collision shape(s) with the same material/density/contact
+  /// settings later — Box2D shapes are immutable once created, there's no
   /// "resize" call, only destroy-and-recreate.
   late final ShapeDef _shapeDef;
-  Shape? _currentShape;
+  final List<Shape> _currentShapes = [];
+
+  /// The largest single collision circle's radius (in the same units as
+  /// [radius]) — for a plain single-circle body this is just [radius]
+  /// itself, but for a compound body (see Ingredient.collisionProfile) a
+  /// thin bottle/flute's true footprint can be much smaller than its
+  /// nominal tier radius, and a capsule body (Ingredient.collisionCapsule)
+  /// has its own, usually narrower, true radius too. Used by
+  /// MixolocoGame._sweepForMerges' safety net so that check matches the
+  /// real touching distance instead of the (much larger) nominal radius.
+  double get contactRadius {
+    final capsule = ingredient.collisionCapsule;
+    final profile = ingredient.collisionProfile;
+    var maxFrac = 0.0;
+    if (capsule != null) {
+      maxFrac = capsule.radius;
+    } else if (profile == null || profile.isEmpty) {
+      maxFrac = 1.0;
+    } else {
+      for (final c in profile) {
+        if (c.radius > maxFrac) maxFrac = c.radius;
+      }
+    }
+    final extra = ingredient.extraCircles;
+    if (extra != null) {
+      for (final c in extra) {
+        if (c.radius > maxFrac) maxFrac = c.radius;
+      }
+    }
+    return radius * maxFrac;
+  }
 
   @override
   Body createBody() {
@@ -100,8 +130,57 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
       enableContactEvents: true,
     );
     final b = world.createBody(bodyDef);
-    _currentShape = b.createShape(Circle(radius: radius), _shapeDef);
+    _createShapes(b, 1.0);
     return b;
+  }
+
+  /// Creates this body's collision shape(s) at `radius * multiplier`,
+  /// appending to [_currentShapes] — a capsule when
+  /// [Ingredient.collisionCapsule] is set (a simple cylinder glass), a
+  /// compound (multi-circle) body when [Ingredient.collisionProfile] is
+  /// set (a bottle/flute), else the plain single circle — plus, on top
+  /// of whichever of those is active, one circle per
+  /// [Ingredient.extraCircles] entry for a protruding appendage (tonic's
+  /// straw) that isn't part of the glass's own main-body shape.
+  void _createShapes(Body b, double multiplier) {
+    final capsule = ingredient.collisionCapsule;
+    final profile = ingredient.collisionProfile;
+    if (capsule != null) {
+      final halfLength = radius * capsule.halfLength * multiplier;
+      final offsetY = radius * capsule.offsetY * multiplier;
+      _currentShapes.add(
+        b.createShape(
+          Capsule(
+            center1: Vector2(0, offsetY - halfLength),
+            center2: Vector2(0, offsetY + halfLength),
+            radius: radius * capsule.radius * multiplier,
+          ),
+          _shapeDef,
+        ),
+      );
+    } else if (profile == null || profile.isEmpty) {
+      _currentShapes.add(b.createShape(Circle(radius: radius * multiplier), _shapeDef));
+    } else {
+      for (final c in profile) {
+        _currentShapes.add(
+          b.createShape(
+            Circle(radius: radius * c.radius * multiplier, center: Vector2(radius * c.offsetX * multiplier, radius * c.offsetY * multiplier)),
+            _shapeDef,
+          ),
+        );
+      }
+    }
+    final extra = ingredient.extraCircles;
+    if (extra != null) {
+      for (final c in extra) {
+        _currentShapes.add(
+          b.createShape(
+            Circle(radius: radius * c.radius * multiplier, center: Vector2(radius * c.offsetX * multiplier, radius * c.offsetY * multiplier)),
+            _shapeDef,
+          ),
+        );
+      }
+    }
   }
 
   /// Temporarily resizes this body's actual collision circle to
@@ -119,8 +198,11 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
   /// nothing to do with the resize itself.
   void setPhysicsRadiusMultiplier(double multiplier) {
     if (!isMounted) return;
-    _currentShape?.destroy(updateBodyMass: false);
-    _currentShape = body.createShape(Circle(radius: radius * multiplier), _shapeDef);
+    for (final s in _currentShapes) {
+      s.destroy(updateBodyMass: false);
+    }
+    _currentShapes.clear();
+    _createShapes(body, multiplier);
   }
 
   @override

@@ -43,7 +43,7 @@ Paint _shadedFill(Color base, Rect bounds, double alpha) {
 /// speed), sells "exploded into the new thing" more than a plain
 /// linear scatter did.
 class MergeExplosionComponent extends PositionComponent {
-  MergeExplosionComponent({required Vector2 position, required this.ingredient, required this.onSpawnReady})
+  MergeExplosionComponent({required Vector2 position, required this.ingredient, required this.onSpawnReady, this.onFinished})
     : super(position: position, anchor: Anchor.center);
 
   final Ingredient ingredient;
@@ -55,6 +55,12 @@ class MergeExplosionComponent extends PositionComponent {
   /// screen quicker without cutting the burst itself short.
   final void Function() onSpawnReady;
   bool _spawnFired = false;
+
+  /// Fires once the burst has actually finished (right before this
+  /// component removes itself) — distinct from [onSpawnReady], which
+  /// fires early. Used by MixolocoGame to know when it's safe to treat
+  /// the table as visually settled again (see its isAnimating getter).
+  final void Function()? onFinished;
 
   Color get color => ingredient.color;
 
@@ -97,6 +103,7 @@ class MergeExplosionComponent extends PositionComponent {
       onSpawnReady();
     }
     if (_elapsed >= _duration) {
+      onFinished?.call();
       removeFromParent();
     }
   }

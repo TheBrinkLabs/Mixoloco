@@ -17,7 +17,7 @@ const kMusicTracks = ['Saltwater_Morning.mp3', 'Saltwater_Sunsets.mp3', 'Warm_Af
 /// Menu music stays on [kMusicTracks] regardless of lifetime level
 /// reached — the home screen's own visuals (sign, sand, boards) never
 /// change, only the in-game table does.
-const kMusicTracksLevel2 = ['Amber_Glass_and_Velvet.mp3', 'Velvet_Boulevard.mp3', 'Velvet_Strings_at_Dusk.mp3'];
+const kMusicTracksLevel2 = ['Amber_Terrace.mp3', 'Velvet_Boulevard.mp3', 'Velvet_Strings_at_Dusk.mp3'];
 
 class AudioSettings {
   final bool menuMusicEnabled;
