@@ -229,43 +229,43 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
     _pulseT += dt;
   }
 
-  /// Continuously nudges this body's horizontal velocity toward wherever
-  /// the aim line predicts it should be for its *current* height, so it
-  /// visibly tracks that line all the way down rather than only
-  /// approximately matching it (see [_throwTargetFarX]'s own doc for why
-  /// a single upfront prediction wasn't reliable enough). Gated on
-  /// [Body.isAwake] (not a fall-speed threshold) so it keeps correcting
-  /// right up until this body genuinely settles — linearDamping/friction
-  /// naturally slow its fall well before that, and bailing out once fall
-  /// speed dropped below a fixed threshold (an earlier version of this)
-  /// stopped correcting during exactly the last, most-needed stretch,
-  /// leaving a visible gap between the line and where it actually
-  /// landed. A collision with something else on the table can still
-  /// leave this short of the line, same as it would for a real thrown
-  /// object — this corrects a *clear* fall, not a blocked one.
+  /// Locks this body's horizontal velocity to the *exact* slope of the
+  /// aim line, every frame, so its path is genuinely straight in x-vs-y
+  /// (matching the line's own shape, not just eventually arriving near
+  /// its endpoint). Earlier versions of this computed a target x for the
+  /// body's current height and steered toward *that* — but at spawn the
+  /// body is already exactly at its own current-height target (x hasn't
+  /// moved yet), so that approach always started with zero correction
+  /// and only visibly bent the path late in the fall once a gap had
+  /// built up: a curved path, not the straight one the line draws.
+  ///
+  /// The fix is a direct geometric constraint instead of a target to
+  /// chase: dx/dy must equal the line's slope at every instant. Since
+  /// vx/vy = dx/dy, setting vx = slope * vy — using whatever this body's
+  /// *actual* vy is each frame, however gravity/damping/a graze off
+  /// another item have left it — keeps that ratio exact throughout the
+  /// whole flight, automatically, with no fall-time estimate to get
+  /// wrong. Integrating dx = slope * dy over the full fall lands exactly
+  /// on [_throwTargetFarX] by construction. Gated on [Body.isAwake] and
+  /// still being above the far line, so it stops once this body's
+  /// actually settled — a collision that stops it short of the far edge
+  /// still leaves it short of the line, same as a real thrown object.
+  ///
+  /// [Body.linearVelocity] is a getter backed by forge2d's FFI bridge —
+  /// it marshals a *fresh* Vector2 from native state on every read, so
+  /// mutating `.x` on the returned object (as an earlier version of this
+  /// did) silently touches a throwaway copy and never reaches the real
+  /// body. The velocity has to go back through the setter as a whole
+  /// Vector2 to actually take effect.
   void _steerTowardThrowLine() {
     if (!body.isAwake) return;
     final farY = kTableFarInset;
-    final remaining = body.position.y - farY;
-    if (remaining <= 0.02) return;
-    final total = _spawnPosition.y - farY;
-    if (total <= 0) return;
-
-    final t = ((_spawnPosition.y - body.position.y) / total).clamp(0.0, 1.0);
-    final targetX = _spawnPosition.x + (_throwTargetFarX! - _spawnPosition.x) * t;
-    // Floors the fall-speed estimate rather than bailing out as it decays
-    // toward zero — keeps timeToFar (and so the correction) bounded and
-    // meaningful instead of blowing up or vanishing right when the body
-    // is closest to the target and the correction matters most.
-    final fallSpeed = (-body.linearVelocity.y).clamp(0.3, double.infinity);
-    final timeToFar = remaining / fallSpeed;
-    final desiredVx = (targetX - body.position.x) / timeToFar;
-    // A firm cap, not a gradual blend — the whole point is this body
-    // reliably lands on the line, and recomputing fresh every frame from
-    // its actual position already keeps the correction smooth in
-    // practice (each frame's target only shifts a little from the last).
-    const maxSteerSpeed = 6.0;
-    body.linearVelocity.x = desiredVx.clamp(-maxSteerSpeed, maxSteerSpeed);
+    if (body.position.y <= farY) return;
+    final dyTotal = farY - _spawnPosition.y;
+    if (dyTotal == 0) return;
+    final slope = (_throwTargetFarX! - _spawnPosition.x) / dyTotal;
+    final velocity = body.linearVelocity;
+    body.linearVelocity = Vector2(slope * velocity.y, velocity.y);
   }
 
   @override

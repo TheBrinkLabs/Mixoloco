@@ -436,7 +436,8 @@ class MixolocoGame extends Forge2DGame {
     // exactly on the spawn point for a moment if something's already
     // resting right there; see _spawnBody's jitter for the other half
     // of this.
-    _spawnBody(tier: tier, position: spawnPos, velocity: Vector2(0, -0.6), throwTargetFarX: _farXFor(aimX));
+    final targetFarX = _farXFor(aimX);
+    _spawnBody(tier: tier, position: spawnPos, velocity: Vector2(0, -0.6), throwTargetFarX: targetFarX);
     onThrowCommitted();
   }
 
