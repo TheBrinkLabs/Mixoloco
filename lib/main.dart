@@ -6,6 +6,7 @@ import 'core/services/ad_consent.dart';
 import 'core/services/aluna_availability_service.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/firebase_bootstrap.dart';
+import 'core/services/purchase_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/banner_ad_widget.dart';
 import 'core/widgets/bar_backdrop.dart';
@@ -36,6 +37,10 @@ void main() {
   // ad_break_screen.dart) doesn't need to re-check on every single fill
   // failure.
   alunaAvailabilityService.init();
+  // Also fire-and-forget — see purchase_service.dart. Every ad-serving
+  // call site checks purchaseService.isAdFree itself once this resolves,
+  // rather than gating first paint on it.
+  purchaseService.init();
 }
 
 Future<void> _initFirebaseAndAuth() async {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/ad_service.dart';
 import '../../../core/services/locale_provider.dart';
+import '../../../core/services/purchase_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart' show backgroundAssetPathForLevel;
@@ -68,6 +69,12 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
 
   void _onNextPressed() {
     if (!mounted || _step != _Step.celebrate) return;
+    // Ad-free purchase active — skip straight to the ready beat, same as
+    // GameScreen._runAdBreak skips the MREC ad break entirely.
+    if (purchaseService.isAdFree) {
+      _showReady();
+      return;
+    }
     setState(() => _step = _Step.ad);
     adService.showLevelPlayInterstitial(
       onDismissed: _showReady,

@@ -1,10 +1,10 @@
 import 'dart:async' show unawaited;
-import 'dart:math' show Random, pi, sin, sqrt;
+import 'dart:math' show Random, pi, sin;
 import 'package:flame/components.dart' show Anchor;
 import 'package:flame_audio/flame_audio.dart';
 import 'package:flame_forge2d/flame_forge2d.dart';
 import 'package:flutter/material.dart' show Color, Colors, Curves;
-import '../../core/widgets/bar_backdrop.dart' show kTableFarToNearWidthRatio;
+import '../../core/widgets/bar_backdrop.dart' show kAimConvergenceRatio;
 import '../../data/models/cocktail_recipe.dart';
 import '../../data/models/ingredient.dart';
 import 'board_geometry.dart';
@@ -436,43 +436,18 @@ class MixolocoGame extends Forge2DGame {
     // exactly on the spawn point for a moment if something's already
     // resting right there; see _spawnBody's jitter for the other half
     // of this.
-    _spawnBody(
-      tier: tier,
-      position: spawnPos,
-      velocity: Vector2(0, -0.6),
-      laneAccelX: _laneAccelXFor(aimX),
-      laneAccelDuration: _laneAccelDuration,
-    );
+    _spawnBody(tier: tier, position: spawnPos, velocity: Vector2(0, -0.6), throwTargetFarX: _farXFor(aimX));
     onThrowCommitted();
   }
 
   /// A drop aimed away from center needs to end up further inward by the
-  /// time it reaches the far edge — the table's side walls taper in to
-  /// [kTableFarToNearWidthRatio] of the near width there (see
-  /// TableBoundaryComponent) — but a *straight* line covering that isn't
-  /// vertical, it's a line angled the same amount the table itself tapers.
-  /// Starting from rest, a constant sideways acceleration held for exactly
-  /// the time a freefall from the staging edge to the far edge takes
-  /// produces exactly that straight line (displacement is proportional to
-  /// acceleration when initial velocity is zero) — same idea
-  /// StagingComponent's aim line traces to draw the matching guide.
-  double _laneAccelXFor(double aimX) {
-    final fallHeight = staging.spawnY - kTableFarInset;
-    if (fallHeight <= 0) return 0;
+  /// time it reaches the far edge, converging by [kAimConvergenceRatio] —
+  /// the same target StagingComponent's aim line draws toward and
+  /// IngredientBodyComponent continuously steers this drop's own flight
+  /// toward (see its _steerTowardThrowLine).
+  double _farXFor(double aimX) {
     final center = kWorldWidthMeters / 2;
-    final farX = center + (aimX - center) * kTableFarToNearWidthRatio;
-    final dx = farX - aimX;
-    return kGravityMagnitude * dx / fallHeight;
-  }
-
-  /// Time a freefall from the staging edge to the far edge takes under
-  /// [kGravityMagnitude] — how long [_laneAccelXFor]'s sideways push
-  /// needs to be held for its displacement to land exactly on the tapered
-  /// target (see its own doc comment).
-  double get _laneAccelDuration {
-    final fallHeight = staging.spawnY - kTableFarInset;
-    if (fallHeight <= 0) return 0;
-    return sqrt(2 * fallHeight / kGravityMagnitude);
+    return center + (aimX - center) * kAimConvergenceRatio;
   }
 
   /// "If any item is entirely below this line for 2 throws, it's game
@@ -526,8 +501,7 @@ class MixolocoGame extends Forge2DGame {
     required int tier,
     required Vector2 position,
     Vector2? velocity,
-    double laneAccelX = 0,
-    double laneAccelDuration = 0,
+    double? throwTargetFarX,
   }) {
     final ingredient = _chain[tier];
     final radius = _radiusForTier(tier, ingredient);
@@ -547,8 +521,7 @@ class MixolocoGame extends Forge2DGame {
       spawnPosition: position + jitter,
       radius: radius,
       initialVelocity: velocity,
-      laneAccelX: laneAccelX,
-      laneAccelDuration: laneAccelDuration,
+      throwTargetFarX: throwTargetFarX,
     );
     world.add(body);
     _liveBodies.add(body);

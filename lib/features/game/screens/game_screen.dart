@@ -7,6 +7,7 @@ import '../../../core/i18n/strings.dart';
 import '../../../core/services/ad_service.dart';
 import '../../../core/services/audio_settings_provider.dart';
 import '../../../core/services/locale_provider.dart';
+import '../../../core/services/purchase_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/ad_break_screen.dart';
@@ -18,6 +19,8 @@ import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/wood_plank.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
+import '../../menu/screens/settings_screen.dart';
+import '../../shop/screens/shop_screen.dart';
 import '../board_geometry.dart';
 import '../mixoloco_game.dart';
 import '../providers/game_state_provider.dart';
@@ -39,6 +42,13 @@ import 'level_up_overlay.dart';
 /// up; a cocktail order completes when its required ingredients end up
 /// touching in one cluster. A pile that reaches the line near the
 /// staging edge for two drops running ends the run.
+/// The original corner-shortcut icon size (see _HudImageIconButton) was
+/// 46 — Shop is now half that per feedback it read too large.
+const kShopIconSize = 23.0;
+
+/// 20% smaller than the original 46 per feedback.
+const kSettingsIconSize = 36.8;
+
 class GameScreen extends ConsumerStatefulWidget {
   const GameScreen({super.key});
 
@@ -85,8 +95,9 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     // Music now plays through gameplay too (picking up the same playlist
     // position, not restarting) — see MenuScreen.initState for the other
     // side of this and _goHome below for handing it back on the way out.
-    // Rooftop tracks once Level 2, same as the background swap below.
-    ref.read(audioSettingsProvider.notifier).playGameMusic(rooftop: ref.read(gameStateProvider).level >= 2);
+    // Rooftop/safari tracks once Level 2/3, same as the background swap
+    // below.
+    ref.read(audioSettingsProvider.notifier).playGameMusic(level: ref.read(gameStateProvider).level);
   }
 
   /// Home isn't the only way a run in progress can end — backgrounding
@@ -108,7 +119,12 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
       // ever finding out — re-assert it on resume rather than leaving
       // silence until the player happens to navigate somewhere that
       // calls playGameMusic() again.
-      ref.read(audioSettingsProvider.notifier).playGameMusic(rooftop: ref.read(gameStateProvider).level >= 2);
+      ref.read(audioSettingsProvider.notifier).playGameMusic(level: ref.read(gameStateProvider).level);
+      // A Monthly/Yearly ad-removal subscription can lapse while the app
+      // was backgrounded — re-check on every resume rather than only on
+      // a cold start (see PurchaseService's own doc comment on why this
+      // on-device re-check, not instant, is the current limit).
+      purchaseService.refresh();
     }
   }
 
@@ -153,6 +169,27 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     if (ref.read(gameStateProvider.notifier).spendCredits(kMiniShotsCost)) {
       _game.clearMiniShots();
     }
+  }
+
+  /// Settings/Shop shortcuts pushed straight from the game HUD (top-right
+  /// gear, top-left storefront) — pauses the physics engine for the same
+  /// reason the ad-break/level-up overlays do (nothing should keep
+  /// falling/merging unseen underneath), and resumes once popped. Neither
+  /// screen needs any change of its own to "come back here" — their
+  /// PlankBackButton already just does a plain Navigator.pop(), which
+  /// returns to whichever screen pushed them.
+  Future<void> _openSettings() async {
+    _game.pauseEngine();
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+    if (!mounted) return;
+    _game.resumeEngine();
+  }
+
+  Future<void> _openShop() async {
+    _game.pauseEngine();
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+    if (!mounted) return;
+    _game.resumeEngine();
   }
 
   @override
@@ -212,6 +249,13 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
   /// during the ad itself.
   Future<void> _runAdBreak(AppLocale locale) async {
     if (!mounted) return;
+    // Ad-free purchase active — mark the milestone handled without ever
+    // pausing/showing anything, same as if the ad had just played.
+    if (purchaseService.isAdFree) {
+      ref.read(gameStateProvider.notifier).acknowledgeAdBreak();
+      _showingAdBreak = false;
+      return;
+    }
     // Let any in-flight merge/cocktail-reveal animation finish playing
     // out first, rather than freezing the engine mid-burst — a merge
     // crossing the score threshold shouldn't cut its own explosion short.
@@ -239,7 +283,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     // than the player seeing it happen.
     ref.read(gameStateProvider.notifier).enterLevel(2);
     _game.switchToLevel(2);
-    ref.read(audioSettingsProvider.notifier).playGameMusic(rooftop: true);
+    ref.read(audioSettingsProvider.notifier).playGameMusic(level: 2);
     await showLevelUpOverlay(context, locale, level: 2);
     if (!mounted) return;
     ref.read(gameStateProvider.notifier).acknowledgeLevelUpCelebration();
@@ -375,6 +419,19 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
                 top: statTop,
                 child: _BoardStat(label: tr(locale, 'score_label'), value: '${board.score}'),
               ),
+              // Shop/Settings shortcuts sit right in the top corners,
+              // their own real icon art (assets/images/shop.png,
+              // settings.png), no circular backing chip. Both bottom-
+              // aligned to statTop (Credits/Score's own top) per
+              // feedback, rather than top-aligned — since they're now
+              // different sizes, matching bottoms is what actually reads
+              // as "level" rather than matching tops would.
+              Positioned(left: 6, top: statTop - kShopIconSize, child: _HudImageIconButton(assetPath: 'assets/images/shop.png', size: kShopIconSize, onTap: _openShop)),
+              Positioned(
+                right: 6,
+                top: statTop - kSettingsIconSize,
+                child: _HudImageIconButton(assetPath: 'assets/images/settings.png', size: kSettingsIconSize, onTap: _openSettings),
+              ),
               Positioned(
                 left: actionRowLeft,
                 top: iconRowCenterY - actionTileSize / 2,
@@ -498,6 +555,26 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
 /// grain — no chip/tile behind it, just a text shadow for legibility
 /// against the busy texture (same technique the home-screen menu tiles
 /// use over the beach photo).
+/// Shop/Settings' corner shortcuts — the real icon art directly, no
+/// circular backing chip (its own outline/shading already carries
+/// enough contrast against the backdrop, same as every action-button
+/// icon lower on this same screen), wrapped in SafeArea so it never
+/// sits under a notch/status bar.
+class _HudImageIconButton extends StatelessWidget {
+  final String assetPath;
+  final double size;
+  final VoidCallback onTap;
+  const _HudImageIconButton({required this.assetPath, required this.size, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      bottom: false,
+      child: GestureDetector(onTap: onTap, child: Image.asset(assetPath, width: size, height: size, fit: BoxFit.contain)),
+    );
+  }
+}
+
 class _BoardStat extends StatelessWidget {
   final String label;
   final String value;

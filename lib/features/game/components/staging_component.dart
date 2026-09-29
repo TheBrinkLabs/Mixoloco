@@ -1,7 +1,7 @@
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart' show BlurStyle, Canvas, Color, MaskFilter, Paint, PaintingStyle, Path, StrokeCap;
-import '../../../core/widgets/bar_backdrop.dart' show kTableFarToNearWidthRatio;
+import '../../../core/widgets/bar_backdrop.dart' show kAimConvergenceRatio;
 import '../../../data/models/ingredient.dart';
 import 'ingredient_sprite.dart';
 import 'table_boundary_component.dart' show kTableFarInset;
@@ -116,21 +116,20 @@ class StagingComponent extends PositionComponent with DragCallbacks {
   }
 
   /// A soft guide from the staged glass to the far edge — always one
-  /// straight line, never a bend. The table's side walls taper in to
-  /// [kTableFarToNearWidthRatio] of the near width by the far edge (see
-  /// TableBoundaryComponent), so "straight ahead" isn't vertical except
-  /// exactly down the middle — off-center it's a straight line angled by
-  /// that same taper, converging toward center by the far edge. A drop's
-  /// actual flight matches this exactly (see
-  /// MixolocoGame._laneAccelXFor), rather than traveling vertically and
-  /// only deflecting once it happens to hit the angled wall.
+  /// straight line, never a bend, angled inward by [kAimConvergenceRatio]
+  /// so "straight ahead" isn't vertical except exactly down the middle —
+  /// off-center it's a straight line converging toward center by the far
+  /// edge, matching the table's own perspective. A drop's actual flight
+  /// matches this exactly (see MixolocoGame._laneAccelXFor), rather than
+  /// traveling vertically and only deflecting once it happens to hit the
+  /// angled wall.
   void _renderAimLine(Canvas canvas) {
     final worldWidth = size.x;
     final startY = spawnY - _radius * 1.3;
     if (startY <= kTableFarInset) return;
 
     final center = worldWidth / 2;
-    final farX = center + (_aimX - center) * kTableFarToNearWidthRatio;
+    final farX = center + (_aimX - center) * kAimConvergenceRatio;
 
     final path = Path()
       ..moveTo(_aimX, startY)

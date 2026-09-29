@@ -6,6 +6,10 @@
          granted; without it they'll still work but may attempt requests
          with no network. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Required by in_app_purchase's Google Play Billing backend (the
+         ad-removal purchases in the Shop) — without it, billing calls
+         fail outright rather than just returning "not available". -->
+    <uses-permission android:name="com.android.vending.BILLING"/>
 
     <application
         android:label="Mixoloco"

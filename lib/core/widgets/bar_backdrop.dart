@@ -331,6 +331,22 @@ const _barTableTopFraction = 0.3385;
 /// back corners still sat outside where items could actually reach.
 const kTableFarToNearWidthRatio = 0.85;
 
+/// How strongly the aim guide/thrown-item's sideways drift converges
+/// toward center as it travels to the far edge — see
+/// StagingComponent._renderAimLine and IngredientBodyComponent's throw
+/// steering. Deliberately its own constant, not
+/// [kTableFarToNearWidthRatio]: that one governs where the actual side
+/// walls sit (repeatedly widened this session, per feedback, up from an
+/// original 0.714 to today's 0.85, which leaves the walls themselves
+/// much closer to vertical than they started), but the *visual* "aims
+/// inward with distance" cue got noticeably weaker along with it.
+/// Started back at that original 0.714, then pulled in further per
+/// feedback that even that read as too straight — always stronger
+/// (smaller ratio) than kTableFarToNearWidthRatio, so the predicted
+/// line/landing spot is always safely inside the real wall, never past
+/// it.
+const kAimConvergenceRatio = 0.6;
+
 /// Maps a y-fraction in the active table PNG's own local space (0 = top
 /// of image, 1 = bottom) to a fraction of the screen, using the same
 /// scale/position math [_TableImage] uses to place the asset itself —

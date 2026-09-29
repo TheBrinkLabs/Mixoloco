@@ -6,6 +6,7 @@ import 'package:unity_levelplay_mediation/unity_levelplay_mediation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import '../services/ad_service.dart';
+import '../services/purchase_service.dart';
 import 'aluna_banner.dart';
 
 /// Where the single persistent banner ad should currently sit. Defaults
@@ -29,7 +30,8 @@ class PersistentBannerAd extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hidden = ref.watch(bannerPositionProvider) == BannerPosition.hidden;
+    final adFree = ref.watch(adFreeProvider).value ?? false;
+    final hidden = adFree || ref.watch(bannerPositionProvider) == BannerPosition.hidden;
     return IgnorePointer(
       ignoring: hidden,
       child: Align(

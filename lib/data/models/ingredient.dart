@@ -360,6 +360,8 @@ const kEvolutionChain = [
     // inflates the per-pixel scale factor), reading as too big a gap
     // above/below. Recomputed against the raw 627x1710 canvas instead.
     collisionCapsule: CollisionCapsule(halfLength: 0.950, radius: 0.462),
+    // 10% bigger per feedback.
+    sizeMultiplier: 1.10,
   ),
   Ingredient(
     id: 'orange',

@@ -73,6 +73,16 @@ const _en = <String, String>{
   'reset_progress_confirm_title': 'Reset your progress?',
   'reset_progress_confirm_body': "This puts your evolution and level back to the start. Your credits won't be touched.",
   'cancel': 'Cancel',
+  'shop_remove_ads_title': 'Remove Ads',
+  'shop_ads_free_forever': "Ads removed — you're set for good!",
+  'shop_ads_free_until': 'Ads removed until',
+  'shop_buy_button': 'Buy',
+  'purchase_not_available': "Not available yet — check back soon",
+  'purchase_failed': 'Purchase failed — try again',
+  'ads_free_1_day': '1 Day',
+  'ads_free_monthly': '1 Month',
+  'ads_free_yearly': '1 Year',
+  'ads_free_forever': 'Forever',
 };
 
 const _es = <String, String>{
@@ -130,4 +140,14 @@ const _es = <String, String>{
   'reset_progress_confirm_title': '¿Restablecer tu progreso?',
   'reset_progress_confirm_body': 'Esto devuelve tu evolución y nivel al inicio. Tus créditos no se verán afectados.',
   'cancel': 'Cancelar',
+  'shop_remove_ads_title': 'Quitar Anuncios',
+  'shop_ads_free_forever': '¡Anuncios eliminados para siempre!',
+  'shop_ads_free_until': 'Anuncios eliminados hasta',
+  'shop_buy_button': 'Comprar',
+  'purchase_not_available': 'Aún no disponible — vuelve pronto',
+  'purchase_failed': 'Compra fallida — inténtalo de nuevo',
+  'ads_free_1_day': '1 Día',
+  'ads_free_monthly': '1 Mes',
+  'ads_free_yearly': '1 Año',
+  'ads_free_forever': 'Para Siempre',
 };

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show BlurStyle, Canvas, Color, MaskFilter
 import '../../../data/models/ingredient.dart';
 import '../mixoloco_game.dart';
 import 'ingredient_sprite.dart';
+import 'table_boundary_component.dart' show kTableFarInset;
 
 /// One item on the table: a dynamic circular Box2D body sized for its
 /// evolution [tier], rendered with the same art used everywhere else in
@@ -18,12 +19,10 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
     required Vector2 spawnPosition,
     required this.radius,
     Vector2? initialVelocity,
-    double laneAccelX = 0,
-    double laneAccelDuration = 0,
+    double? throwTargetFarX,
   }) : _spawnPosition = spawnPosition,
        _initialVelocity = initialVelocity ?? Vector2.zero(),
-       _laneAccelX = laneAccelX,
-       _laneAccelRemaining = laneAccelDuration,
+       _throwTargetFarX = throwTargetFarX,
        super(renderBody: false);
 
   final int tier;
@@ -32,15 +31,21 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
   final Vector2 _spawnPosition;
   final Vector2 _initialVelocity;
 
-  /// A constant sideways push held for [_laneAccelRemaining] seconds after
-  /// spawn — only ever set on a player-thrown drop (see
-  /// MixolocoGame._handleDrop/_laneAccelXFor), never on a merge/cocktail
-  /// result — so a throw aimed away from center lands on the same
-  /// straight, tapered line StagingComponent draws as its aim guide,
-  /// instead of drifting only once it happens to hit the angled boundary
-  /// wall.
-  final double _laneAccelX;
-  double _laneAccelRemaining;
+  /// The X the aim line predicts this body should reach by the time it
+  /// gets to the far edge (kTableFarInset) — only set on a player-thrown
+  /// drop (see MixolocoGame._handleDrop), never a merge/cocktail result.
+  /// [_steerTowardThrowLine] uses this to continuously correct this
+  /// body's horizontal velocity every frame, rather than a single
+  /// precomputed push applied at spawn: that one-shot approach assumed
+  /// the body fell from rest under plain constant acceleration, but the
+  /// spawn's own initial downward nudge (see MixolocoGame._handleDrop)
+  /// and this body's own linearDamping both violate that assumption, so
+  /// the predicted push landed short/long of the line it was drawn
+  /// against. Recomputing fresh from the body's actual current position
+  /// and fall speed every frame self-corrects against whatever damping/
+  /// nudges/bumps have actually done to it so far, instead of trusting a
+  /// single upfront prediction.
+  final double? _throwTargetFarX;
 
   /// How long a body stays in Box2D's continuous-collision ("bullet")
   /// mode after spawning — comfortably longer than any realistic fall
@@ -210,10 +215,8 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
     super.update(dt);
     if (!isMounted) return;
 
-    if (_laneAccelRemaining > 0) {
-      final step = dt < _laneAccelRemaining ? dt : _laneAccelRemaining;
-      body.linearVelocity.x += _laneAccelX * step;
-      _laneAccelRemaining -= dt;
+    if (_throwTargetFarX != null && _bulletTimeRemaining > 0) {
+      _steerTowardThrowLine();
     }
 
     if (_bulletTimeRemaining > 0) {
@@ -224,6 +227,45 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
     }
 
     _pulseT += dt;
+  }
+
+  /// Continuously nudges this body's horizontal velocity toward wherever
+  /// the aim line predicts it should be for its *current* height, so it
+  /// visibly tracks that line all the way down rather than only
+  /// approximately matching it (see [_throwTargetFarX]'s own doc for why
+  /// a single upfront prediction wasn't reliable enough). Gated on
+  /// [Body.isAwake] (not a fall-speed threshold) so it keeps correcting
+  /// right up until this body genuinely settles — linearDamping/friction
+  /// naturally slow its fall well before that, and bailing out once fall
+  /// speed dropped below a fixed threshold (an earlier version of this)
+  /// stopped correcting during exactly the last, most-needed stretch,
+  /// leaving a visible gap between the line and where it actually
+  /// landed. A collision with something else on the table can still
+  /// leave this short of the line, same as it would for a real thrown
+  /// object — this corrects a *clear* fall, not a blocked one.
+  void _steerTowardThrowLine() {
+    if (!body.isAwake) return;
+    final farY = kTableFarInset;
+    final remaining = body.position.y - farY;
+    if (remaining <= 0.02) return;
+    final total = _spawnPosition.y - farY;
+    if (total <= 0) return;
+
+    final t = ((_spawnPosition.y - body.position.y) / total).clamp(0.0, 1.0);
+    final targetX = _spawnPosition.x + (_throwTargetFarX! - _spawnPosition.x) * t;
+    // Floors the fall-speed estimate rather than bailing out as it decays
+    // toward zero — keeps timeToFar (and so the correction) bounded and
+    // meaningful instead of blowing up or vanishing right when the body
+    // is closest to the target and the correction matters most.
+    final fallSpeed = (-body.linearVelocity.y).clamp(0.3, double.infinity);
+    final timeToFar = remaining / fallSpeed;
+    final desiredVx = (targetX - body.position.x) / timeToFar;
+    // A firm cap, not a gradual blend — the whole point is this body
+    // reliably lands on the line, and recomputing fresh every frame from
+    // its actual position already keeps the correction smooth in
+    // practice (each frame's target only shifts a little from the last).
+    const maxSteerSpeed = 6.0;
+    body.linearVelocity.x = desiredVx.clamp(-maxSteerSpeed, maxSteerSpeed);
   }
 
   @override

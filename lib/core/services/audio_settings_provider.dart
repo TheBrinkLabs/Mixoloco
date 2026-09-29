@@ -19,6 +19,21 @@ const kMusicTracks = ['Saltwater_Morning.mp3', 'Saltwater_Sunsets.mp3', 'Warm_Af
 /// change, only the in-game table does.
 const kMusicTracksLevel2 = ['Amber_Terrace.mp3', 'Velvet_Boulevard.mp3', 'Velvet_Strings_at_Dusk.mp3'];
 
+/// The safari bar's own playlist (Level 3) — see [kMusicTracksLevel2]'s
+/// doc for how [musicTracksForLevel] picks between the three.
+const kMusicTracksLevel3 = ['Furaha_Iko_Hapa.mp3', 'Furaha_Iko_Mixoloco.mp3', 'Haya_Heya_Ho.mp3', 'Karibu_Mixo_loco.mp3'];
+
+/// Which playlist plays for [level] — shared by [AudioSettingsNotifier
+/// .playGameMusic] so the beach/rooftop/safari choice can't drift out of
+/// sync between call sites. Menu music stays on [kMusicTracks] regardless
+/// of lifetime level reached — the home screen's own visuals (sign,
+/// sand, boards) never change, only the in-game table does.
+List<String> musicTracksForLevel(int level) {
+  if (level >= 3) return kMusicTracksLevel3;
+  if (level >= 2) return kMusicTracksLevel2;
+  return kMusicTracks;
+}
+
 class AudioSettings {
   final bool menuMusicEnabled;
   final bool gameMusicEnabled;
@@ -103,14 +118,14 @@ class AudioSettingsNotifier extends Notifier<AudioSettings> {
   /// Starts (or keeps playing) the music playlist if game music is
   /// enabled — called whenever the game screen becomes current, or its
   /// board's own level changes mid-session (leveling up, see
-  /// GameScreen._runLevelUp). [rooftop] picks [kMusicTracksLevel2]
-  /// instead of the beach playlist once Level 2's been reached.
-  Future<void> playGameMusic({bool rooftop = false}) async {
+  /// GameScreen._runLevelUp). [level] picks the right playlist via
+  /// [musicTracksForLevel].
+  Future<void> playGameMusic({int level = 1}) async {
     if (!state.gameMusicEnabled) {
       await stopMusic();
       return;
     }
-    await _startPlaylist(rooftop ? kMusicTracksLevel2 : kMusicTracks);
+    await _startPlaylist(musicTracksForLevel(level));
   }
 
   Future<void> stopMusic() async {

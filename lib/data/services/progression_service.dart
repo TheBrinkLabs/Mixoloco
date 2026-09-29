@@ -12,6 +12,9 @@ const _kMenuMusicEnabledKey = 'menu_music_enabled';
 const _kGameMusicEnabledKey = 'game_music_enabled';
 const _kSfxEnabledKey = 'sfx_enabled';
 const _kLocaleKey = 'app_locale';
+const _kAdFreeForeverKey = 'ad_free_forever';
+const _kAdFreeOneDayExpiryKey = 'ad_free_one_day_expiry_ms';
+const _kAdFreeSubscriptionCachedKey = 'ad_free_subscription_cached';
 
 /// The player's current credit balance — persists across games and app
 /// restarts (unlike score, which resets every run).
@@ -128,4 +131,45 @@ Future<String> loadLocaleCode() async {
 Future<void> saveLocaleCode(String code) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(_kLocaleKey, code);
+}
+
+/// Whether the Forever ad-removal purchase has ever been made — permanent
+/// once true, never reset (see PurchaseService, which is the only writer).
+Future<bool> loadAdFreeForever() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(_kAdFreeForeverKey) ?? false;
+}
+
+Future<void> saveAdFreeForever(bool value) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_kAdFreeForeverKey, value);
+}
+
+/// When the 1-Day ad-removal purchase's grant runs out — null if it's
+/// never been bought (or ran out and wasn't renewed). A future timestamp
+/// here means ads are currently suppressed regardless of anything else.
+Future<DateTime?> loadAdFreeOneDayExpiry() async {
+  final prefs = await SharedPreferences.getInstance();
+  final ms = prefs.getInt(_kAdFreeOneDayExpiryKey);
+  return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+}
+
+Future<void> saveAdFreeOneDayExpiry(DateTime expiry) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(_kAdFreeOneDayExpiryKey, expiry.millisecondsSinceEpoch);
+}
+
+/// Best-effort local cache of "was the Monthly/Yearly subscription active
+/// last time PurchaseService checked with Play Billing" — used only so
+/// the UI doesn't flash ads on for the moment between app launch and that
+/// live re-check finishing; the live check (not this cache) is always the
+/// actual source of truth once it completes.
+Future<bool> loadAdFreeSubscriptionCached() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(_kAdFreeSubscriptionCachedKey) ?? false;
+}
+
+Future<void> saveAdFreeSubscriptionCached(bool active) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_kAdFreeSubscriptionCachedKey, active);
 }
