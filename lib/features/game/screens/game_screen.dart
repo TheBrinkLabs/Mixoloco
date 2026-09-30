@@ -430,15 +430,18 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
               ),
               // Shop/Settings shortcuts sit right in the top corners,
               // their own real icon art (assets/images/shop.png,
-              // settings.png), no circular backing chip. Bottom-aligned
-              // to statTop minus a further nudge up (rather than flush
-              // with it) and inset further in from the edge than the
-              // board's own margin — per feedback that at the plain
-              // statTop/6px placement they hung off the board's tapered
-              // top corners instead of sitting inside them.
+              // settings.png), no circular backing chip. Top-aligned to
+              // each other (not each bottom-aligned to its own size) —
+              // they're different sizes, so matching bottoms left the
+              // smaller Shop icon's top edge reading lower/out of line
+              // with Settings; a shared top is what actually reads as
+              // "level". Inset further in from the edge than the board's
+              // own margin — per feedback that at the plain statTop/6px
+              // placement they hung off the board's tapered top corners
+              // instead of sitting inside them.
               Positioned(
                 left: 6 + kCornerIconInwardNudge,
-                top: statTop - kShopIconSize - kCornerIconUpNudge,
+                top: statTop - kSettingsIconSize - kCornerIconUpNudge,
                 child: _HudImageIconButton(assetPath: 'assets/images/shop.png', size: kShopIconSize, onTap: _openShop),
               ),
               Positioned(
