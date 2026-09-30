@@ -49,6 +49,15 @@ const kShopIconSize = 23.0;
 /// 20% smaller than the original 46 per feedback.
 const kSettingsIconSize = 36.8;
 
+/// How much further up from statTop the shop/settings corner shortcuts
+/// sit, on top of their own bottom-aligned offset — per feedback they
+/// were hanging off the header board's tapered top corners.
+const kCornerIconUpNudge = 24.0;
+
+/// How much further in from the board's edge margin the shop/settings
+/// corner shortcuts sit — see [kCornerIconUpNudge].
+const kCornerIconInwardNudge = 18.0;
+
 class GameScreen extends ConsumerStatefulWidget {
   const GameScreen({super.key});
 
@@ -421,15 +430,20 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
               ),
               // Shop/Settings shortcuts sit right in the top corners,
               // their own real icon art (assets/images/shop.png,
-              // settings.png), no circular backing chip. Both bottom-
-              // aligned to statTop (Credits/Score's own top) per
-              // feedback, rather than top-aligned — since they're now
-              // different sizes, matching bottoms is what actually reads
-              // as "level" rather than matching tops would.
-              Positioned(left: 6, top: statTop - kShopIconSize, child: _HudImageIconButton(assetPath: 'assets/images/shop.png', size: kShopIconSize, onTap: _openShop)),
+              // settings.png), no circular backing chip. Bottom-aligned
+              // to statTop minus a further nudge up (rather than flush
+              // with it) and inset further in from the edge than the
+              // board's own margin — per feedback that at the plain
+              // statTop/6px placement they hung off the board's tapered
+              // top corners instead of sitting inside them.
               Positioned(
-                right: 6,
-                top: statTop - kSettingsIconSize,
+                left: 6 + kCornerIconInwardNudge,
+                top: statTop - kShopIconSize - kCornerIconUpNudge,
+                child: _HudImageIconButton(assetPath: 'assets/images/shop.png', size: kShopIconSize, onTap: _openShop),
+              ),
+              Positioned(
+                right: 6 + kCornerIconInwardNudge,
+                top: statTop - kSettingsIconSize - kCornerIconUpNudge,
                 child: _HudImageIconButton(assetPath: 'assets/images/settings.png', size: kSettingsIconSize, onTap: _openSettings),
               ),
               Positioned(
