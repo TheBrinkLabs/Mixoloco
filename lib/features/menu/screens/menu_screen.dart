@@ -186,12 +186,15 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
     // per feedback that adding a sixth option tile (Info) alongside the
     // existing five left the stack running too tall/crowded otherwise.
     final plankHeight = maxPlankWidth / kMenuBoard3Aspect * 0.9;
-    // A deliberate 5% stretch past the board's own true aspect (not just
-    // scaled up — height stays exactly what the budget above gives it)
-    // per feedback that labels were wrapping more than they should —
-    // gives every tile's text a bit more room before ColorfulPlankText's
-    // Wrap has to drop to a second line.
-    final plankWidth = plankHeight * kMenuBoardWhiteAspect * 1.05;
+    // A deliberate stretch past the board's own true aspect (not just
+    // scaled up — height stays exactly what the budget above gives it):
+    // 5% per feedback that labels were wrapping more than they should,
+    // then a further 15% on top of that per later feedback asking for
+    // more room still — gives every tile's text more room before
+    // ColorfulPlankText's own Wrap has to drop to a second line. Still
+    // comfortably under maxPlankWidth (~91% of it), so this doesn't
+    // overflow the screen's own side margins.
+    final plankWidth = plankHeight * kMenuBoardWhiteAspect * 1.05 * 1.15;
     // Seven boards now — the six menu options (five original plus Info)
     // plus one more underneath Settings that just hosts the Credits/
     // Level/Unlocked row (see hudTabWidth/Height below) instead of

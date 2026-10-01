@@ -38,7 +38,6 @@ class InfoScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     WoodTitlePlank(title: tr(locale, 'info'), icon: Icons.menu_book_rounded, width: plankWidth, height: plankHeight, assetPath: 'assets/images/menu_board_3.png'),
-                    const SizedBox(height: 10),
                     _InfoRow(
                       icon: Icons.local_bar_rounded,
                       label: tr(locale, 'ingredients'),
@@ -46,7 +45,6 @@ class InfoScreen extends ConsumerWidget {
                       height: plankHeight,
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IngredientsScreen())),
                     ),
-                    const SizedBox(height: 10),
                     _InfoRow(
                       icon: Icons.wine_bar_rounded,
                       label: tr(locale, 'cocktails'),
@@ -54,7 +52,6 @@ class InfoScreen extends ConsumerWidget {
                       height: plankHeight,
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CocktailsScreen())),
                     ),
-                    const SizedBox(height: 10),
                     _InfoRow(
                       icon: Icons.music_note_rounded,
                       label: tr(locale, 'songs'),
@@ -62,7 +59,6 @@ class InfoScreen extends ConsumerWidget {
                       height: plankHeight,
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SongsScreen())),
                     ),
-                    const SizedBox(height: 10),
                     _InfoRow(
                       icon: Icons.info_rounded,
                       label: tr(locale, 'about'),

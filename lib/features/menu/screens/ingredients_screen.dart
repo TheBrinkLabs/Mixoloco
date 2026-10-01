@@ -81,11 +81,7 @@ class _IngredientsLevelPage extends StatelessWidget {
                 assetPath: 'assets/images/menu_board_3.png',
                 fontScale: 0.72,
               ),
-              const SizedBox(height: 10),
-              for (var i = 0; i < level.chain.length; i++) ...[
-                _IngredientRow(ingredient: level.chain[i], width: plankWidth, height: plankHeight),
-                if (i < level.chain.length - 1) const SizedBox(height: 10),
-              ],
+              for (final ingredient in level.chain) _IngredientRow(ingredient: ingredient, width: plankWidth, height: plankHeight),
             ],
           ),
         ),

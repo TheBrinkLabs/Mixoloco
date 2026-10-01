@@ -98,11 +98,8 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     WoodTitlePlank(title: tr(locale, 'songs'), icon: Icons.music_note_rounded, width: plankWidth, height: plankHeight, assetPath: 'assets/images/menu_board_3.png'),
-                    const SizedBox(height: 10),
-                    for (var i = 0; i < kAllSongs.length; i++) ...[
-                      _SongRow(file: kAllSongs[i], playing: _playingFile == kAllSongs[i], onTap: () => _toggle(kAllSongs[i]), width: plankWidth, height: plankHeight),
-                      if (i < kAllSongs.length - 1) const SizedBox(height: 10),
-                    ],
+                    for (final file in kAllSongs)
+                      _SongRow(file: file, playing: _playingFile == file, onTap: () => _toggle(file), width: plankWidth, height: plankHeight),
                   ],
                 ),
               ),

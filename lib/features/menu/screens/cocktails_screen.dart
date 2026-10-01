@@ -4,17 +4,17 @@ import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart';
-import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/wood_plank.dart';
 import '../../../data/models/cocktail_recipe.dart';
-import '../../../data/models/ingredient.dart';
 import '../info_level_data.dart';
+import 'cocktail_detail_screen.dart';
 
 /// Every cocktail order in the game, one page per level (see
 /// [kInfoLevels]) — same swipe-between-levels pattern as
-/// ingredients_screen.dart. Each row shows the finished drink plus the
-/// small icons of exactly what it needs, per feedback that just the
-/// name/picture wasn't enough on its own.
+/// ingredients_screen.dart. Each row is just the picture and name — tap
+/// it for the full recipe (ingredients + how-to-make) on its own page,
+/// since a full ingredient breakdown didn't leave enough room on the
+/// row itself.
 class CocktailsScreen extends ConsumerStatefulWidget {
   const CocktailsScreen({super.key});
 
@@ -65,10 +65,6 @@ class _CocktailsLevelPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Cocktail rows need more vertical room than a plain ingredient row
-    // — the finished-drink picture, name, and a row of needed-ingredient
-    // icons all share the one plank.
-    final rowHeight = plankHeight * 1.3;
     return BarBackdrop(
       showTable: false,
       showHeaderBoard: false,
@@ -87,11 +83,13 @@ class _CocktailsLevelPage extends StatelessWidget {
                 assetPath: 'assets/images/menu_board_3.png',
                 fontScale: 0.72,
               ),
-              const SizedBox(height: 10),
-              for (var i = 0; i < level.recipes.length; i++) ...[
-                _CocktailRow(recipe: level.recipes[i], width: plankWidth, height: rowHeight),
-                if (i < level.recipes.length - 1) const SizedBox(height: 10),
-              ],
+              for (final recipe in level.recipes)
+                _CocktailRow(
+                  recipe: recipe,
+                  width: plankWidth,
+                  height: plankHeight,
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CocktailDetailScreen(recipe: recipe))),
+                ),
             ],
           ),
         ),
@@ -104,43 +102,33 @@ class _CocktailRow extends StatelessWidget {
   final CocktailRecipe recipe;
   final double width;
   final double height;
-  const _CocktailRow({required this.recipe, required this.width, required this.height});
+  final VoidCallback onTap;
+  const _CocktailRow({required this.recipe, required this.width, required this.height, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return WoodPlank(
-      width: width,
-      height: height,
-      assetPath: 'assets/images/menu_board_3.png',
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: width * 0.06, vertical: height * 0.08),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.asset(recipe.assetPath, width: height * 0.4, height: height * 0.4, fit: BoxFit.contain),
-                ),
-                SizedBox(width: width * 0.04),
-                Expanded(
-                  child: ColorfulPlankText(text: recipe.name, fontSize: height * 0.17, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-                ),
-              ],
-            ),
-            SizedBox(height: height * 0.07),
-            Row(
-              children: [
-                for (final id in recipe.ingredientIds)
-                  Padding(
-                    padding: EdgeInsets.only(right: width * 0.025),
-                    child: GlassVisual(ingredient: findIngredientById(id), size: height * 0.28),
-                  ),
-              ],
-            ),
-          ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: WoodPlank(
+        width: width,
+        height: height,
+        assetPath: 'assets/images/menu_board_3.png',
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: width * 0.06),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.asset(recipe.assetPath, width: height * 0.72, height: height * 0.72, fit: BoxFit.contain),
+              ),
+              SizedBox(width: width * 0.04),
+              Expanded(
+                child: ColorfulPlankText(text: recipe.name, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+              ),
+              Icon(Icons.chevron_right_rounded, size: height * 0.3, color: kPlankIconColor),
+            ],
+          ),
         ),
       ),
     );
