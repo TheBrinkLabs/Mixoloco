@@ -212,6 +212,14 @@ class WoodTitlePlank extends StatelessWidget {
   /// use, so those screens read as a continuation of the tile you
   /// tapped rather than falling back to a generic Material glyph.
   final String? iconAsset;
+
+  /// Shrinks the title text's font size relative to the standard
+  /// `height * 0.26` — for a caller whose title runs longer than the
+  /// usual single word/short phrase (e.g. "Ingredients — Rooftop" on the
+  /// Info menu's level-swipe pages), where the full-size font would wrap
+  /// to a second line and overflow the plank's fixed height. 1.0 (every
+  /// other caller) keeps the original size exactly.
+  final double fontScale;
   const WoodTitlePlank({
     super.key,
     required this.title,
@@ -220,6 +228,7 @@ class WoodTitlePlank extends StatelessWidget {
     required this.height,
     this.assetPath = 'assets/images/menu_board.png',
     this.iconAsset,
+    this.fontScale = 1.0,
   });
 
   @override
@@ -250,7 +259,7 @@ class WoodTitlePlank extends StatelessWidget {
             Flexible(
               child: ColorfulPlankText(
                 text: title,
-                fontSize: height * 0.26,
+                fontSize: height * 0.26 * fontScale,
                 variant: kPlankTextVariant,
                 font: kPlankTextFont,
                 shadowStyle: kPlankShadowStyle,

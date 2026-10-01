@@ -20,6 +20,7 @@ import '../../onboarding/screens/nickname_setup_screen.dart';
 import '../../shop/screens/shop_screen.dart';
 import '../components/falling_ingredients_game.dart';
 import 'high_scores_screen.dart';
+import 'info_screen.dart';
 import 'settings_screen.dart';
 
 /// beach_sign.png, cropped tight to its own opaque content — a two-post
@@ -181,18 +182,21 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
     // height budget the stack has always used instead keeps its total
     // height exactly what it's always been; these boards just end up
     // narrower (centered) rather than stretched to some new height.
-    final plankHeight = maxPlankWidth / kMenuBoard3Aspect;
+    // Squeezed 10% smaller than the budget below would otherwise give —
+    // per feedback that adding a sixth option tile (Info) alongside the
+    // existing five left the stack running too tall/crowded otherwise.
+    final plankHeight = maxPlankWidth / kMenuBoard3Aspect * 0.9;
     // A deliberate 5% stretch past the board's own true aspect (not just
     // scaled up — height stays exactly what the budget above gives it)
     // per feedback that labels were wrapping more than they should —
     // gives every tile's text a bit more room before ColorfulPlankText's
     // Wrap has to drop to a second line.
     final plankWidth = plankHeight * kMenuBoardWhiteAspect * 1.05;
-    // Six boards now — the five menu options plus one more underneath
-    // Settings that just hosts the Credits/Level/Unlocked row (see
-    // hudTabWidth/Height below) instead of floating separately on the
-    // sand below the whole pile.
-    final boardsColumnHeight = plankHeight * 6 + kBoardGap * 5;
+    // Seven boards now — the six menu options (five original plus Info)
+    // plus one more underneath Settings that just hosts the Credits/
+    // Level/Unlocked row (see hudTabWidth/Height below) instead of
+    // floating separately on the sand below the whole pile.
+    final boardsColumnHeight = plankHeight * 7 + kBoardGap * 6;
 
     // Sized to fit ON that sixth board (with its own bit of padding)
     // rather than the old floating row's screen-width-derived size —
@@ -340,6 +344,17 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                                   width: plankWidth,
                                   height: plankHeight,
                                   onTap: () => _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const ShopScreen())),
+                                  variant: kPlankTextVariant,
+                                  font: kPlankTextFont,
+                                  shadowStyle: kPlankShadowStyle,
+                                ),
+                                SizedBox(height: kBoardGap),
+                                _MenuPlankTile(
+                                  label: tr(locale, 'info'),
+                                  icon: Icons.menu_book_rounded,
+                                  width: plankWidth,
+                                  height: plankHeight,
+                                  onTap: () => _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const InfoScreen())),
                                   variant: kPlankTextVariant,
                                   font: kPlankTextFont,
                                   shadowStyle: kPlankShadowStyle,

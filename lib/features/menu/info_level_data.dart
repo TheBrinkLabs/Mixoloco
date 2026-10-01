@@ -1,0 +1,23 @@
+import '../../data/models/cocktail_recipe.dart';
+import '../../data/models/ingredient.dart';
+
+/// One playable bar's worth of content for the Info menu's Ingredients/
+/// Cocktails screens (see ingredients_screen.dart/cocktails_screen.dart) —
+/// each level gets its own swipeable page, backed by that level's own
+/// photo so it reads as "the Beach bar" vs "the Rooftop bar" rather than
+/// a plain list with a label. Level 3 (Safari) isn't included yet since
+/// it has no evolution chain/cocktail list of its own (see
+/// ingredient.dart/cocktail_recipe.dart) — only a background photo and
+/// music have landed for it so far.
+class InfoLevelData {
+  final String name;
+  final String backgroundAssetPath;
+  final List<Ingredient> chain;
+  final List<CocktailRecipe> recipes;
+  const InfoLevelData({required this.name, required this.backgroundAssetPath, required this.chain, required this.recipes});
+}
+
+const kInfoLevels = [
+  InfoLevelData(name: 'Beach', backgroundAssetPath: 'assets/images/beach_background.png', chain: kEvolutionChain, recipes: kCocktailRecipes),
+  InfoLevelData(name: 'Rooftop', backgroundAssetPath: 'assets/images/rooftop_background.png', chain: kEvolutionChainLevel2, recipes: kCocktailRecipesLevel2),
+];
