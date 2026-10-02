@@ -641,7 +641,17 @@ class GameStateNotifier extends Notifier<BoardState> {
     recordScore(state.score);
     final uid = authService.uid;
     if (uid != null && state.score > 0) {
-      ref.read(leagueRepositoryProvider).submitWeeklyScore(uid: uid, score: state.score).catchError((e) {});
+      ref
+          .read(leagueRepositoryProvider)
+          .submitWeeklyScore(
+            uid: uid,
+            score: state.score,
+            level: state.level,
+            highestTierUnlocked: state.highestTierUnlocked,
+            highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
+            highestLevelReached: state.highestLevelReached,
+          )
+          .catchError((e) {});
     }
   }
 

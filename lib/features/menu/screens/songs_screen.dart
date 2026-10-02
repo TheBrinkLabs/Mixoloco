@@ -90,20 +90,28 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
         showHeaderBoard: false,
         child: Stack(
           children: [
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    WoodTitlePlank(title: tr(locale, 'songs'), icon: Icons.music_note_rounded, width: plankWidth, height: plankHeight, assetPath: 'assets/images/menu_board_3.png'),
+                    WoodTitlePlank(
+                      title: tr(locale, 'songs'),
+                      icon: Icons.music_note_rounded,
+                      iconAsset: 'assets/images/play.png',
+                      width: plankWidth,
+                      height: plankHeight,
+                      assetPath: 'assets/images/menu_board_3.png',
+                    ),
                     for (final file in kAllSongs)
                       _SongRow(file: file, playing: _playingFile == file, onTap: () => _toggle(file), width: plankWidth, height: plankHeight),
                   ],
                 ),
               ),
             ),
+            // Painted last — see info_screen.dart's matching comment.
+            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
           ],
         ),
       ),

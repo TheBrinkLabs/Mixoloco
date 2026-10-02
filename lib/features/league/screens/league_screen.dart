@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/colorful_plank_text.dart';
+import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/banner_ad_widget.dart';
+import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/league_tier_badge.dart';
+import '../../../core/widgets/wood_plank.dart';
 import '../../../data/repositories/league_repository.dart';
 import '../providers/league_provider.dart';
 
@@ -70,12 +74,15 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
                       _buildPendingJoin()
                     else if (state.leaderboard.isEmpty)
                       _buildEmpty()
-                    else
+                    else ...[
+                      _LeaderboardHeaderRow(width: MediaQuery.sizeOf(context).width - 32),
                       ...state.leaderboard.asMap().entries.map((e) => _LeaderboardRow(
                         rank: e.key + 1,
                         entry: e.value,
                         isMe: e.value.uid == state.uid,
+                        width: MediaQuery.sizeOf(context).width - 32,
                       )),
+                    ],
                   ],
                 ),
               ),
@@ -149,37 +156,100 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
   }
 }
 
+/// Column labels for [_LeaderboardRow] — plain text, not wood-plank
+/// styled, since it's a thin one-off header rather than a real board.
+class _LeaderboardHeaderRow extends StatelessWidget {
+  final double width;
+  const _LeaderboardHeaderRow({required this.width});
+
+  static const _labelStyle = TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: AppColors.textMuted);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+      child: SizedBox(
+        width: width - 28,
+        child: const Row(
+          children: [
+            SizedBox(width: 22, child: Text('#', style: _labelStyle)),
+            Expanded(child: Text('NAME', style: _labelStyle)),
+            SizedBox(width: 30, child: Text('EVO', style: _labelStyle, textAlign: TextAlign.center)),
+            SizedBox(width: 26, child: Text('LVL', style: _labelStyle, textAlign: TextAlign.center)),
+            SizedBox(width: 56, child: Text('SCORE', style: _labelStyle, textAlign: TextAlign.right)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One player's row — a wood_plank board like every other list in the
+/// app, but at half [kMenuBoard3Aspect]'s usual height and a smaller
+/// font throughout, per feedback that the full-size board/font this
+/// used before left no room for the two new columns (Evolution/Level)
+/// alongside Position/Name/Score. Plain white text (not the heavy
+/// gradient ColorfulPlankText treatment every other board uses) — five
+/// columns of real data packed this tight needs to read cleanly over
+/// looking decorative, same reasoning high_scores_screen.dart's own
+/// rank/score row already used.
 class _LeaderboardRow extends StatelessWidget {
   final int rank;
   final LeagueLeaderboardEntry entry;
   final bool isMe;
-  const _LeaderboardRow({required this.rank, required this.entry, required this.isMe});
+  final double width;
+  const _LeaderboardRow({required this.rank, required this.entry, required this.isMe, required this.width});
 
   @override
   Widget build(BuildContext context) {
+    final height = (width / kMenuBoard3Aspect) / 2;
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: isMe ? AppColors.sunsetOrange.withValues(alpha: 0.16) : AppColors.surface2,
-        borderRadius: BorderRadius.circular(12),
-        border: isMe ? Border.all(color: AppColors.sunsetOrange, width: 1.2) : null,
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 28,
-            child: Text('$rank', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textMuted)),
+      margin: const EdgeInsets.only(top: 6),
+      decoration: isMe ? BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.sunsetOrange, width: 1.6)) : null,
+      child: WoodPlank(
+        width: width,
+        height: height,
+        assetPath: 'assets/images/menu_board_3.png',
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: width * 0.04),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                child: ColorfulPlankText(text: '$rank', fontSize: height * 0.34, variant: PlankTextVariant.plainWhite, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+              ),
+              Expanded(
+                child: ColorfulPlankText(
+                  text: entry.nickname,
+                  fontSize: height * 0.3,
+                  variant: PlankTextVariant.plainWhite,
+                  font: kPlankTextFont,
+                  shadowStyle: kPlankShadowStyle,
+                ),
+              ),
+              SizedBox(width: 30, child: Center(child: GlassVisual(ingredient: entry.evolutionIngredient, size: height * 0.68))),
+              SizedBox(
+                width: 26,
+                child: Center(
+                  child: ColorfulPlankText(text: '${entry.level}', fontSize: height * 0.3, variant: PlankTextVariant.plainWhite, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+                ),
+              ),
+              SizedBox(
+                width: 56,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: ColorfulPlankText(
+                    text: '${entry.score}',
+                    fontSize: height * 0.32,
+                    variant: PlankTextVariant.sunsetGradient,
+                    font: kPlankTextFont,
+                    shadowStyle: kPlankShadowStyle,
+                  ),
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: Text(
-              entry.nickname,
-              style: TextStyle(fontSize: 14, fontWeight: isMe ? FontWeight.w800 : FontWeight.w600, color: AppColors.textLight),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text('${entry.score}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.sunsetGold)),
-        ],
+        ),
       ),
     );
   }

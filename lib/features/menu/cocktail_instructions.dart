@@ -1,23 +1,98 @@
-/// Brief how-to-make text for each cocktail recipe (see
+/// Brief, step-by-step how-to-make text for each cocktail recipe (see
 /// cocktail_recipe.dart), shown on the Info menu's cocktail detail
-/// screen — keyed by [CocktailRecipe.id]. Deliberately only ever
+/// screen — keyed by [CocktailRecipe.id]. Each step only ever
 /// references ingredients already in that recipe's own ingredientIds
-/// list, never anything extra invented for flavor (a dash of bitters, a
-/// sugar rim, ...) that isn't actually one of the things the player
-/// throws/merges for it.
-const kCocktailInstructions = <String, String>{
-  'mojito': 'Muddle the mint and lime, add the rum, top with soda, and stir.',
-  'screwdriver': 'Pour the vodka over ice, then top with orange juice and stir.',
-  'rum_punch': 'Shake the rum with the lime, orange, and lemon juice, then pour over ice.',
-  'cherry_daiquiri': 'Shake the rum, cherry, and lime juice with ice, then strain into a glass.',
-  'rum_and_coke': 'Pour the rum over ice and top with cola.',
-  'cosmopolitan': 'Shake the vodka with the cranberry, lime, and orange juice, then strain into a glass.',
-  'blue_hawaiian': 'Blend the rum, blue curaçao, and pineapple juice with ice, then garnish with the cherry.',
-  'espresso_martini': 'Shake the vodka and coffee liqueur hard with ice, then strain into a glass.',
-  'bramble': 'Shake the gin and lime juice with ice, then top with the blackberry.',
-  'melon_sour': 'Shake the vodka, lime juice, and melon liqueur with ice, then garnish with the cherry.',
-  'martini': 'Stir the gin and vermouth with ice, then strain into a glass.',
-  'gin_and_tonic': 'Pour the gin over ice, top with tonic water, and add a squeeze of lime.',
-  'manhattan': 'Stir the whisky and vermouth with ice, then garnish with the cherry.',
-  'bellini': 'Pour the peach juice into a glass and top with prosecco.',
+/// list, with exactly one deliberate exception: a dash of simple syrup,
+/// on the handful of recipes where a real one actually calls for it
+/// (Mojito, Rum Punch, Cherry Daiquiri, Bramble) — it isn't one of the
+/// game's own throwable/mergeable ingredients, so it never appears on
+/// the ingredients list above these steps, only in the step text
+/// itself.
+const kCocktailInstructions = <String, List<String>>{
+  'mojito': [
+    'Muddle the mint and lime in the glass.',
+    'Add a dash of simple syrup.',
+    'Pour in the rum.',
+    'Fill with ice and top with soda.',
+    'Stir gently and serve.',
+  ],
+  'screwdriver': [
+    'Fill a glass with ice.',
+    'Pour in the vodka.',
+    'Top with orange juice.',
+    'Stir and serve.',
+  ],
+  'rum_punch': [
+    'Fill a shaker with ice.',
+    'Add the rum, lime, orange, and lemon juice.',
+    'Add a dash of simple syrup.',
+    'Shake well.',
+    'Strain over fresh ice.',
+  ],
+  'cherry_daiquiri': [
+    'Fill a shaker with ice.',
+    'Add the rum, cherry, and lime juice.',
+    'Add a dash of simple syrup.',
+    'Shake well.',
+    'Strain into a chilled glass.',
+  ],
+  'rum_and_coke': [
+    'Fill a glass with ice.',
+    'Pour in the rum.',
+    'Top with cola.',
+    'Stir gently and serve.',
+  ],
+  'cosmopolitan': [
+    'Fill a shaker with ice.',
+    'Add the vodka, cranberry, lime, and orange juice.',
+    'Shake well.',
+    'Strain into a chilled glass.',
+  ],
+  'blue_hawaiian': [
+    'Add the rum, blue curaçao, and pineapple juice to a blender with ice.',
+    'Blend until smooth.',
+    'Pour into a glass.',
+    'Garnish with the cherry.',
+  ],
+  'espresso_martini': [
+    'Fill a shaker with ice.',
+    'Add the vodka and coffee liqueur.',
+    'Shake hard until frothy.',
+    'Strain into a chilled glass.',
+  ],
+  'bramble': [
+    'Fill a glass with crushed ice.',
+    'Pour in the gin and lime juice.',
+    'Add a dash of simple syrup.',
+    'Stir, then top with the blackberry.',
+  ],
+  'melon_sour': [
+    'Fill a shaker with ice.',
+    'Add the vodka, lime juice, and melon liqueur.',
+    'Shake well.',
+    'Strain into a glass and garnish with the cherry.',
+  ],
+  'martini': [
+    'Fill a mixing glass with ice.',
+    'Add the gin and vermouth.',
+    "Stir well — don't shake.",
+    'Strain into a chilled glass.',
+  ],
+  'gin_and_tonic': [
+    'Fill a glass with ice.',
+    'Pour in the gin.',
+    'Top with tonic water.',
+    'Add a squeeze of lime.',
+  ],
+  'manhattan': [
+    'Fill a mixing glass with ice.',
+    'Add the whisky and vermouth.',
+    'Stir well.',
+    'Strain into a glass and garnish with the cherry.',
+  ],
+  'bellini': [
+    'Pour the peach juice into a chilled glass.',
+    'Top slowly with prosecco.',
+    'Stir gently and serve.',
+  ],
 };

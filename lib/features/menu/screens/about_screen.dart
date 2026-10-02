@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
@@ -8,16 +9,30 @@ import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/game_logo.dart';
 import '../../../core/widgets/wood_plank.dart';
 
-/// Shown on the About page — keep in sync with pubspec.yaml's own
-/// `version:` line by hand (no package_info_plus dependency just for
-/// one static line of text).
-const kAppVersionLabel = '1.0.0';
-
-class AboutScreen extends ConsumerWidget {
+class AboutScreen extends ConsumerStatefulWidget {
   const AboutScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends ConsumerState<AboutScreen> {
+  // Null while loading — the version plank just shows a blank value
+  // briefly rather than a hardcoded number that could drift from
+  // pubspec.yaml's own (see PackageInfo.fromPlatform, which reads the
+  // actual installed build's version, not a string maintained by hand).
+  String? _version;
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _version = info.version);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final locale = ref.watch(localeProvider);
     final screenSize = MediaQuery.sizeOf(context);
     const sideMargin = 28.0;
@@ -30,7 +45,6 @@ class AboutScreen extends ConsumerWidget {
         showHeaderBoard: false,
         child: Stack(
           children: [
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(vertical: 40),
@@ -45,7 +59,7 @@ class AboutScreen extends ConsumerWidget {
                       assetPath: 'assets/images/menu_board_3.png',
                       child: Center(
                         child: ColorfulPlankText(
-                          text: '${tr(locale, 'version')} $kAppVersionLabel',
+                          text: '${tr(locale, 'version')} ${_version ?? ''}',
                           fontSize: plankHeight * 0.2,
                           variant: kPlankTextVariant,
                           font: kPlankTextFont,
@@ -56,7 +70,7 @@ class AboutScreen extends ConsumerWidget {
                     const SizedBox(height: 10),
                     WoodPlank(
                       width: plankWidth,
-                      height: plankHeight * 2.0,
+                      height: plankHeight * 2.2,
                       assetPath: 'assets/images/menu_board_3.png',
                       child: Padding(
                         padding: EdgeInsets.symmetric(horizontal: plankWidth * 0.09),
@@ -73,6 +87,8 @@ class AboutScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            // Painted last — see info_screen.dart's matching comment.
+            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
           ],
         ),
       ),

@@ -78,6 +78,7 @@ class _CocktailsLevelPage extends StatelessWidget {
               WoodTitlePlank(
                 title: '${tr(locale, 'cocktails')} — ${level.name}',
                 icon: Icons.wine_bar_rounded,
+                iconAsset: 'assets/images/mohito.png',
                 width: plankWidth,
                 height: plankHeight,
                 assetPath: 'assets/images/menu_board_3.png',
@@ -88,7 +89,9 @@ class _CocktailsLevelPage extends StatelessWidget {
                   recipe: recipe,
                   width: plankWidth,
                   height: plankHeight,
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CocktailDetailScreen(recipe: recipe))),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => CocktailDetailScreen(recipe: recipe, backgroundAssetPath: level.backgroundAssetPath)),
+                  ),
                 ),
             ],
           ),

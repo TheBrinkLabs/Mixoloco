@@ -30,16 +30,23 @@ class InfoScreen extends ConsumerWidget {
         showHeaderBoard: false,
         child: Stack(
           children: [
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    WoodTitlePlank(title: tr(locale, 'info'), icon: Icons.menu_book_rounded, width: plankWidth, height: plankHeight, assetPath: 'assets/images/menu_board_3.png'),
+                    WoodTitlePlank(
+                      title: tr(locale, 'info'),
+                      icon: Icons.menu_book_rounded,
+                      iconAsset: 'assets/images/info.png',
+                      width: plankWidth,
+                      height: plankHeight,
+                      assetPath: 'assets/images/menu_board_3.png',
+                    ),
                     _InfoRow(
                       icon: Icons.local_bar_rounded,
+                      iconAsset: 'assets/images/ingredient_cherry.png',
                       label: tr(locale, 'ingredients'),
                       width: plankWidth,
                       height: plankHeight,
@@ -47,6 +54,7 @@ class InfoScreen extends ConsumerWidget {
                     ),
                     _InfoRow(
                       icon: Icons.wine_bar_rounded,
+                      iconAsset: 'assets/images/mohito.png',
                       label: tr(locale, 'cocktails'),
                       width: plankWidth,
                       height: plankHeight,
@@ -54,6 +62,7 @@ class InfoScreen extends ConsumerWidget {
                     ),
                     _InfoRow(
                       icon: Icons.music_note_rounded,
+                      iconAsset: 'assets/images/play.png',
                       label: tr(locale, 'songs'),
                       width: plankWidth,
                       height: plankHeight,
@@ -61,6 +70,7 @@ class InfoScreen extends ConsumerWidget {
                     ),
                     _InfoRow(
                       icon: Icons.info_rounded,
+                      iconAsset: 'assets/images/about.png',
                       label: tr(locale, 'about'),
                       width: plankWidth,
                       height: plankHeight,
@@ -70,6 +80,12 @@ class InfoScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            // Painted last so it always sits on top of (and stays
+            // reliably tappable over) the scrollable content above —
+            // per feedback the back button didn't always register,
+            // and on Songs specifically was visually hidden behind
+            // that screen's own title board.
+            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
           ],
         ),
       ),
@@ -79,11 +95,15 @@ class InfoScreen extends ConsumerWidget {
 
 class _InfoRow extends StatelessWidget {
   final IconData icon;
+
+  /// Real game art standing in for [icon] when set — same pattern as
+  /// _MenuPlankTile's own iconAsset on the main menu.
+  final String? iconAsset;
   final String label;
   final double width;
   final double height;
   final VoidCallback onTap;
-  const _InfoRow({required this.icon, required this.label, required this.width, required this.height, required this.onTap});
+  const _InfoRow({required this.icon, this.iconAsset, required this.label, required this.width, required this.height, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +118,9 @@ class _InfoRow extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: width * 0.06),
           child: Row(
             children: [
-              Icon(icon, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
+              iconAsset != null
+                  ? Image.asset(iconAsset!, width: height * 0.4, height: height * 0.4, fit: BoxFit.contain)
+                  : Icon(icon, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
               SizedBox(width: width * 0.03),
               Expanded(
                 child: ColorfulPlankText(text: label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),

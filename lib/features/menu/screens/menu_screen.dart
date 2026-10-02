@@ -355,6 +355,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                                 _MenuPlankTile(
                                   label: tr(locale, 'info'),
                                   icon: Icons.menu_book_rounded,
+                                  iconAsset: 'assets/images/info.png',
                                   width: plankWidth,
                                   height: plankHeight,
                                   onTap: () => _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const InfoScreen())),

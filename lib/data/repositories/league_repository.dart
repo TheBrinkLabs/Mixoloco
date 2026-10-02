@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/league_scoring.dart';
+import '../models/ingredient.dart';
 
 final leagueRepositoryProvider = Provider<LeagueRepository>((ref) {
   return LeagueRepository(FirebaseFirestore.instance);
@@ -18,7 +19,39 @@ class LeagueLeaderboardEntry {
   final String uid;
   final String nickname;
   final int score;
-  const LeagueLeaderboardEntry({required this.uid, required this.nickname, required this.score});
+
+  /// The bar level (1 or 2) this entry's score was set on — written
+  /// alongside bestScore at submit time (see
+  /// [LeagueRepository.submitWeeklyScore]), so an older score doc from
+  /// before this field existed just reads back as 1 (the default every
+  /// run starts on).
+  final int level;
+
+  /// This player's lifetime-highest evolution tier reached, same shape
+  /// as [BoardState.highestTierUnlocked]/[highestTierUnlockedLevel2]/
+  /// [highestLevelReached] — resolve the actual Ingredient to show with
+  /// [evolutionIngredient] rather than indexing the chains directly at
+  /// every call site.
+  final int highestTierUnlocked;
+  final int highestTierUnlockedLevel2;
+  final int highestLevelReached;
+
+  const LeagueLeaderboardEntry({
+    required this.uid,
+    required this.nickname,
+    required this.score,
+    this.level = 1,
+    this.highestTierUnlocked = 0,
+    this.highestTierUnlockedLevel2 = -1,
+    this.highestLevelReached = 1,
+  });
+
+  /// The ingredient to show as this entry's "Evolution" badge — same
+  /// level2-outranks-level1 rule the main menu's own Unlocked tab uses
+  /// (see menu_screen.dart).
+  Ingredient get evolutionIngredient => highestLevelReached >= 2
+      ? kEvolutionChainLevel2[highestTierUnlockedLevel2.clamp(0, kEvolutionChainLevel2.length - 1)]
+      : kEvolutionChain[highestTierUnlocked.clamp(0, kEvolutionChain.length - 1)];
 }
 
 /// Mirrors Capitle's own league_repository.dart, simplified for
@@ -106,7 +139,21 @@ class LeagueRepository {
   /// was actually played for a retried/queued submission — otherwise a
   /// score earned late one night that only manages to submit the next
   /// morning would get filed under the wrong week entirely.
-  Future<void> submitWeeklyScore({required String uid, required int score, DateTime? playedAt}) async {
+  ///
+  /// [level]/[highestTierUnlocked]/[highestTierUnlockedLevel2]/
+  /// [highestLevelReached] are this player's own progress at submit
+  /// time — purely informational extras on top of bestScore (see
+  /// [LeagueLeaderboardEntry]), not subject to firestore.rules'
+  /// bestScore-only validation, so they're free-form here.
+  Future<void> submitWeeklyScore({
+    required String uid,
+    required int score,
+    DateTime? playedAt,
+    int level = 1,
+    int highestTierUnlocked = 0,
+    int highestTierUnlockedLevel2 = -1,
+    int highestLevelReached = 1,
+  }) async {
     final playedAtUtc = (playedAt ?? DateTime.now()).toUtc();
     final weekId = isoWeekId(playedAtUtc);
     final scoreRef = _players.doc(uid).collection('scores').doc(weekId);
@@ -118,6 +165,10 @@ class LeagueRepository {
       tx.set(scoreRef, {
         'bestScore': score,
         'weekId': weekId,
+        'level': level,
+        'highestTierUnlocked': highestTierUnlocked,
+        'highestTierUnlockedLevel2': highestTierUnlockedLevel2,
+        'highestLevelReached': highestLevelReached,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
@@ -165,8 +216,17 @@ class LeagueRepository {
       final playerSnap = await _players.doc(uid).get();
       final scoreSnap = await _players.doc(uid).collection('scores').doc(weekId).get();
       final nickname = (playerSnap.data()?['nickname'] as String?) ?? 'Player';
-      final score = (scoreSnap.data()?['bestScore'] as int?) ?? 0;
-      return LeagueLeaderboardEntry(uid: uid, nickname: nickname, score: score);
+      final scoreData = scoreSnap.data();
+      final score = (scoreData?['bestScore'] as int?) ?? 0;
+      return LeagueLeaderboardEntry(
+        uid: uid,
+        nickname: nickname,
+        score: score,
+        level: (scoreData?['level'] as int?) ?? 1,
+        highestTierUnlocked: (scoreData?['highestTierUnlocked'] as int?) ?? 0,
+        highestTierUnlockedLevel2: (scoreData?['highestTierUnlockedLevel2'] as int?) ?? -1,
+        highestLevelReached: (scoreData?['highestLevelReached'] as int?) ?? 1,
+      );
     }));
 
     entries.sort((a, b) => (b.score - a.score) != 0 ? b.score - a.score : a.uid.compareTo(b.uid));

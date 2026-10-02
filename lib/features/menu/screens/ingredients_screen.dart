@@ -76,6 +76,7 @@ class _IngredientsLevelPage extends StatelessWidget {
               WoodTitlePlank(
                 title: '${tr(locale, 'ingredients')} — ${level.name}',
                 icon: Icons.local_bar_rounded,
+                iconAsset: 'assets/images/ingredient_cherry.png',
                 width: plankWidth,
                 height: plankHeight,
                 assetPath: 'assets/images/menu_board_3.png',
