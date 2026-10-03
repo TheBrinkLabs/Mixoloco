@@ -261,10 +261,22 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
     if (!body.isAwake) return;
     final farY = kTableFarInset;
     if (body.position.y <= farY) return;
+    final velocity = body.linearVelocity;
+    // Once vy has dropped this low, the body isn't really "falling"
+    // anymore — it's jostling/settling against whatever it landed on.
+    // Forcing vx = slope * vy every frame through that phase re-derives
+    // a tiny-but-nonzero vx from the tiny residual vy every single
+    // frame, which fights Box2D's own collision/friction response and
+    // its sleep threshold — the body keeps getting nudged sideways in
+    // small steps instead of settling immediately, reading as an odd
+    // slow-motion "creep" into its final resting spot that wasn't there
+    // before this steering existed. Bailing out here once it's clearly
+    // past the falling phase leaves the landing itself to ordinary
+    // physics, same as every other body on the table.
+    if (velocity.y.abs() < kRestSpeedThreshold) return;
     final dyTotal = farY - _spawnPosition.y;
     if (dyTotal == 0) return;
     final slope = (_throwTargetFarX! - _spawnPosition.x) / dyTotal;
-    final velocity = body.linearVelocity;
     body.linearVelocity = Vector2(slope * velocity.y, velocity.y);
   }
 

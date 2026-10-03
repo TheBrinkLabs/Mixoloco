@@ -908,25 +908,15 @@ class MixolocoGame extends Forge2DGame {
     );
   }
 
-  /// Removes every alcoholic item currently on the table (see
-  /// Ingredient.isAlcoholic — three on the beach chain, six on the
-  /// rooftop one) — shared by the Alcohol-Free purchase (mid-game,
-  /// doesn't touch game-over state) and [clearAlcoholicAndResume] (the
-  /// ad-continue flow, which also un-ends the game). A per-ingredient
-  /// flag rather than a hardcoded id list, since the rooftop chain alone
-  /// nearly doubles how many ingredients this needs to catch.
-  void clearAlcoholic() {
-    for (final b in List.of(_liveBodies)) {
-      if (b.ingredient.isAlcoholic) {
-        _removeBody(b);
-      }
-    }
-  }
-
   /// Removes every item currently on the table that's one of the Slam
   /// Mini-Shots ingredients (see Ingredient.isMiniShot: Vodka, Melon
-  /// Liqueur, Gin, Coffee Liqueur) — the mid-game purchase that replaced
-  /// the old, broader Alcohol-Free button.
+  /// Liqueur, Gin, Coffee Liqueur) — the mid-game purchase, and also
+  /// [clearMiniShotsAndResume] (the ad-continue flow). Deliberately
+  /// narrower than every [Ingredient.isAlcoholic] item: that used to be
+  /// what the ad-continue flow cleared, but on the rooftop chain that
+  /// also swept up Whisky, which isn't a shot glass at all and reads as
+  /// an odd thing for a "clear shots" offer to take — per feedback, this
+  /// (not the broader alcoholic set) is what it should have been using.
   void clearMiniShots() {
     for (final b in List.of(_liveBodies)) {
       if (b.ingredient.isMiniShot) {
@@ -935,13 +925,13 @@ class MixolocoGame extends Forge2DGame {
     }
   }
 
-  /// The rewarded-ad "clear all shots" continue: removes every alcoholic
+  /// The rewarded-ad "clear all shots" continue: clears every Mini-Shots
   /// item from the table and un-ends the game — called once the ad
   /// finishes playing; see GameScreen's continue-offer flow. Staging's
   /// own visibility follows board.gameOver via the next syncBoard call as
   /// normal, so nothing extra is needed for that here.
-  void clearAlcoholicAndResume() {
-    clearAlcoholic();
+  void clearMiniShotsAndResume() {
+    clearMiniShots();
     _gameOverTriggered = false;
     _overflowStreak = 0;
   }

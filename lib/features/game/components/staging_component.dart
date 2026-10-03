@@ -60,7 +60,13 @@ class StagingComponent extends PositionComponent with DragCallbacks {
 
   void hide() => _visible = false;
 
-  double _clampAim(double x) => x.clamp(_radius, size.x - _radius);
+  /// A quarter of the radius (not the full radius) as the margin — per
+  /// feedback the old full-radius clamp (keeping the whole glass
+  /// on-screen while aiming) left noticeably more table width
+  /// unreachable near the edges than it needed to, and a first pass at
+  /// half the radius still wasn't quite far enough; this still keeps
+  /// part of the glass visible while aiming, just not the whole thing.
+  double _clampAim(double x) => x.clamp(_radius * 0.25, size.x - _radius * 0.25);
 
   @override
   void update(double dt) {

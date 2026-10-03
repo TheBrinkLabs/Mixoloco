@@ -11,6 +11,7 @@ const _kMusicEnabledKey = 'music_enabled';
 const _kMenuMusicEnabledKey = 'menu_music_enabled';
 const _kGameMusicEnabledKey = 'game_music_enabled';
 const _kSfxEnabledKey = 'sfx_enabled';
+const _kCocktailModeEnabledKey = 'cocktail_mode_enabled';
 const _kLocaleKey = 'app_locale';
 const _kAdFreeForeverKey = 'ad_free_forever';
 const _kAdFreeOneDayExpiryKey = 'ad_free_one_day_expiry_ms';
@@ -118,6 +119,22 @@ Future<bool> loadSfxEnabled() async {
 Future<void> saveSfxEnabled(bool enabled) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(_kSfxEnabledKey, enabled);
+}
+
+/// Whether cocktails drive progression — on by default (the game's
+/// normal mode), toggled from Settings. Off switches the level-up
+/// condition from "every cocktail plus the jug" to just "merge the two
+/// highest items" (reach the jug/capstone tier on its own) and hides
+/// the progress-tabs row — see GameStateNotifier._checkLevelUp and
+/// GameScreen's own use of this.
+Future<bool> loadCocktailModeEnabled() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(_kCocktailModeEnabledKey) ?? true;
+}
+
+Future<void> saveCocktailModeEnabled(bool enabled) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_kCocktailModeEnabledKey, enabled);
 }
 
 /// The selected app language — a plain language code ('en'/'es') rather

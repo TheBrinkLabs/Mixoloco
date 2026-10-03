@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/cocktail_mode_provider.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
 import '../../../data/repositories/league_repository.dart';
@@ -491,17 +492,22 @@ class GameStateNotifier extends Notifier<BoardState> {
   }
 
   /// Every Level 1 cocktail recipe made at least once, plus the Jug
-  /// reached, on this run — advances to Level 2. A no-op once already
-  /// there (there's no Level 3 to advance to further). Only flips
-  /// [BoardState.level] itself; GameScreen notices that flip and calls
-  /// [enterLevel] to actually reset the table/queue/order for the new
-  /// chain once its celebration sequence has played out (see
-  /// level_up_overlay.dart) — doing that heavy a reset from inside this
-  /// callback, mid physics-contact-resolution, would be a bad time for
-  /// the whole board to change under MixolocoGame's feet.
+  /// reached, on this run — advances to Level 2. With Cocktail Mode off
+  /// (see cocktail_mode_provider.dart), the cocktail requirement drops
+  /// out entirely — reaching the Jug (merging the two highest items) is
+  /// enough on its own. A no-op once already at Level 2 (there's no
+  /// Level 3 to advance to further). Only flips [BoardState.level]
+  /// itself; GameScreen notices that flip and calls [enterLevel] to
+  /// actually reset the table/queue/order for the new chain once its
+  /// celebration sequence has played out (see level_up_overlay.dart) —
+  /// doing that heavy a reset from inside this callback, mid physics-
+  /// contact-resolution, would be a bad time for the whole board to
+  /// change under MixolocoGame's feet.
   void _checkLevelUp() {
     if (state.level >= 2) return;
-    if (state.jugReached && state.completedCocktailIds.length >= kCocktailRecipes.length) {
+    if (!state.jugReached) return;
+    final cocktailModeEnabled = ref.read(cocktailModeProvider);
+    if (!cocktailModeEnabled || state.completedCocktailIds.length >= kCocktailRecipes.length) {
       state = state.copyWith(level: 2);
     }
   }

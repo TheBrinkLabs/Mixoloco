@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/audio_settings_provider.dart';
+import '../../../core/services/cocktail_mode_provider.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
@@ -23,6 +24,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(audioSettingsProvider);
     final notifier = ref.read(audioSettingsProvider.notifier);
+    final cocktailModeEnabled = ref.watch(cocktailModeProvider);
     final locale = ref.watch(localeProvider);
     final screenSize = MediaQuery.sizeOf(context);
     const sideMargin = 28.0;
@@ -74,6 +76,15 @@ class SettingsScreen extends ConsumerWidget {
                       label: tr(locale, 'sound_effects'),
                       value: settings.sfxEnabled,
                       onChanged: notifier.setSfxEnabled,
+                      width: plankWidth,
+                      height: plankHeight,
+                    ),
+                    const SizedBox(height: 10),
+                    _SettingPlankRow(
+                      icon: Icons.local_bar_rounded,
+                      label: tr(locale, 'cocktail_mode'),
+                      value: cocktailModeEnabled,
+                      onChanged: ref.read(cocktailModeProvider.notifier).setEnabled,
                       width: plankWidth,
                       height: plankHeight,
                     ),

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/ad_service.dart';
 import '../../../core/services/audio_settings_provider.dart';
+import '../../../core/services/cocktail_mode_provider.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/services/purchase_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -215,7 +216,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
       RewardedAdSlot.continueGame,
       onReward: () {
         if (!mounted) return;
-        _game.clearAlcoholicAndResume();
+        _game.clearMiniShotsAndResume();
         ref.read(gameStateProvider.notifier).continueAfterAd();
         setState(() => _showingAdPlaceholder = false);
       },
@@ -237,7 +238,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
         final watched = await showContinueFallbackVideo(context, ref.read(localeProvider));
         if (!mounted) return;
         if (watched) {
-          _game.clearAlcoholicAndResume();
+          _game.clearMiniShotsAndResume();
           ref.read(gameStateProvider.notifier).continueAfterAd();
         } else {
           ref.read(gameStateProvider.notifier).declineContinue();
@@ -304,6 +305,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
   Widget build(BuildContext context) {
     final board = ref.watch(gameStateProvider);
     final locale = ref.watch(localeProvider);
+    final cocktailModeEnabled = ref.watch(cocktailModeProvider);
     final screenSize = MediaQuery.sizeOf(context);
     final rooftop = board.level >= 2;
     // Level 3's own table/header-board art hasn't landed yet (more to
@@ -514,16 +516,21 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
                   onTap: () => setState(() => _showCocktailMenu = true),
                 ),
               ),
-              Positioned(
-                left: progressTabMargin,
-                top: progressTabsTop,
-                child: _ProgressTabsRow(
-                  board: board,
-                  tabWidth: progressTabWidth,
-                  tabHeight: progressTabHeight,
-                  gap: progressTabGap,
+              // Cocktail Mode off: cocktails can still be made/scored
+              // (the order card/Cocktail Menu above are untouched), but
+              // this progress-tracking row doesn't mean anything when
+              // completing them isn't what levels you up anymore.
+              if (cocktailModeEnabled)
+                Positioned(
+                  left: progressTabMargin,
+                  top: progressTabsTop,
+                  child: _ProgressTabsRow(
+                    board: board,
+                    tabWidth: progressTabWidth,
+                    tabHeight: progressTabHeight,
+                    gap: progressTabGap,
+                  ),
                 ),
-              ),
               Positioned(
                 left: geometry.playAreaRect.left,
                 top: geometry.playAreaRect.top,

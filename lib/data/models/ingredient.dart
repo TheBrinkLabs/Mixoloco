@@ -185,16 +185,12 @@ class Ingredient {
   /// appendage) set a non-zero [CollisionCircle.offsetX].
   final List<CollisionCircle>? extraCircles;
 
-  /// Whether this ingredient counts toward the rewarded-ad "clear all
-  /// shots" continue's clear-the-table effect (see
-  /// MixolocoGame.clearAlcoholic/clearAlcoholicAndResume) — the mid-game
-  /// purchase that used to share this same flag was replaced by Slam
-  /// Mini-Shots' own, narrower [isMiniShot] flag. A flag rather than a
-  /// hardcoded id list at the call site — the rooftop chain alone adds
-  /// five more alcoholic ingredients (Gin, Whisky, Vermouth, Coffee
-  /// Liqueur, Melon Liqueur) on top of the beach chain's three (Vodka,
-  /// Rum, Blue Curaçao), and a per-ingredient flag scales to that
-  /// without the clearing logic needing to know the full list by name.
+  /// Whether this ingredient contains alcohol — purely descriptive game
+  /// data at the moment (nothing currently reads it; the rewarded-ad
+  /// "clear all shots" continue and the Slam Mini-Shots purchase both
+  /// clear by [isMiniShot] instead, since this broader flag's rooftop
+  /// set turned out to include Whisky, which isn't a shot glass and
+  /// reads oddly as something a "clear shots" offer sweeps away).
   final bool isAlcoholic;
 
   /// Whether this ingredient counts toward the Slam Mini-Shots purchase's
