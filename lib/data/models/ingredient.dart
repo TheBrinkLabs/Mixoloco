@@ -838,7 +838,7 @@ const kEvolutionChainLevel3 = [
     // 'pineapple' uses — same reasoning (and same distinct-id fix) as
     // this chain's own 'orange_slice' above.
     id: 'pineapple_fruit',
-    label: 'Pineapple Juice',
+    label: 'Pineapple',
     color: Color(0xFFF7C948),
     tier: 9,
     shape: GlassShape.tumbler,

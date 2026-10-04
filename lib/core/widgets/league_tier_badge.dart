@@ -26,6 +26,11 @@ String labelForTier(String tier) {
   }
 }
 
+/// bronze_league.png's own aspect once cropped tight to its plate (was
+/// 1408x768 with a lot of transparent padding baked in, cropped down
+/// to 1238x452) — used to size it without letterboxing.
+const kLeaguePlateAspect = 1238 / 452;
+
 /// The engraved-metal plate art for a tier, once made — currently only
 /// bronze; silver/gold fall back to the plain colour-coded pill below
 /// until their own plates are supplied.
@@ -39,17 +44,17 @@ String? leagueAssetForTier(String tier) {
 }
 
 /// A league tier badge — the real engraved plate art
-/// (assets/images/bronze_league.png etc, 1408x768) when one exists for
-/// [tier], otherwise a colour-coded pill as a placeholder. Used both as
-/// the league screen's own full-width header (pass [width]) and as a
+/// (assets/images/bronze_league.png etc) when one exists for [tier],
+/// otherwise a colour-coded pill as a placeholder. Used both as the
+/// league screen's own full-width header (pass [width]) and as a
 /// small badge elsewhere (pass [fontSize] instead).
 class LeagueTierBadge extends StatelessWidget {
   final String tier;
   final double fontSize;
 
   /// When set, renders as a full-width banner at this width (height
-  /// follows the plate art's own 1408:768 aspect) instead of the
-  /// small auto-sized badge — the league screen's own header row.
+  /// follows [kLeaguePlateAspect]) instead of the small auto-sized
+  /// badge — the league screen's own header row.
   final double? width;
   const LeagueTierBadge({super.key, required this.tier, this.fontSize = 11, this.width});
 
@@ -59,7 +64,7 @@ class LeagueTierBadge extends StatelessWidget {
     final color = colorForTier(tier);
     if (width != null) {
       final w = width!;
-      final h = w / (1408 / 768);
+      final h = w / kLeaguePlateAspect;
       if (asset != null) {
         return Image.asset(asset, width: w, height: h, fit: BoxFit.contain);
       }
@@ -80,7 +85,7 @@ class LeagueTierBadge extends StatelessWidget {
     }
     if (asset != null) {
       final height = fontSize * 3.6;
-      return Image.asset(asset, height: height, width: height * (1408 / 768), fit: BoxFit.contain);
+      return Image.asset(asset, height: height, width: height * kLeaguePlateAspect, fit: BoxFit.contain);
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

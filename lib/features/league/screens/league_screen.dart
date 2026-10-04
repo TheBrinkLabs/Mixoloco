@@ -81,11 +81,11 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
                             height: plankHeight,
                             assetPath: 'assets/images/menu_board_3.png',
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 6),
                           if (!_resultBannerDismissed && state.lastWeekResultIsNew && state.lastWeekResult != null)
                             _WeekResultBanner(result: state.lastWeekResult!, onDismiss: () => setState(() => _resultBannerDismissed = true)),
                           _buildHeader(state, rowWidth),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 6),
                           if (state.pendingJoin)
                             _buildPendingJoin()
                           else if (state.leaderboard.isEmpty)

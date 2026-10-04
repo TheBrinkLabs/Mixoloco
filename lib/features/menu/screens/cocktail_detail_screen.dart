@@ -155,10 +155,12 @@ class _InstructionsCard extends StatelessWidget {
           children: [
             Image.asset('assets/images/Cocktail_intructions.png', fit: BoxFit.fill),
             // To the right of the card's own sketched glass (its top-left
-            // corner), not above the card — the sketch occupies roughly
-            // the top-left third, so the title starts clear of it.
+            // corner), not above the card — top-aligned with the glass
+            // drawing's own rim (measured ~0.135 of the card's height),
+            // not the card's edge, so the title sits level with the art
+            // rather than floating above it.
             Positioned(
-              top: height * 0.07,
+              top: height * 0.135,
               left: width * 0.38,
               right: width * 0.08,
               child: Text(
@@ -231,7 +233,7 @@ class _InstructionsFullScreen extends StatelessWidget {
                     children: [
                       Image.asset('assets/images/Cocktail_intructions.png', fit: BoxFit.fill),
                       Positioned(
-                        top: height * 0.07,
+                        top: height * 0.135,
                         left: width * 0.38,
                         right: width * 0.08,
                         child: Text(
