@@ -10,7 +10,20 @@ class GlassVisual extends StatelessWidget {
   final Ingredient ingredient;
   final double size;
 
-  const GlassVisual({super.key, required this.ingredient, this.size = 64});
+  /// Whether to apply [Ingredient.displayScale]/[displayScaleX] on top
+  /// of the raw image — true (every in-game call site: the table, the
+  /// HUD's Unlocked badge) so this preview matches how the same art
+  /// actually touches/fills its physics circle on the table. False for
+  /// a plain catalog list (the Info menu's Ingredients screen, a
+  /// cocktail's own ingredient breakdown, the Leaderboard's Evolution
+  /// column) — those scales are calibrated for gameplay contact-
+  /// matching, not for looking visually consistent next to every other
+  /// ingredient in a list, and applying them there was exactly why
+  /// Vodka (displayScaleX 1.652, a deliberate gameplay stretch) read as
+  /// oversized next to everything else per feedback.
+  final bool applyDisplayScale;
+
+  const GlassVisual({super.key, required this.ingredient, this.size = 64, this.applyDisplayScale = true});
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +39,7 @@ class GlassVisual extends StatelessWidget {
         // drawn glass the same way an ingredient with no art at all does.
         errorBuilder: (context, error, stackTrace) => _drawn,
       );
+      if (!applyDisplayScale) return image;
       // Some photos are naturally tall/narrow and read as smaller than
       // rounder ones once fit into the same square box — displayScale
       // compensates, scaling in place so it doesn't shift neighbors.

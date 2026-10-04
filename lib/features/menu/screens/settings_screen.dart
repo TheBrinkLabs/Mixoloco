@@ -37,7 +37,6 @@ class SettingsScreen extends ConsumerWidget {
         showHeaderBoard: false,
         child: Stack(
           children: [
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(vertical: 40),
@@ -107,6 +106,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            // Painted last — see info_screen.dart's matching comment.
+            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
           ],
         ),
       ),

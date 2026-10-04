@@ -43,6 +43,7 @@ class InfoScreen extends ConsumerWidget {
                       width: plankWidth,
                       height: plankHeight,
                       assetPath: 'assets/images/menu_board_3.png',
+                      iconScale: 1.2,
                     ),
                     _InfoRow(
                       icon: Icons.local_bar_rounded,
@@ -66,6 +67,7 @@ class InfoScreen extends ConsumerWidget {
                       label: tr(locale, 'songs'),
                       width: plankWidth,
                       height: plankHeight,
+                      iconScale: 1.25,
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SongsScreen())),
                     ),
                     _InfoRow(
@@ -74,6 +76,7 @@ class InfoScreen extends ConsumerWidget {
                       label: tr(locale, 'about'),
                       width: plankWidth,
                       height: plankHeight,
+                      iconScale: 1.25,
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutScreen())),
                     ),
                   ],
@@ -103,7 +106,20 @@ class _InfoRow extends StatelessWidget {
   final double width;
   final double height;
   final VoidCallback onTap;
-  const _InfoRow({required this.icon, this.iconAsset, required this.label, required this.width, required this.height, required this.onTap});
+
+  /// Grows [iconAsset]'s rendered size relative to the standard
+  /// `height * 0.4` — Songs/About per feedback they read smaller/fainter
+  /// than Ingredients/Cocktails' own real-photo icons next to them.
+  final double iconScale;
+  const _InfoRow({
+    required this.icon,
+    this.iconAsset,
+    required this.label,
+    required this.width,
+    required this.height,
+    required this.onTap,
+    this.iconScale = 1.0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +135,7 @@ class _InfoRow extends StatelessWidget {
           child: Row(
             children: [
               iconAsset != null
-                  ? Image.asset(iconAsset!, width: height * 0.4, height: height * 0.4, fit: BoxFit.contain)
+                  ? Image.asset(iconAsset!, width: height * 0.4 * iconScale, height: height * 0.4 * iconScale, fit: BoxFit.contain)
                   : Icon(icon, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
               SizedBox(width: width * 0.03),
               Expanded(

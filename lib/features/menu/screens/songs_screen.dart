@@ -136,7 +136,11 @@ class _SongsLevelPage extends StatelessWidget {
       showTable: false,
       showHeaderBoard: false,
       backgroundAssetPath: level.backgroundAssetPath,
-      child: Center(
+      // Bottom-anchored (not centered) — per feedback, this leaves the
+      // top of the screen, where each backdrop photo's own best detail
+      // sits, clear rather than covered by boards for a short playlist.
+      child: Align(
+        alignment: Alignment.bottomCenter,
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 40),
           child: Column(

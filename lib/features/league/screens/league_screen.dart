@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/i18n/strings.dart';
+import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart';
@@ -47,45 +49,64 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(leagueControllerProvider);
+    final locale = ref.watch(localeProvider);
+    final screenSize = MediaQuery.sizeOf(context);
+    const sideMargin = 28.0;
+    final plankWidth = screenSize.width - sideMargin * 2;
+    final plankHeight = plankWidth / kMenuBoard3Aspect;
+    final rowWidth = screenSize.width - 32;
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.bg,
-        elevation: 0,
-        title: const Text('Leaderboard', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.textLight)),
-      ),
-      body: SafeArea(
-        child: state.loading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.sunsetOrange))
-            : state.error == 'not_signed_in'
-            ? _buildConnecting()
-            : RefreshIndicator(
-                color: AppColors.sunsetOrange,
-                onRefresh: () => ref.read(leagueControllerProvider.notifier).refresh(),
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  children: [
-                    if (!_resultBannerDismissed && state.lastWeekResultIsNew && state.lastWeekResult != null)
-                      _WeekResultBanner(result: state.lastWeekResult!, onDismiss: () => setState(() => _resultBannerDismissed = true)),
-                    _buildHeader(state),
-                    const SizedBox(height: 16),
-                    if (state.pendingJoin)
-                      _buildPendingJoin()
-                    else if (state.leaderboard.isEmpty)
-                      _buildEmpty()
-                    else ...[
-                      _LeaderboardHeaderRow(width: MediaQuery.sizeOf(context).width - 32),
-                      ...state.leaderboard.asMap().entries.map((e) => _LeaderboardRow(
-                        rank: e.key + 1,
-                        entry: e.value,
-                        isMe: e.value.uid == state.uid,
-                        width: MediaQuery.sizeOf(context).width - 32,
-                      )),
-                    ],
-                  ],
-                ),
-              ),
+      body: BarBackdrop(
+        showTable: false,
+        showHeaderBoard: false,
+        child: Stack(
+          children: [
+            SafeArea(
+              child: state.loading
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.sunsetOrange))
+                  : state.error == 'not_signed_in'
+                  ? _buildConnecting()
+                  : RefreshIndicator(
+                      color: AppColors.sunsetOrange,
+                      onRefresh: () => ref.read(leagueControllerProvider.notifier).refresh(),
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 46, 16, 24),
+                        children: [
+                          WoodTitlePlank(
+                            title: tr(locale, 'leaderboard'),
+                            icon: Icons.leaderboard_rounded,
+                            iconAsset: 'assets/images/leaderboard.png',
+                            width: plankWidth,
+                            height: plankHeight,
+                            assetPath: 'assets/images/menu_board_3.png',
+                          ),
+                          const SizedBox(height: 14),
+                          if (!_resultBannerDismissed && state.lastWeekResultIsNew && state.lastWeekResult != null)
+                            _WeekResultBanner(result: state.lastWeekResult!, onDismiss: () => setState(() => _resultBannerDismissed = true)),
+                          _buildHeader(state),
+                          const SizedBox(height: 16),
+                          if (state.pendingJoin)
+                            _buildPendingJoin()
+                          else if (state.leaderboard.isEmpty)
+                            _buildEmpty()
+                          else ...[
+                            _LeaderboardHeaderRow(width: rowWidth),
+                            ...state.leaderboard.asMap().entries.map((e) => _LeaderboardRow(
+                              rank: e.key + 1,
+                              entry: e.value,
+                              isMe: e.value.uid == state.uid,
+                              width: rowWidth,
+                            )),
+                          ],
+                        ],
+                      ),
+                    ),
+            ),
+            // Painted last — see info_screen.dart's matching comment.
+            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
+          ],
+        ),
       ),
     );
   }
@@ -227,7 +248,7 @@ class _LeaderboardRow extends StatelessWidget {
                   shadowStyle: kPlankShadowStyle,
                 ),
               ),
-              SizedBox(width: 30, child: Center(child: GlassVisual(ingredient: entry.evolutionIngredient, size: height * 0.68))),
+              SizedBox(width: 30, child: Center(child: GlassVisual(ingredient: entry.evolutionIngredient, size: height * 0.68, applyDisplayScale: false))),
               SizedBox(
                 width: 26,
                 child: Center(

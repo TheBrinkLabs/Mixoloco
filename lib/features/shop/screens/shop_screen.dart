@@ -118,7 +118,6 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
         showHeaderBoard: false,
         child: Stack(
           children: [
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(vertical: 40),
@@ -182,14 +181,17 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                     const SizedBox(height: 18),
                     Text('${tr(locale, 'credits')}: ${board.credits}', style: const TextStyle(color: AppColors.textLight, fontSize: 15, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 24),
+                    // Flush together (no gap) and a little thinner than
+                    // the rest of this screen's boards — per feedback,
+                    // reads as one tight group of "the ad-removal
+                    // options" rather than five separately-spaced boards.
                     WoodTitlePlank(
                       title: tr(locale, 'shop_remove_ads_title'),
                       icon: Icons.block_rounded,
                       width: plankWidth,
-                      height: plankHeight,
+                      height: plankHeight * 0.85,
                       assetPath: 'assets/images/menu_board_3.png',
                     ),
-                    const SizedBox(height: 10),
                     _AdFreeRow(
                       tier: AdFreeTier.oneDay,
                       details: _products[kAdFreeProductIds[AdFreeTier.oneDay]],
@@ -197,11 +199,10 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                       disabled: _purchasingTier != null,
                       onBuy: () => _buyAdFree(locale, AdFreeTier.oneDay),
                       width: plankWidth,
-                      height: plankHeight,
+                      height: plankHeight * 0.85,
                       locale: locale,
-                      fallbackPrice: '£0.25',
+                      fallbackPrice: '£0.20',
                     ),
-                    const SizedBox(height: 10),
                     _AdFreeRow(
                       tier: AdFreeTier.monthly,
                       details: _products[kAdFreeProductIds[AdFreeTier.monthly]],
@@ -209,11 +210,10 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                       disabled: _purchasingTier != null,
                       onBuy: () => _buyAdFree(locale, AdFreeTier.monthly),
                       width: plankWidth,
-                      height: plankHeight,
+                      height: plankHeight * 0.85,
                       locale: locale,
-                      fallbackPrice: '£1.99',
+                      fallbackPrice: '£1.49',
                     ),
-                    const SizedBox(height: 10),
                     _AdFreeRow(
                       tier: AdFreeTier.yearly,
                       details: _products[kAdFreeProductIds[AdFreeTier.yearly]],
@@ -221,11 +221,10 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                       disabled: _purchasingTier != null,
                       onBuy: () => _buyAdFree(locale, AdFreeTier.yearly),
                       width: plankWidth,
-                      height: plankHeight,
+                      height: plankHeight * 0.85,
                       locale: locale,
-                      fallbackPrice: '£7.99',
+                      fallbackPrice: '£2.99',
                     ),
-                    const SizedBox(height: 10),
                     _AdFreeRow(
                       tier: AdFreeTier.forever,
                       details: _products[kAdFreeProductIds[AdFreeTier.forever]],
@@ -233,9 +232,9 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                       disabled: _purchasingTier != null,
                       onBuy: () => _buyAdFree(locale, AdFreeTier.forever),
                       width: plankWidth,
-                      height: plankHeight,
+                      height: plankHeight * 0.85,
                       locale: locale,
-                      fallbackPrice: '£19.99',
+                      fallbackPrice: '£3.99',
                     ),
                     if (adFree) ...[
                       const SizedBox(height: 14),
@@ -248,6 +247,9 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 ),
               ),
             ),
+            // Painted last — see info_screen.dart's matching comment; was
+            // visually sitting slightly behind this board's own art.
+            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
           ],
         ),
       ),

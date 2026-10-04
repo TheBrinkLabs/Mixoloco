@@ -357,14 +357,15 @@ class GameStateNotifier extends Notifier<BoardState> {
     required int highestTierUnlocked,
     required int highestTierUnlockedLevel2,
     required int highestLevelReached,
+    int? level,
   }) {
     _ingredientBag = [];
-    final level = highestLevelReached;
-    final highestForLevel = level >= 2 ? highestTierUnlockedLevel2 : highestTierUnlocked;
+    final resolvedLevel = level ?? highestLevelReached;
+    final highestForLevel = resolvedLevel >= 2 ? highestTierUnlockedLevel2 : highestTierUnlocked;
     return BoardState(
-      current: _randomIngredient(level, highestForLevel),
-      upcoming: List.generate(3, (_) => _randomIngredient(level, highestForLevel)),
-      order: level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail,
+      current: _randomIngredient(resolvedLevel, highestForLevel),
+      upcoming: List.generate(3, (_) => _randomIngredient(resolvedLevel, highestForLevel)),
+      order: resolvedLevel >= 2 ? kStarterCocktailLevel2 : kStarterCocktail,
       cocktailsMade: 0,
       score: 0,
       gameOver: false,
@@ -372,19 +373,32 @@ class GameStateNotifier extends Notifier<BoardState> {
       highestTierUnlocked: highestTierUnlocked,
       highestTierUnlockedLevel2: highestTierUnlockedLevel2,
       highestLevelReached: highestLevelReached,
-      level: level,
+      level: resolvedLevel,
       // A fresh game that *starts* on Level 2 (because that's already the
-      // lifetime record) isn't the moment of leveling up — that already
-      // happened, in whatever earlier run first reached it. Marking the
-      // celebration pre-shown here is what stops GameScreen's
+      // lifetime record, or the player deliberately chose it — see
+      // startNewGameAtLevel) isn't the moment of leveling up — that
+      // already happened, in whatever earlier run first reached it.
+      // Marking the celebration pre-shown here is what stops GameScreen's
       // `board.level == 2 && !levelUpCelebrationShown` check from replaying
       // the "Level Complete!" popup on every single new game once a
       // player's actually reached the rooftop bar; without this, only a
       // genuine mid-run 1->2 transition (see enterLevel) should ever show
       // it, but every fresh Level 2 start did too.
-      levelUpCelebrationShown: level >= 2,
+      levelUpCelebrationShown: resolvedLevel >= 2,
     );
   }
+
+  /// Starts a brand-new run at [level] — same lifetime-stat-carryover
+  /// rules as [restart], but lets the player deliberately choose a level
+  /// they've already reached rather than always jumping to their highest
+  /// (see the Play Game level picker, main menu).
+  void startNewGameAtLevel(int level) => state = _freshGame(
+    credits: state.credits,
+    highestTierUnlocked: state.highestTierUnlocked,
+    highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
+    highestLevelReached: state.highestLevelReached,
+    level: level,
+  );
 
   /// Takes the level and its highest-tier record explicitly rather than
   /// reading `state.*` directly — this is called from [_freshGame] during

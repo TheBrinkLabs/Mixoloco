@@ -44,7 +44,6 @@ class _HighScoresScreenState extends ConsumerState<HighScoresScreen> {
         showHeaderBoard: false,
         child: Stack(
           children: [
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(vertical: 40),
@@ -59,7 +58,7 @@ class _HighScoresScreenState extends ConsumerState<HighScoresScreen> {
                       assetPath: 'assets/images/menu_board_3.png',
                       iconAsset: 'assets/images/best_scores.png',
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 14),
                     if (scores == null)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 24),
@@ -85,14 +84,15 @@ class _HighScoresScreenState extends ConsumerState<HighScoresScreen> {
                         ),
                       )
                     else
-                      for (var i = 0; i < scores.length; i++) ...[
-                        _ScoreRow(rank: i + 1, score: scores[i], width: plankWidth, height: plankHeight),
-                        if (i < scores.length - 1) const SizedBox(height: 10),
-                      ],
+                      // Thinner boards, flush together — same layout as
+                      // the Leaderboard's own rows, per feedback.
+                      for (final (i, score) in scores.indexed) _ScoreRow(rank: i + 1, score: score, width: plankWidth, height: plankHeight / 2),
                   ],
                 ),
               ),
             ),
+            // Painted last — see info_screen.dart's matching comment.
+            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
           ],
         ),
       ),
@@ -100,6 +100,10 @@ class _HighScoresScreenState extends ConsumerState<HighScoresScreen> {
   }
 }
 
+/// Half [kMenuBoard3Aspect]'s usual height and a bigger relative font
+/// than that height would otherwise suggest — [height] comes in already
+/// halved, so these multipliers are calibrated against that, same as
+/// league_screen.dart's own half-height row.
 class _ScoreRow extends StatelessWidget {
   final int rank;
   final int score;
@@ -109,30 +113,33 @@ class _ScoreRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WoodPlank(
-      width: width,
-      height: height,
-      assetPath: 'assets/images/menu_board_3.png',
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: width * 0.09),
-        child: Row(
-          children: [
-            ColorfulPlankText(
-              text: '#$rank',
-              fontSize: height * 0.24,
-              variant: PlankTextVariant.plainWhite,
-              font: kPlankTextFont,
-              shadowStyle: kPlankShadowStyle,
-            ),
-            const Spacer(),
-            ColorfulPlankText(
-              text: '$score',
-              fontSize: height * 0.28,
-              variant: PlankTextVariant.plainWhite,
-              font: kPlankTextFont,
-              shadowStyle: kPlankShadowStyle,
-            ),
-          ],
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      child: WoodPlank(
+        width: width,
+        height: height,
+        assetPath: 'assets/images/menu_board_3.png',
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: width * 0.09),
+          child: Row(
+            children: [
+              ColorfulPlankText(
+                text: '#$rank',
+                fontSize: height * 0.4,
+                variant: PlankTextVariant.plainWhite,
+                font: kPlankTextFont,
+                shadowStyle: kPlankShadowStyle,
+              ),
+              const Spacer(),
+              ColorfulPlankText(
+                text: '$score',
+                fontSize: height * 0.46,
+                variant: PlankTextVariant.plainWhite,
+                font: kPlankTextFont,
+                shadowStyle: kPlankShadowStyle,
+              ),
+            ],
+          ),
         ),
       ),
     );

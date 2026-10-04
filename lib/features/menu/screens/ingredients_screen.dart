@@ -107,7 +107,7 @@ class _IngredientRow extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: width * 0.06),
         child: Row(
           children: [
-            GlassVisual(ingredient: ingredient, size: height * 0.72),
+            GlassVisual(ingredient: ingredient, size: height * 0.72, applyDisplayScale: false),
             SizedBox(width: width * 0.04),
             Expanded(
               child: ColorfulPlankText(text: ingredient.label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),

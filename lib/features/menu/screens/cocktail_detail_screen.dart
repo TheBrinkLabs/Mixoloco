@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/colorful_plank_text.dart';
@@ -79,6 +80,7 @@ class CocktailDetailScreen extends ConsumerWidget {
                     if (steps != null) ...[
                       const SizedBox(height: 18),
                       _InstructionsCard(
+                        recipeName: recipe.name,
                         steps: steps,
                         width: plankWidth,
                         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _InstructionsFullScreen(recipeName: recipe.name, steps: steps))),
@@ -113,7 +115,7 @@ class _IngredientRow extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: width * 0.06),
         child: Row(
           children: [
-            GlassVisual(ingredient: ingredient, size: height * 0.72),
+            GlassVisual(ingredient: ingredient, size: height * 0.72, applyDisplayScale: false),
             SizedBox(width: width * 0.04),
             Expanded(
               child: ColorfulPlankText(text: ingredient.label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
@@ -127,14 +129,17 @@ class _IngredientRow extends StatelessWidget {
 
 /// The numbered step list laid out on cocktail_intructions.png's own
 /// parchment card — dark text (the card is light, unlike every wood
-/// plank elsewhere) inset to clear its decorative corner sketch and
-/// hand-drawn border. Tappable: opens [_InstructionsFullScreen] for a
-/// bigger, easier read.
+/// plank elsewhere), a handwriting-style font (fits a "recipe card"
+/// much better than the game's usual chunky plank lettering), and the
+/// cocktail's own name as a title sitting beside the card's own
+/// decorative glass sketch rather than floating separately above it.
+/// Tappable: opens [_InstructionsFullScreen] for a bigger, easier read.
 class _InstructionsCard extends StatelessWidget {
+  final String recipeName;
   final List<String> steps;
   final double width;
   final VoidCallback onTap;
-  const _InstructionsCard({required this.steps, required this.width, required this.onTap});
+  const _InstructionsCard({required this.recipeName, required this.steps, required this.width, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -149,9 +154,21 @@ class _InstructionsCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Image.asset('assets/images/Cocktail_intructions.png', fit: BoxFit.fill),
+            // To the right of the card's own sketched glass (its top-left
+            // corner), not above the card — the sketch occupies roughly
+            // the top-left third, so the title starts clear of it.
+            Positioned(
+              top: height * 0.07,
+              left: width * 0.38,
+              right: width * 0.08,
+              child: Text(
+                recipeName,
+                style: GoogleFonts.caveat(fontSize: width * 0.078, fontWeight: FontWeight.w700, color: Colors.black87),
+              ),
+            ),
             Padding(
               padding: EdgeInsets.only(top: height * 0.3, left: width * 0.14, right: width * 0.1, bottom: height * 0.08),
-              child: _StepList(steps: steps, fontSize: width * 0.044),
+              child: _StepList(steps: steps, fontSize: width * 0.038),
             ),
           ],
         ),
@@ -173,10 +190,10 @@ class _StepList extends StatelessWidget {
       children: [
         for (var i = 0; i < steps.length; i++)
           Padding(
-            padding: EdgeInsets.only(bottom: fontSize * 0.55),
+            padding: EdgeInsets.only(bottom: fontSize * 0.5),
             child: Text(
               '${i + 1}. ${steps[i]}',
-              style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600, color: Colors.black87, height: 1.3),
+              style: GoogleFonts.caveat(fontSize: fontSize, fontWeight: FontWeight.w600, color: Colors.black87, height: 1.25),
             ),
           ),
       ],
@@ -206,26 +223,28 @@ class _InstructionsFullScreen extends StatelessWidget {
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ColorfulPlankText(text: recipeName, fontSize: width * 0.09, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: width,
-                      height: height,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image.asset('assets/images/Cocktail_intructions.png', fit: BoxFit.fill),
-                          Padding(
-                            padding: EdgeInsets.only(top: height * 0.3, left: width * 0.14, right: width * 0.1, bottom: height * 0.08),
-                            child: _StepList(steps: steps, fontSize: width * 0.058),
-                          ),
-                        ],
+                child: SizedBox(
+                  width: width,
+                  height: height,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.asset('assets/images/Cocktail_intructions.png', fit: BoxFit.fill),
+                      Positioned(
+                        top: height * 0.07,
+                        left: width * 0.38,
+                        right: width * 0.08,
+                        child: Text(
+                          recipeName,
+                          style: GoogleFonts.caveat(fontSize: width * 0.065, fontWeight: FontWeight.w700, color: Colors.black87),
+                        ),
                       ),
-                    ),
-                  ],
+                      Padding(
+                        padding: EdgeInsets.only(top: height * 0.3, left: width * 0.14, right: width * 0.1, bottom: height * 0.08),
+                        child: _StepList(steps: steps, fontSize: width * 0.050),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

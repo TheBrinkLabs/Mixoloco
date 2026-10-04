@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import '../theme/colorful_plank_text.dart';
 import 'bar_backdrop.dart' show kMenuBoardAspect;
 
@@ -52,9 +51,12 @@ class WoodPlank extends StatelessWidget {
 /// The circular "back to previous screen" button every pushed
 /// wood-plank screen (Settings, Best Scores) shows top-left — shared
 /// here rather than duplicated per screen since both copies were
-/// pixel-identical. The glyph itself is our sunset gold->orange->coral
-/// gradient (the same "orange combo" every plank label uses) via a
-/// ShaderMask, in place of the old flat off-white icon.
+/// pixel-identical.
+///
+/// A real carved-wood disc (assets/images/back.png) — replaced two
+/// code-painted attempts (a flat dark circle, then a wood-gradient
+/// pill with a drawn chevron) per feedback neither quite fit; real art
+/// reads as part of the plank family immediately.
 class PlankBackButton extends StatelessWidget {
   final VoidCallback onTap;
   const PlankBackButton({super.key, required this.onTap});
@@ -65,72 +67,10 @@ class PlankBackButton extends StatelessWidget {
       bottom: false,
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.35),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-          ),
-          child: const Center(child: SizedBox(width: 19, height: 19, child: CustomPaint(painter: _PlankArrowPainter()))),
-        ),
+        child: Image.asset('assets/images/back.png', width: 42, height: 42, fit: BoxFit.contain),
       ),
     );
   }
-}
-
-/// A thick, rounded back-arrow glyph — outline + gradient fill + soft
-/// shadow, the exact same three layers [ColorfulPlankText] paints every
-/// letter with — instead of Material's thin [Icons.arrow_back_rounded],
-/// which read as a mismatched foreign font next to the chunky plank
-/// lettering once just tinted orange.
-class _PlankArrowPainter extends CustomPainter {
-  const _PlankArrowPainter();
-
-  Path _arrowPath(Size size) {
-    final w = size.width;
-    final h = size.height;
-    final head = Path()
-      ..moveTo(w * 0.04, h * 0.5)
-      ..lineTo(w * 0.48, h * 0.14)
-      ..lineTo(w * 0.48, h * 0.86)
-      ..close();
-    final shaft = Path()..addRRect(RRect.fromLTRBR(w * 0.4, h * 0.34, w * 0.98, h * 0.66, Radius.circular(h * 0.08)));
-    return Path.combine(PathOperation.union, head, shaft);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = _arrowPath(size);
-
-    final shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.45)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.shortestSide * 0.08);
-    canvas.save();
-    canvas.translate(size.width * 0.05, size.height * 0.08);
-    canvas.drawPath(path, shadowPaint);
-    canvas.restore();
-
-    final outlinePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.shortestSide * 0.16
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round
-      ..color = const Color(0xFF4A2410);
-    canvas.drawPath(path, outlinePaint);
-
-    final fillPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [AppColors.sunsetGold, AppColors.sunsetOrange, AppColors.coral],
-      ).createShader(Offset.zero & size);
-    canvas.drawPath(path, fillPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _PlankArrowPainter oldDelegate) => false;
 }
 
 /// A toggle styled to look carved/inset into the wood plank itself —
@@ -220,6 +160,11 @@ class WoodTitlePlank extends StatelessWidget {
   /// to a second line and overflow the plank's fixed height. 1.0 (every
   /// other caller) keeps the original size exactly.
   final double fontScale;
+
+  /// Grows [iconAsset]'s rendered size relative to the standard
+  /// `height * 0.48` — e.g. the Info hub's own title plank, 20% bigger
+  /// per feedback. 1.0 (every other caller) keeps the original size.
+  final double iconScale;
   const WoodTitlePlank({
     super.key,
     required this.title,
@@ -229,6 +174,7 @@ class WoodTitlePlank extends StatelessWidget {
     this.assetPath = 'assets/images/menu_board.png',
     this.iconAsset,
     this.fontScale = 1.0,
+    this.iconScale = 1.0,
   });
 
   @override
@@ -237,7 +183,7 @@ class WoodTitlePlank extends StatelessWidget {
     // 20% bigger than the plain Material glyph it replaces — the real
     // artwork carries more visual weight than a thin icon outline, so
     // it reads better with some extra room.
-    final imageIconSize = height * 0.48;
+    final imageIconSize = height * 0.48 * iconScale;
     final iconWidget = iconAsset != null
         ? Image.asset(iconAsset!, width: imageIconSize, height: imageIconSize, fit: BoxFit.contain)
         : Icon(icon, size: iconSize, color: kPlankIconColor, shadows: kPlankIconShadows);

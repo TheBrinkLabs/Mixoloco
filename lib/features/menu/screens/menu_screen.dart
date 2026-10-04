@@ -154,15 +154,45 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
     ));
   }
 
-  void _playGame() {
-    // A game left via Home mid-run should be resumed as-is (that's the
-    // whole point of placedItems persistence) — but a game left via Home
-    // *after* it already ended is a finished game with no fresh state
-    // ever set, so starting again from here needs an explicit restart or
-    // it reopens straight into that old game-over/full table.
-    if (ref.read(gameStateProvider).gameOver) {
-      ref.read(gameStateProvider.notifier).restart();
+  /// A game left via Home mid-run should be resumable as-is (that's the
+  /// whole point of placedItems persistence) — offers Continue/New Game
+  /// whenever there's actually something in progress to continue
+  /// (non-zero score or a non-empty table, and not already game-over —
+  /// a genuinely fresh/never-played state has nothing worth offering
+  /// Continue for, so that case skips straight to New Game). Choosing
+  /// New Game past Level 1 offers a level picker, defaulting to the
+  /// highest the player's ever reached — see startNewGameAtLevel.
+  Future<void> _playGame() async {
+    final board = ref.read(gameStateProvider);
+    final inProgress = !board.gameOver && (board.score > 0 || board.placedItems.isNotEmpty);
+    if (!inProgress) {
+      await _startNewGame();
+      return;
     }
+    final locale = ref.read(localeProvider);
+    final choice = await showDialog<_PlayChoice>(context: context, builder: (_) => _PlayChoiceDialog(locale: locale));
+    if (!mounted || choice == null) return;
+    if (choice == _PlayChoice.continueGame) {
+      _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const GameScreen()));
+    } else {
+      await _startNewGame();
+    }
+  }
+
+  Future<void> _startNewGame() async {
+    final board = ref.read(gameStateProvider);
+    var level = board.highestLevelReached;
+    if (board.highestLevelReached >= 2) {
+      final locale = ref.read(localeProvider);
+      final chosen = await showDialog<int>(
+        context: context,
+        builder: (_) => _LevelPickerDialog(locale: locale, maxLevel: board.highestLevelReached, initialLevel: board.highestLevelReached),
+      );
+      if (!mounted || chosen == null) return; // cancelled — stay on the menu
+      level = chosen;
+    }
+    ref.read(gameStateProvider.notifier).startNewGameAtLevel(level);
+    if (!mounted) return;
     _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const GameScreen()));
   }
 
@@ -356,6 +386,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                                   label: tr(locale, 'info'),
                                   icon: Icons.menu_book_rounded,
                                   iconAsset: 'assets/images/info.png',
+                                  iconScale: 1.2,
                                   width: plankWidth,
                                   height: plankHeight,
                                   onTap: () => _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const InfoScreen())),
@@ -548,7 +579,25 @@ class _MenuPlankTile extends StatefulWidget {
   final PlankFont font;
   final PlankShadowStyle shadowStyle;
 
-  const _MenuPlankTile({required this.label, required this.icon, this.iconAsset, required this.width, required this.height, required this.variant, this.font = PlankFont.fredoka, this.shadowStyle = PlankShadowStyle.soft, this.onTap, this.comingSoon = false, this.soonLabel = 'SOON'});
+  /// Grows [iconAsset]'s rendered size relative to the standard
+  /// `height * 0.529` — Info, 20% bigger per feedback. 1.0 (every other
+  /// tile) keeps the original size.
+  final double iconScale;
+
+  const _MenuPlankTile({
+    required this.label,
+    required this.icon,
+    this.iconAsset,
+    required this.width,
+    required this.height,
+    required this.variant,
+    this.font = PlankFont.fredoka,
+    this.shadowStyle = PlankShadowStyle.soft,
+    this.onTap,
+    this.comingSoon = false,
+    this.soonLabel = 'SOON',
+    this.iconScale = 1.0,
+  });
 
   @override
   State<_MenuPlankTile> createState() => _MenuPlankTileState();
@@ -578,7 +627,12 @@ class _MenuPlankTileState extends State<_MenuPlankTile> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.iconAsset != null)
-                  Image.asset(widget.iconAsset!, width: widget.height * 0.529, height: widget.height * 0.529, fit: BoxFit.contain)
+                  Image.asset(
+                    widget.iconAsset!,
+                    width: widget.height * 0.529 * widget.iconScale,
+                    height: widget.height * 0.529 * widget.iconScale,
+                    fit: BoxFit.contain,
+                  )
                 else
                   Icon(
                     icon,
@@ -627,6 +681,125 @@ class _MenuPlankTileState extends State<_MenuPlankTile> {
       onTapUp: (_) => _setPressed(false),
       onTap: widget.onTap,
       child: AnimatedScale(scale: _pressed ? 0.96 : 1.0, duration: const Duration(milliseconds: 90), curve: Curves.easeOut, child: tile),
+    );
+  }
+}
+
+enum _PlayChoice { continueGame, newGame }
+
+/// Offered instead of jumping straight into GameScreen whenever there's
+/// a run actually in progress — see MenuScreen._playGame.
+class _PlayChoiceDialog extends StatelessWidget {
+  final AppLocale locale;
+  const _PlayChoiceDialog({required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              tr(locale, 'play_choice_title'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textLight),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(_PlayChoice.continueGame),
+              child: Container(
+                width: double.infinity,
+                height: 46,
+                decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(14)),
+                child: Center(child: Text(tr(locale, 'continue_label'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black))),
+              ),
+            ),
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(_PlayChoice.newGame),
+              child: Container(
+                width: double.infinity,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppColors.surface2,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                ),
+                child: Center(child: Text(tr(locale, 'new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textLight))),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets the player pick which already-reached level a New Game starts
+/// on, defaulting (highlighted) to the highest one — see
+/// MenuScreen._startNewGame. Names match InfoLevelData's own (Beach/
+/// Rooftop/Safari), the game's established level naming.
+class _LevelPickerDialog extends StatelessWidget {
+  final AppLocale locale;
+  final int maxLevel;
+  final int initialLevel;
+  const _LevelPickerDialog({required this.locale, required this.maxLevel, required this.initialLevel});
+
+  static String _levelName(int level) => switch (level) {
+    1 => 'Beach',
+    2 => 'Rooftop',
+    _ => 'Safari',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(tr(locale, 'choose_level'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textLight)),
+            const SizedBox(height: 18),
+            for (var level = maxLevel; level >= 1; level--) ...[
+              if (level != maxLevel) const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(level),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: level == initialLevel ? AppColors.gradientSunset : null,
+                    color: level == initialLevel ? null : AppColors.surface2,
+                    borderRadius: BorderRadius.circular(14),
+                    border: level == initialLevel ? null : Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${tr(locale, 'level')} $level — ${_levelName(level)}',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: level == initialLevel ? Colors.black : AppColors.textLight),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
