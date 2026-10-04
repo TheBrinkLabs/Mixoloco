@@ -123,7 +123,16 @@ class _CocktailRow extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
-                child: Image.asset(recipe.assetPath, width: height * 0.72, height: height * 0.72, fit: BoxFit.contain),
+                child: Image.asset(
+                  recipe.assetPath,
+                  width: height * 0.72,
+                  height: height * 0.72,
+                  fit: BoxFit.contain,
+                  // A few Level 3 recipes reference art that hasn't been
+                  // supplied yet — a plain glyph beats Flutter's broken-
+                  // image icon until it lands.
+                  errorBuilder: (context, error, stackTrace) => Icon(Icons.local_bar_rounded, size: height * 0.5, color: kPlankIconColor),
+                ),
               ),
               SizedBox(width: width * 0.04),
               Expanded(

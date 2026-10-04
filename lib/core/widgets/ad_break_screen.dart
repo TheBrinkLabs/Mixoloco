@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:unity_levelplay_mediation/unity_levelplay_mediation.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../i18n/strings.dart';
 import '../services/ad_service.dart';
 import '../services/locale_provider.dart';
@@ -51,11 +52,17 @@ class _AdBreakScreenState extends State<_AdBreakScreen> implements LevelPlayBann
   @override
   void initState() {
     super.initState();
+    // Same reasoning as continue_fallback_video_screen.dart's own
+    // WakelockPlus.enable() — a screen the player just watches without
+    // touching anything is exactly the kind a normal screen-timeout can
+    // turn off mid-ad.
+    WakelockPlus.enable();
     _startProviderTimeout();
   }
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     _countdownTimer?.cancel();
     _loadTimeoutTimer?.cancel();
     super.dispose();

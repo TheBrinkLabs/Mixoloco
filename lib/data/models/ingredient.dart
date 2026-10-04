@@ -710,21 +710,187 @@ const kEvolutionChainLevel2 = [
   ),
 ];
 
+/// The safari bar's own evolution chain (Level 3) — same independent-
+/// chain shape as [kEvolutionChainLevel2] (tiers 0-11, local to this
+/// chain). Shorter than the first two chains (12 tiers, not 13) since
+/// that's how many real ingredients this one's recipes actually need —
+/// nothing architecturally requires every chain to be the same length.
+///
+/// Lime/Vodka/Gin/Tonic/Orange/Prosecco/Pineapple reuse their existing
+/// art directly (same pattern as Level 2 reusing Cherry/Vodka/Lime from
+/// Level 1) rather than commissioning new versions of ingredients that
+/// already exist. Marula Liqueur/Honey/Mango/Ginger Beer are new —
+/// their assetPaths below are reserved for art that hasn't landed yet
+/// (see the class doc's note on assetPath/GlassVisual's drawn
+/// fallback); displayScale/displayScaleX are left at the default 1.0
+/// until that real art exists to measure against, same as every other
+/// ingredient's own first pass before its precise calibration.
+const kEvolutionChainLevel3 = [
+  Ingredient(
+    id: 'lime',
+    label: 'Lime Juice',
+    color: Color(0xFF9ACD32),
+    tier: 0,
+    shape: GlassShape.jug,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_lime.png',
+    displayScale: 1.119,
+  ),
+  Ingredient(
+    id: 'honey',
+    label: 'Honey',
+    color: Color(0xFFE8A317),
+    tier: 1,
+    shape: GlassShape.jug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_honey.png',
+  ),
+  Ingredient(
+    id: 'vodka',
+    label: 'Vodka',
+    color: Color(0xFFEAF6FA),
+    tier: 2,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_vodka.png',
+    displayScale: 1.044,
+    displayScaleX: 1.652,
+    isAlcoholic: true,
+    isMiniShot: true,
+  ),
+  Ingredient(
+    id: 'gin',
+    label: 'Gin',
+    color: Color(0xFFF0F4F0),
+    tier: 3,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_gin.png',
+    displayScale: 0.992,
+    isAlcoholic: true,
+    isMiniShot: true,
+    collisionProfile: [
+      CollisionCircle(offsetY: -0.59, radius: 0.68),
+      CollisionCircle(offsetY: -0.50, radius: 0.62),
+      CollisionCircle(offsetY: 0.07, radius: 0.56),
+      CollisionCircle(offsetY: 0.50, radius: 0.32),
+      CollisionCircle(offsetY: 0.63, radius: 0.21),
+      CollisionCircle(offsetY: 0.85, radius: 0.42),
+    ],
+  ),
+  Ingredient(
+    // A raw orange-slice picture, not the poured-glass art Level 1/2's
+    // own 'orange' uses — this chain's own dedicated art rather than a
+    // reuse, per feedback. displayScale left at the default until
+    // there's real art-fit calibration to measure against, same as
+    // every other brand new ingredient in this chain.
+    id: 'orange',
+    label: 'Orange Juice',
+    color: Color(0xFFFFA500),
+    tier: 4,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_orange_slice.png',
+  ),
+  Ingredient(
+    id: 'marula_liqueur',
+    label: 'Marula Liqueur',
+    color: Color(0xFFD2A857),
+    tier: 5,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_marula.png',
+    isAlcoholic: true,
+  ),
+  Ingredient(
+    id: 'tonic',
+    label: 'Tonic Water',
+    color: Color(0xFFDCEFF5),
+    tier: 6,
+    shape: GlassShape.mug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_tonic.png',
+    displayScale: 1.065,
+    collisionCapsule: CollisionCapsule(halfLength: 0.418, radius: 0.603, offsetY: 0.194),
+    extraCircles: [CollisionCircle(offsetX: 0.357, offsetY: -1.022, radius: 0.077)],
+  ),
+  Ingredient(
+    id: 'mango',
+    label: 'Mango',
+    color: Color(0xFFFF8C42),
+    tier: 7,
+    shape: GlassShape.jug,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_mango.png',
+  ),
+  Ingredient(
+    id: 'ginger_beer',
+    label: 'Ginger Beer',
+    color: Color(0xFFC77A2B),
+    tier: 8,
+    shape: GlassShape.mug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_ginger_beer.png',
+  ),
+  Ingredient(
+    // A whole-fruit picture, not the poured-glass art Level 1's own
+    // 'pineapple' uses — same reasoning as this chain's own 'orange'
+    // above.
+    id: 'pineapple',
+    label: 'Pineapple Juice',
+    color: Color(0xFFF7C948),
+    tier: 9,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_pineapple_fruit.png',
+  ),
+  Ingredient(
+    id: 'prosecco',
+    label: 'Prosecco',
+    color: Color(0xFFE8D9A0),
+    tier: 10,
+    shape: GlassShape.martini,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_prosecco.png',
+    displayScale: 0.993,
+    sizeMultiplier: 1.15,
+    isAlcoholic: true,
+    collisionProfile: [
+      CollisionCircle(offsetY: -0.95, radius: 0.27),
+      CollisionCircle(offsetY: -0.55, radius: 0.34),
+      CollisionCircle(offsetY: -0.15, radius: 0.28),
+      CollisionCircle(offsetY: 0.45, radius: 0.07),
+      CollisionCircle(offsetY: 0.95, radius: 0.37),
+    ],
+  ),
+  Ingredient(
+    id: 'safari_beer',
+    label: 'Safari Beer',
+    color: Color(0xFFC98A2C),
+    tier: 11,
+    shape: GlassShape.jug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_safari_beer.png',
+    isAlcoholic: true,
+  ),
+];
+
 /// The actual throwable pool for a player whose lifetime record within
 /// this level is [highestTierUnlocked] — [kThrowableTierCount] items
 /// normally, growing by one (the very next tier up) once they've reached
 /// [kExtraThrowableUnlockTier]. [level] picks which chain: 1 for the
-/// beach bar, 2 for the rooftop bar.
+/// beach bar, 2 for the rooftop bar, 3+ for the safari bar.
 List<Ingredient> throwableIngredientsFor(int level, int highestTierUnlocked) {
-  final chain = level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain;
+  final chain = level >= 3 ? kEvolutionChainLevel3 : (level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain);
   final count = highestTierUnlocked >= kExtraThrowableUnlockTier ? kThrowableTierCount + 1 : kThrowableTierCount;
   return chain.take(count).toList();
 }
 
 /// Resolves a CocktailRecipe.ingredientIds entry back to its Ingredient —
-/// searches both chains, since a handful of ids (cherry, vodka, lime)
-/// are shared between them. Throws if [id] isn't in either — recipes are
-/// only ever built from real ingredient ids, so that would mean a
-/// genuine data bug worth surfacing loudly rather than swallowing.
+/// searches all three chains, since a handful of ids (cherry, vodka,
+/// lime, gin, tonic, orange, prosecco, pineapple) are shared between
+/// them. Throws if [id] isn't in any — recipes are only ever built from
+/// real ingredient ids, so that would mean a genuine data bug worth
+/// surfacing loudly rather than swallowing.
 Ingredient findIngredientById(String id) =>
-    [...kEvolutionChain, ...kEvolutionChainLevel2].firstWhere((i) => i.id == id);
+    [...kEvolutionChain, ...kEvolutionChainLevel2, ...kEvolutionChainLevel3].firstWhere((i) => i.id == id);

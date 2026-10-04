@@ -95,4 +95,43 @@ const kCocktailInstructions = <String, List<String>>{
     'Top slowly with prosecco.',
     'Stir gently and serve.',
   ],
+  'vermouth_tonic': [
+    'Fill a glass with ice.',
+    'Pour in the vermouth.',
+    'Top with tonic water.',
+    'Garnish with a twist of lime.',
+  ],
+  'dawa': [
+    'Muddle the honey and lime in the glass.',
+    'Pour in the vodka.',
+    'Fill with ice and stir well.',
+  ],
+  'marula_sunset': [
+    'Fill a glass with ice.',
+    'Pour in the marula liqueur.',
+    'Top with orange juice and let it settle.',
+  ],
+  'citrus_mule': [
+    'Fill a glass with ice.',
+    'Pour in the vodka.',
+    'Top with ginger beer.',
+    'Add a squeeze of lime.',
+  ],
+  'savanna_gold_mule': [
+    'Fill a glass with ice.',
+    'Pour in the marula liqueur.',
+    'Top with ginger beer.',
+    'Add the mango.',
+  ],
+  'golden_pineapple': [
+    'Fill a glass with ice.',
+    'Pour in the pineapple juice.',
+    'Add a dash of honey.',
+    'Top with ginger beer.',
+  ],
+  'mimosa': [
+    'Pour the orange juice into a chilled glass.',
+    'Top slowly with prosecco.',
+    'Stir gently and serve.',
+  ],
 };

@@ -17,7 +17,7 @@ const kMusicTracks = ['Saltwater_Morning.mp3', 'Saltwater_Sunsets.mp3', 'Warm_Af
 /// Menu music stays on [kMusicTracks] regardless of lifetime level
 /// reached — the home screen's own visuals (sign, sand, boards) never
 /// change, only the in-game table does.
-const kMusicTracksLevel2 = ['Amber_Terrace.mp3', 'Velvet_Boulevard.mp3', 'Velvet_Strings_at_Dusk.mp3'];
+const kMusicTracksLevel2 = ['Amber_Terrace.mp3', 'Velvet_Boulevard.mp3', 'Velvet_Strings_at_Dusk.mp3', 'Golden_Hour_Motion.mp3'];
 
 /// The safari bar's own playlist (Level 3) — see [kMusicTracksLevel2]'s
 /// doc for how [musicTracksForLevel] picks between the three.

@@ -1192,7 +1192,15 @@ class _MenuListRow extends StatelessWidget {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
-                      child: Image.asset(recipe.assetPath, width: height * 0.7, height: height * 0.7, fit: BoxFit.contain),
+                      child: Image.asset(
+                        recipe.assetPath,
+                        width: height * 0.7,
+                        height: height * 0.7,
+                        fit: BoxFit.contain,
+                        // Some Level 3 recipes' art hasn't landed yet —
+                        // see cocktails_screen.dart's matching comment.
+                        errorBuilder: (context, error, stackTrace) => Icon(Icons.local_bar_rounded, size: height * 0.5, color: AppColors.textMuted),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(

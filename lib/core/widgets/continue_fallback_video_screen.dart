@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../i18n/strings.dart';
 import '../services/locale_provider.dart';
 import '../theme/app_theme.dart';
@@ -14,6 +16,13 @@ const _capitlePlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.
 /// reported position can sit a frame or two short), so waiting for an
 /// exact match can leave Continue stuck just short of unlocking.
 const _completionTolerance = Duration(milliseconds: 300);
+
+/// Hard ceiling on how long this screen can ever hold the player before
+/// Continue unlocks regardless of what the video itself is doing — see
+/// [_ContinueFallbackVideoScreenState._watchdogTimer]. Comfortably
+/// longer than the real ~20s clip, so it never fires for a normally-
+/// playing video, only a genuinely stuck one.
+const _watchdogCeiling = Duration(seconds: 40);
 
 /// Stands in for the real rewarded "clear shots and continue" ad (see
 /// GameScreen._watchAdToContinue) when it isn't available — not
@@ -68,9 +77,34 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
   bool _canContinue = false;
   int _secondsRemaining = 0;
 
+  /// Forces [_canContinue] true after [_watchdogCeiling] regardless of
+  /// what the video/_onVideoTick are doing — the only thing that was
+  /// ever supposed to unlock Continue was the video's own position
+  /// reaching its duration, which has no escape path at all if playback
+  /// stalls mid-video (buffering, resource contention, the Activity's
+  /// surface getting torn down and recreated by a screen-off/on cycle
+  /// mid-playback, ...): _onVideoTick simply stops getting new position
+  /// updates and Continue never unlocks — a real hang, not a crash,
+  /// which is exactly what it looked like from the outside. This is the
+  /// backstop that guarantees this screen can never trap the player
+  /// indefinitely, independent of diagnosing why a given stall happened.
+  Timer? _watchdogTimer;
+
   @override
   void initState() {
     super.initState();
+    // Ads/video playback is exactly the kind of screen a player sits
+    // and watches without touching anything — without this, a normal
+    // screen-timeout can turn the lights out mid-video, and video_player
+    // losing its rendering surface to a screen-off/on cycle mid-playback
+    // is a plausible way for the stall above to happen in the first
+    // place. Disabled on dispose, same screen-exit path either way
+    // (finished naturally, watchdog fired, or the player backed out).
+    WakelockPlus.enable();
+    _watchdogTimer = Timer(_watchdogCeiling, () {
+      if (!mounted || _canContinue) return;
+      setState(() => _canContinue = true);
+    });
     // GameScreen (the only real caller — see _watchAdToContinue) already
     // hides the persistent banner for as long as it's mounted, so this
     // is normally redundant — but it's not safe to rely on that: this
@@ -120,6 +154,8 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
 
   @override
   void dispose() {
+    _watchdogTimer?.cancel();
+    WakelockPlus.disable();
     _controller.removeListener(_onVideoTick);
     _controller.dispose();
     super.dispose();

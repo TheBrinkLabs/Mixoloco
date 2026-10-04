@@ -43,6 +43,7 @@ dependencies:
   firebase_auth: ^6.6.1
   shared_preferences: ^2.5.5
   package_info_plus: ^8.1.2
+  wakelock_plus: ^1.2.8
   google_fonts: ^8.2.1
   unity_levelplay_mediation: ^9.2.0
   http: ^1.2.0

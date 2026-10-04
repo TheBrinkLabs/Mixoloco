@@ -123,10 +123,21 @@ const kCocktailRecipesLevel2 = [
     price: 350,
   ),
   CocktailRecipe(
-    id: 'gin_and_tonic',
-    name: 'Gin & Tonic',
-    ingredientIds: ['gin', 'tonic', 'lime'],
-    assetPath: 'assets/images/gin_and_tonic.png',
+    // Replaced Gin & Tonic — moved to the safari bar's own list (Level
+    // 3) instead, since it's a genuinely good fit there too and
+    // recipes shouldn't duplicate across levels. That left Tonic Water
+    // with no recipe using it at all (nothing else on this chain calls
+    // for it), so rather than restructure the chain itself (tier
+    // positions are load-bearing: saved per-player tier records, radius
+    // scaling, the throwable rotation), this gives Tonic a new,
+    // genuinely distinct home — Vermouth & Tonic ("vermut con tónica")
+    // is a real, increasingly fashionable drink in its own right, not
+    // just a reskinned G&T. Same price/list position as the recipe it
+    // replaced, so the difficulty ladder doesn't shift.
+    id: 'vermouth_tonic',
+    name: 'Vermouth & Tonic',
+    ingredientIds: ['vermouth', 'tonic', 'lime'],
+    assetPath: 'assets/images/vermouth_tonic.png',
     price: 400,
   ),
   CocktailRecipe(
@@ -146,3 +157,59 @@ const kCocktailRecipesLevel2 = [
 ];
 
 CocktailRecipe get kStarterCocktailLevel2 => kCocktailRecipesLevel2.firstWhere((r) => r.id == kStarterCocktailIdLevel2);
+
+/// The safari bar's own cocktail list (Level 3) — same shape as
+/// [kCocktailRecipesLevel2], ordered easiest to hardest by highest
+/// evolution tier needed. Dawa is a genuine classic (Swahili for
+/// "medicine"): vodka, honey, and lime, traditionally muddled together
+/// with a "dawa stick". Golden Pineapple is this list's own addition
+/// (not from the original brainstorm) — Pineapple Juice otherwise had
+/// no recipe using it at all, the same "ingredient nothing calls for"
+/// gap Tonic Water hit above, worth closing the same way rather than
+/// leaving it on the chain unused.
+const kStarterCocktailIdLevel3 = 'dawa';
+
+const kCocktailRecipesLevel3 = [
+  CocktailRecipe(id: 'dawa', name: 'Dawa', ingredientIds: ['vodka', 'honey', 'lime'], assetPath: 'assets/images/dawa.png', price: 200),
+  CocktailRecipe(
+    id: 'marula_sunset',
+    name: 'Marula Sunset',
+    ingredientIds: ['marula_liqueur', 'orange'],
+    assetPath: 'assets/images/marula_sunset.png',
+    price: 250,
+  ),
+  CocktailRecipe(
+    // Reuses the same picture as before — moved here from Level 2 (see
+    // that list's own vermouth_tonic comment), the drink itself didn't
+    // change, just which bar's menu it's on.
+    id: 'gin_and_tonic',
+    name: 'Gin & Tonic',
+    ingredientIds: ['gin', 'tonic', 'lime'],
+    assetPath: 'assets/images/gin_and_tonic.png',
+    price: 300,
+  ),
+  CocktailRecipe(
+    id: 'citrus_mule',
+    name: 'Citrus Mule',
+    ingredientIds: ['vodka', 'ginger_beer', 'lime'],
+    assetPath: 'assets/images/citrus_mule.png',
+    price: 350,
+  ),
+  CocktailRecipe(
+    id: 'savanna_gold_mule',
+    name: 'Savanna Gold Mule',
+    ingredientIds: ['marula_liqueur', 'ginger_beer', 'mango'],
+    assetPath: 'assets/images/savanna_gold_mule.png',
+    price: 400,
+  ),
+  CocktailRecipe(
+    id: 'golden_pineapple',
+    name: 'Golden Pineapple',
+    ingredientIds: ['pineapple', 'honey', 'ginger_beer'],
+    assetPath: 'assets/images/golden_pineapple.png',
+    price: 450,
+  ),
+  CocktailRecipe(id: 'mimosa', name: 'Mimosa', ingredientIds: ['prosecco', 'orange'], assetPath: 'assets/images/mimosa.png', price: 500),
+];
+
+CocktailRecipe get kStarterCocktailLevel3 => kCocktailRecipesLevel3.firstWhere((r) => r.id == kStarterCocktailIdLevel3);

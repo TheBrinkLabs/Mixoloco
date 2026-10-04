@@ -53,7 +53,15 @@ class CocktailDetailScreen extends ConsumerWidget {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: Image.asset(recipe.assetPath, width: plankWidth * 0.5, height: plankWidth * 0.5, fit: BoxFit.contain),
+                      child: Image.asset(
+                        recipe.assetPath,
+                        width: plankWidth * 0.5,
+                        height: plankWidth * 0.5,
+                        fit: BoxFit.contain,
+                        // See cocktails_screen.dart's matching comment —
+                        // some Level 3 recipes' art hasn't landed yet.
+                        errorBuilder: (context, error, stackTrace) => Icon(Icons.local_bar_rounded, size: plankWidth * 0.3, color: kPlankIconColor),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     ColorfulPlankText(text: recipe.name, fontSize: plankHeight * 0.3, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
