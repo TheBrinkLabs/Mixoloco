@@ -174,7 +174,7 @@ const kCocktailRecipesLevel3 = [
   CocktailRecipe(
     id: 'marula_sunset',
     name: 'Marula Sunset',
-    ingredientIds: ['marula_liqueur', 'orange'],
+    ingredientIds: ['marula_liqueur', 'orange_slice'],
     assetPath: 'assets/images/marula_sunset.png',
     price: 250,
   ),
@@ -207,11 +207,11 @@ const kCocktailRecipesLevel3 = [
     // in it at all. Close to a real "Pineapple Upside-Down" martini.
     id: 'golden_pineapple',
     name: 'Golden Pineapple',
-    ingredientIds: ['pineapple', 'honey', 'vodka'],
+    ingredientIds: ['pineapple_fruit', 'honey', 'vodka'],
     assetPath: 'assets/images/golden_pineapple.png',
     price: 450,
   ),
-  CocktailRecipe(id: 'mimosa', name: 'Mimosa', ingredientIds: ['prosecco', 'orange'], assetPath: 'assets/images/mimosa.png', price: 500),
+  CocktailRecipe(id: 'mimosa', name: 'Mimosa', ingredientIds: ['prosecco', 'orange_slice'], assetPath: 'assets/images/mimosa.png', price: 500),
 ];
 
 CocktailRecipe get kStarterCocktailLevel3 => kCocktailRecipesLevel3.firstWhere((r) => r.id == kStarterCocktailIdLevel3);

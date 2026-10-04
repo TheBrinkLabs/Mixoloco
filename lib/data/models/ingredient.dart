@@ -781,11 +781,12 @@ const kEvolutionChainLevel3 = [
   Ingredient(
     // A raw orange-slice picture, not the poured-glass art Level 1/2's
     // own 'orange' uses — this chain's own dedicated art rather than a
-    // reuse, per feedback. displayScale left at the default until
-    // there's real art-fit calibration to measure against, same as
-    // every other brand new ingredient in this chain.
-    id: 'orange',
-    label: 'Orange Juice',
+    // reuse, per feedback. A distinct id (not 'orange') since
+    // findIngredientById searches all three chains and would otherwise
+    // always resolve to Level 1's entry first, showing the wrong art on
+    // this bar's own cocktail/order screens.
+    id: 'orange_slice',
+    label: 'Orange',
     color: Color(0xFFFFA500),
     tier: 4,
     shape: GlassShape.tumbler,
@@ -834,9 +835,9 @@ const kEvolutionChainLevel3 = [
   ),
   Ingredient(
     // A whole-fruit picture, not the poured-glass art Level 1's own
-    // 'pineapple' uses — same reasoning as this chain's own 'orange'
-    // above.
-    id: 'pineapple',
+    // 'pineapple' uses — same reasoning (and same distinct-id fix) as
+    // this chain's own 'orange_slice' above.
+    id: 'pineapple_fruit',
     label: 'Pineapple Juice',
     color: Color(0xFFF7C948),
     tier: 9,
@@ -888,9 +889,14 @@ List<Ingredient> throwableIngredientsFor(int level, int highestTierUnlocked) {
 
 /// Resolves a CocktailRecipe.ingredientIds entry back to its Ingredient —
 /// searches all three chains, since a handful of ids (cherry, vodka,
-/// lime, gin, tonic, orange, prosecco, pineapple) are shared between
-/// them. Throws if [id] isn't in any — recipes are only ever built from
-/// real ingredient ids, so that would mean a genuine data bug worth
-/// surfacing loudly rather than swallowing.
+/// lime, gin, tonic, prosecco) are shared between them, always with the
+/// same art, so resolving to whichever chain's copy comes first is safe.
+/// Level 3's orange/pineapple deliberately use their own ids
+/// ('orange_slice'/'pineapple_fruit') rather than reusing 'orange'/
+/// 'pineapple', since their art genuinely differs from Level 1's and a
+/// shared id would silently resolve to the wrong picture. Throws if
+/// [id] isn't in any — recipes are only ever built from real ingredient
+/// ids, so that would mean a genuine data bug worth surfacing loudly
+/// rather than swallowing.
 Ingredient findIngredientById(String id) =>
     [...kEvolutionChain, ...kEvolutionChainLevel2, ...kEvolutionChainLevel3].firstWhere((i) => i.id == id);

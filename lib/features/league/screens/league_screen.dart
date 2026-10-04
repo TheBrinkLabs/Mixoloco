@@ -84,7 +84,7 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
                           const SizedBox(height: 14),
                           if (!_resultBannerDismissed && state.lastWeekResultIsNew && state.lastWeekResult != null)
                             _WeekResultBanner(result: state.lastWeekResult!, onDismiss: () => setState(() => _resultBannerDismissed = true)),
-                          _buildHeader(state),
+                          _buildHeader(state, rowWidth),
                           const SizedBox(height: 16),
                           if (state.pendingJoin)
                             _buildPendingJoin()
@@ -124,31 +124,11 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
     );
   }
 
-  Widget _buildHeader(LeagueState state) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        children: [
-          LeagueTierBadge(tier: state.tier, fontSize: 12),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              state.nickname ?? 'You',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textLight),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text('THIS WEEK', style: TextStyle(fontSize: 9, letterSpacing: 1.2, color: AppColors.textMuted)),
-              Text('${state.myWeeklyBestScore}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.sunsetGold)),
-            ],
-          ),
-        ],
-      ),
-    );
+  Widget _buildHeader(LeagueState state, double width) {
+    // Just the tier plate, full width — nickname/score are already
+    // visible in this player's own row further down, so repeating them
+    // here was redundant.
+    return LeagueTierBadge(tier: state.tier, width: width);
   }
 
   Widget _buildPendingJoin() {
