@@ -7,11 +7,7 @@ import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/wood_plank.dart';
-
-/// Every music track in the game, across all three levels' playlists —
-/// just for browsing/previewing here, not tied to which level's
-/// actually unlocked.
-final kAllSongs = [...kMusicTracks, ...kMusicTracksLevel2, ...kMusicTracksLevel3];
+import '../info_level_data.dart';
 
 /// A song's display name — its filename, minus the extension, with
 /// underscores swapped for spaces (per feedback: "the filename without
@@ -25,7 +21,14 @@ String songDisplayName(String file) {
 /// Lets the player preview any track in the game on its own, outside of
 /// whichever playlist is actually driving the background music right
 /// now. Mutes the real menu/game bgm for as long as this screen is open
-/// (restored on exit) so a preview never plays over it.
+/// (restored on exit) so a preview never plays over it. Same swipe-
+/// between-levels pattern as ingredients_screen.dart/
+/// cocktails_screen.dart — each level's own page lists just that
+/// level's playlist against that level's own backdrop, rather than one
+/// flat list of every track in the game with no sense of which bar it
+/// belongs to. Playback state lives here (not per-page) since only one
+/// preview should ever play regardless of which page it was started
+/// from, and swiping to another page shouldn't stop it.
 class SongsScreen extends ConsumerStatefulWidget {
   const SongsScreen({super.key});
 
@@ -34,6 +37,7 @@ class SongsScreen extends ConsumerStatefulWidget {
 }
 
 class _SongsScreenState extends ConsumerState<SongsScreen> {
+  final _pageController = PageController();
   AudioPlayer? _player;
   String? _playingFile;
 
@@ -45,6 +49,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _player?.stop();
     ref.read(audioSettingsProvider.notifier).playMenuMusic();
     super.dispose();
@@ -85,34 +90,71 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     final plankHeight = plankWidth / kMenuBoard3Aspect;
 
     return Scaffold(
-      body: BarBackdrop(
-        showTable: false,
-        showHeaderBoard: false,
-        child: Stack(
-          children: [
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    WoodTitlePlank(
-                      title: tr(locale, 'songs'),
-                      icon: Icons.music_note_rounded,
-                      iconAsset: 'assets/images/play.png',
-                      width: plankWidth,
-                      height: plankHeight,
-                      assetPath: 'assets/images/menu_board_3.png',
-                    ),
-                    for (final file in kAllSongs)
-                      _SongRow(file: file, playing: _playingFile == file, onTap: () => _toggle(file), width: plankWidth, height: plankHeight),
-                  ],
+      body: Stack(
+        children: [
+          PageView(
+            controller: _pageController,
+            children: [
+              for (final level in kInfoLevels)
+                _SongsLevelPage(
+                  level: level,
+                  plankWidth: plankWidth,
+                  plankHeight: plankHeight,
+                  locale: locale,
+                  playingFile: _playingFile,
+                  onToggle: _toggle,
                 ),
+            ],
+          ),
+          // Painted last — see info_screen.dart's matching comment.
+          Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
+        ],
+      ),
+    );
+  }
+}
+
+class _SongsLevelPage extends StatelessWidget {
+  final InfoLevelData level;
+  final double plankWidth;
+  final double plankHeight;
+  final AppLocale locale;
+  final String? playingFile;
+  final ValueChanged<String> onToggle;
+  const _SongsLevelPage({
+    required this.level,
+    required this.plankWidth,
+    required this.plankHeight,
+    required this.locale,
+    required this.playingFile,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BarBackdrop(
+      showTable: false,
+      showHeaderBoard: false,
+      backgroundAssetPath: level.backgroundAssetPath,
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              WoodTitlePlank(
+                title: '${tr(locale, 'songs')} — ${level.name}',
+                icon: Icons.music_note_rounded,
+                iconAsset: 'assets/images/play.png',
+                width: plankWidth,
+                height: plankHeight,
+                assetPath: 'assets/images/menu_board_3.png',
+                fontScale: 0.72,
               ),
-            ),
-            // Painted last — see info_screen.dart's matching comment.
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
-          ],
+              for (final file in level.songs)
+                _SongRow(file: file, playing: playingFile == file, onTap: () => onToggle(file), width: plankWidth, height: plankHeight),
+            ],
+          ),
         ),
       ),
     );

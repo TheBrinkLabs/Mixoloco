@@ -137,7 +137,7 @@ const kCocktailRecipesLevel2 = [
     id: 'vermouth_tonic',
     name: 'Vermouth & Tonic',
     ingredientIds: ['vermouth', 'tonic', 'lime'],
-    assetPath: 'assets/images/vermouth_tonic.png',
+    assetPath: 'assets/images/vermouth_&_tonic.png',
     price: 400,
   ),
   CocktailRecipe(
