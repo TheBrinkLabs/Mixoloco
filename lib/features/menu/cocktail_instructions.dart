@@ -124,10 +124,10 @@ const kCocktailInstructions = <String, List<String>>{
     'Add the mango.',
   ],
   'golden_pineapple': [
-    'Fill a glass with ice.',
-    'Pour in the pineapple juice.',
-    'Add a dash of honey.',
-    'Top with ginger beer.',
+    'Fill a shaker with ice.',
+    'Add the vodka, pineapple juice, and a dash of honey.',
+    'Shake well.',
+    'Strain into a chilled glass.',
   ],
   'mimosa': [
     'Pour the orange juice into a chilled glass.',

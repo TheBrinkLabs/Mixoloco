@@ -203,9 +203,11 @@ const kCocktailRecipesLevel3 = [
     price: 400,
   ),
   CocktailRecipe(
+    // Vodka, not ginger beer — per feedback the original had no alcohol
+    // in it at all. Close to a real "Pineapple Upside-Down" martini.
     id: 'golden_pineapple',
     name: 'Golden Pineapple',
-    ingredientIds: ['pineapple', 'honey', 'ginger_beer'],
+    ingredientIds: ['pineapple', 'honey', 'vodka'],
     assetPath: 'assets/images/golden_pineapple.png',
     price: 450,
   ),
