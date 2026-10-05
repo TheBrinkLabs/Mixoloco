@@ -9,7 +9,7 @@ import '../../data/services/progression_service.dart';
 /// 'assets/audio/' prefix. Playback starts on a random track each app
 /// launch (see AudioSettingsNotifier._trackIndex's initializer) rather
 /// than always opening on the first one.
-const kMusicTracks = ['Saltwater_Morning.mp3', 'Saltwater_Sunsets.mp3', 'Warm_Afternoon_Tide.mp3'];
+const kMusicTracks = ['Saltwater_Morning.mp3', 'Saltwater_Sunsets.mp3', 'Warm_Afternoon_Tide.mp3', 'Midday_at_the_Cabana.mp3'];
 
 /// The rooftop bar's own playlist (Level 2) — swapped in by
 /// [AudioSettingsNotifier.playGameMusic]'s `rooftop` flag once

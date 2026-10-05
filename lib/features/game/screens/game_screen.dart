@@ -150,11 +150,6 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     Navigator.of(context).pop();
   }
 
-  void _playAgain() {
-    _game.clearBoard();
-    ref.read(gameStateProvider.notifier).restart();
-  }
-
   void _useCherryBomb() {
     if (ref.read(gameStateProvider.notifier).spendCredits(kCherryBombCost)) {
       _game.cherryBomb();
@@ -284,17 +279,17 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
   /// The end-of-level celebration → interstitial sequence (see
   /// level_up_overlay.dart) — same pause/resume treatment as the ad
   /// break, since this also covers the table for several seconds.
-  Future<void> _runLevelUp(AppLocale locale) async {
+  Future<void> _runLevelUp(AppLocale locale, int level) async {
     if (!mounted) return;
     _game.pauseEngine();
     // Both sides of the reset happen now, while the celebration overlay
     // is about to cover the whole screen — by the time it's dismissed,
-    // the table's already cleared and reconfigured for Level 2 rather
-    // than the player seeing it happen.
-    ref.read(gameStateProvider.notifier).enterLevel(2);
-    _game.switchToLevel(2);
-    ref.read(audioSettingsProvider.notifier).playGameMusic(level: 2);
-    await showLevelUpOverlay(context, locale, level: 2);
+    // the table's already cleared and reconfigured for the new level
+    // rather than the player seeing it happen.
+    ref.read(gameStateProvider.notifier).enterLevel(level);
+    _game.switchToLevel(level);
+    ref.read(audioSettingsProvider.notifier).playGameMusic(level: level);
+    await showLevelUpOverlay(context, locale, level: level);
     if (!mounted) return;
     ref.read(gameStateProvider.notifier).acknowledgeLevelUpCelebration();
     _game.resumeEngine();
@@ -322,9 +317,10 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     // Level-up takes priority — if both somehow trip on the same frame,
     // the ad break just waits for the next score check once level-up's
     // interstitial has already covered the ad slot for this moment.
-    if (board.level == 2 && !board.levelUpCelebrationShown && !_showingLevelUp) {
+    if (board.level > 1 && !board.levelUpCelebrationShown && !_showingLevelUp) {
       _showingLevelUp = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _runLevelUp(locale));
+      final targetLevel = board.level;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _runLevelUp(locale, targetLevel));
     } else if (board.pendingAdBreak && !_showingAdBreak && !_showingLevelUp) {
       _showingAdBreak = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _runAdBreak(locale));
@@ -564,7 +560,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
                   onEndGame: () => ref.read(gameStateProvider.notifier).declineContinue(),
                   locale: locale,
                 ),
-              if (showGameOver) _GameOverOverlay(board: board, onHome: _goHome, onPlayAgain: _playAgain, locale: locale),
+              if (showGameOver) _GameOverOverlay(board: board, onHome: _goHome, locale: locale),
               if (_showingAdPlaceholder) _AdPlaceholderOverlay(locale: locale),
               if (_showCocktailMenu) _CocktailMenuOverlay(onClose: () => setState(() => _showCocktailMenu = false)),
             ],
@@ -788,8 +784,8 @@ class _ProgressTabsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final recipes = board.level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes;
-    final capstone = board.level >= 2 ? kEvolutionChainLevel2.last : kEvolutionChain.last;
+    final recipes = cocktailRecipesForLevel(board.level);
+    final capstone = evolutionChainForLevel(board.level).last;
     return Row(
       children: [
         for (var i = 0; i < recipes.length; i++) ...[
@@ -1097,7 +1093,7 @@ class _CocktailMenuOverlay extends ConsumerWidget {
                       child: Column(
                         children: [
                           WoodTitlePlank(title: tr(locale, 'cocktail_menu'), icon: Icons.local_florist_rounded, width: rowWidth, height: rowHeight),
-                          for (final recipe in board.level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes)
+                          for (final recipe in cocktailRecipesForLevel(board.level))
                             _MenuListRow(
                               recipe: recipe,
                               width: rowWidth,
@@ -1261,61 +1257,133 @@ class _MenuListRow extends StatelessWidget {
 /// Deliberately light dim — per feedback the table/board behind should
 /// stay "quite visible" rather than the old opaque-feeling card overlay,
 /// since the whole point is the player can still see how the game ended.
+/// Redesigned per feedback into a proper stat plaque (score, level,
+/// cocktails made, and this run's own highest evolution reached — see
+/// BoardState.runHighestTier), a "NEW BEST SCORE!" callout when
+/// [BoardState.isNewHighScore] is set, and a single way out: Main Menu.
+/// There's no more Play Again here — restarting in place read as
+/// skipping past what just happened; the plaque's whole point is to let
+/// that sink in before the player decides what's next from the menu.
 class _GameOverOverlay extends StatelessWidget {
   final BoardState board;
   final VoidCallback onHome;
-  final VoidCallback onPlayAgain;
   final AppLocale locale;
-  const _GameOverOverlay({required this.board, required this.onHome, required this.onPlayAgain, required this.locale});
+  const _GameOverOverlay({required this.board, required this.onHome, required this.locale});
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    const sideMargin = 36.0;
+    final rowWidth = screenWidth - sideMargin * 2;
+    final rowHeight = (rowWidth / kMenuBoard3Aspect) / 2;
+    final chain = evolutionChainForLevel(board.level);
+    final maxEvoIngredient = chain[board.runHighestTier.clamp(0, chain.length - 1)];
+
     return Positioned.fill(
       child: Container(
         color: Colors.black.withValues(alpha: 0.28),
         child: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 12),
-              Text(
-                '${tr(locale, 'score_label')}: ${board.score}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textLight,
-                  shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+              const SizedBox(height: 16),
+              Image.asset('assets/images/game_over.png', width: screenWidth * 0.68),
+              const SizedBox(height: 10),
+              if (board.isNewHighScore) ...[
+                ColorfulPlankText(
+                  text: tr(locale, 'new_best_score'),
+                  fontSize: rowHeight * 0.5,
+                  variant: PlankTextVariant.sunsetGradient,
+                  font: kPlankTextFont,
+                  shadowStyle: kPlankShadowStyle,
                 ),
-              ),
-              Text(
-                '${tr(locale, 'cocktails_made_label')}: ${board.cocktailsMade}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textLight,
-                  shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
-                ),
-              ),
+                const SizedBox(height: 10),
+              ],
+              _GameOverStatRow(label: tr(locale, 'score_label'), value: '${board.score}', width: rowWidth, height: rowHeight),
+              _GameOverStatRow(label: tr(locale, 'level'), value: '${board.level}', width: rowWidth, height: rowHeight),
+              _GameOverEvoRow(label: tr(locale, 'max_evo_label'), ingredient: maxEvoIngredient, width: rowWidth, height: rowHeight),
+              _GameOverStatRow(label: tr(locale, 'cocktails_made_label'), value: '${board.cocktailsMade}', width: rowWidth, height: rowHeight),
               const Spacer(),
               GestureDetector(
-                onTap: onPlayAgain,
+                onTap: onHome,
                 child: Container(
-                  width: 180,
-                  height: 44,
+                  width: 220,
+                  height: 46,
                   decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(14)),
                   child: Center(
-                    child: Text(tr(locale, 'play_again'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
+                    child: Text(tr(locale, 'main_menu'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
                   ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              GestureDetector(
-                onTap: onHome,
-                child: Image.asset('assets/images/game_over.png', width: MediaQuery.of(context).size.width * 0.78),
               ),
               // Clears the table's own front-face Next/Order cards docked
               // at the very bottom (see the Positioned pair above in
               // GameScreen.build) — plain bottom SafeArea padding alone
               // isn't enough since those cards aren't a system inset.
               const SizedBox(height: 110),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One label/value stat line on the Game Over plaque — same half-height
+/// wood-plank row shape as high_scores_screen.dart's own _ScoreRow.
+class _GameOverStatRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final double width;
+  final double height;
+  const _GameOverStatRow({required this.label, required this.value, required this.width, required this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      child: WoodPlank(
+        width: width,
+        height: height,
+        assetPath: 'assets/images/menu_board_3.png',
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: width * 0.06),
+          child: Row(
+            children: [
+              ColorfulPlankText(text: label, fontSize: height * 0.32, variant: PlankTextVariant.plainWhite, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+              const Spacer(),
+              ColorfulPlankText(text: value, fontSize: height * 0.42, variant: PlankTextVariant.sunsetGradient, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Same shape as [_GameOverStatRow], but the value is this run's highest
+/// evolution reached shown as its real ingredient art (see
+/// BoardState.runHighestTier) rather than plain text.
+class _GameOverEvoRow extends StatelessWidget {
+  final String label;
+  final Ingredient ingredient;
+  final double width;
+  final double height;
+  const _GameOverEvoRow({required this.label, required this.ingredient, required this.width, required this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      child: WoodPlank(
+        width: width,
+        height: height,
+        assetPath: 'assets/images/menu_board_3.png',
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: width * 0.06),
+          child: Row(
+            children: [
+              ColorfulPlankText(text: label, fontSize: height * 0.32, variant: PlankTextVariant.plainWhite, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+              const Spacer(),
+              GlassVisual(ingredient: ingredient, size: height * 0.82, applyDisplayScale: false),
             ],
           ),
         ),

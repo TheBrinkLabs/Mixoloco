@@ -11,29 +11,32 @@ import 'banner_ad_widget.dart';
 
 const _capitlePlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.brinklabs.capitle';
 
-/// How close to the very end counts as "finished" — video_player's
-/// position updates don't always land exactly on duration (the last
-/// reported position can sit a frame or two short), so waiting for an
-/// exact match can leave Continue stuck just short of unlocking.
-const _completionTolerance = Duration(milliseconds: 300);
-
-/// Hard ceiling on how long this screen can ever hold the player before
-/// Continue unlocks regardless of what the video itself is doing — see
-/// [_ContinueFallbackVideoScreenState._watchdogTimer]. Comfortably
-/// longer than the real ~20s clip, so it never fires for a normally-
-/// playing video, only a genuinely stuck one.
-const _watchdogCeiling = Duration(seconds: 40);
+/// How long Continue stays locked for — a plain countdown, same shape
+/// (and same reasoning) as ad_break_screen.dart's own `_minWatchSeconds`
+/// rather than gating on the video's own reported playback position.
+/// That earlier approach (unlock once `_controller.value.position`
+/// reaches `duration`) had no escape path at all if video_player's
+/// position stream stalled mid-playback — a watchdog Timer was added to
+/// force Continue open after a ceiling, but a report of the hang still
+/// happening after that fix pointed at a deeper problem: video_player's
+/// native plugin channel itself can stop delivering position updates
+/// (buffering, resource contention, a screen-off/on cycle tearing down
+/// the decode surface) in a way a Dart-side Timer *should* survive, but
+/// evidently wasn't reliably doing so in practice. Decoupling entirely
+/// — the video now plays purely for show, Continue unlocks on this
+/// timer alone — removes video_player from the unlock path altogether,
+/// closing off that whole category of stall rather than racing it.
+const _fallbackWatchSeconds = 20;
 
 /// Stands in for the real rewarded "clear shots and continue" ad (see
 /// GameScreen._watchAdToContinue) when it isn't available — not
 /// configured yet, or no fill. Rather than leaving the continue-offer
-/// as a dead end, this plays a short Capitle video in its place. Unlike
-/// the MREC ad break's fixed minimum-watch timer, Continue only unlocks
-/// once the video has actually finished playing — this is standing in
-/// for a real rewarded ad, which the same way requires watching the
-/// whole thing, not a skippable placeholder. Returns true once that
-/// happens, false if the player backs out early — the caller treats a
-/// false the same as declining the offer outright.
+/// as a dead end, this plays a short Capitle video in its place.
+/// Continue unlocks after [_fallbackWatchSeconds], the same fixed
+/// minimum-watch-timer shape the MREC ad break uses (see its doc for
+/// why this no longer gates on the video's own playback position).
+/// Returns true once that happens, false if the player backs out early
+/// — the caller treats a false the same as declining the offer outright.
 ///
 /// Used to embed a YouTube Short via WebView instead — dropped after a
 /// field report showed "This video is unavailable — Error code: 152-4"
@@ -75,35 +78,30 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
   late final VideoPlayerController _controller;
   bool _ready = false;
   bool _canContinue = false;
-  int _secondsRemaining = 0;
-
-  /// Forces [_canContinue] true after [_watchdogCeiling] regardless of
-  /// what the video/_onVideoTick are doing — the only thing that was
-  /// ever supposed to unlock Continue was the video's own position
-  /// reaching its duration, which has no escape path at all if playback
-  /// stalls mid-video (buffering, resource contention, the Activity's
-  /// surface getting torn down and recreated by a screen-off/on cycle
-  /// mid-playback, ...): _onVideoTick simply stops getting new position
-  /// updates and Continue never unlocks — a real hang, not a crash,
-  /// which is exactly what it looked like from the outside. This is the
-  /// backstop that guarantees this screen can never trap the player
-  /// indefinitely, independent of diagnosing why a given stall happened.
-  Timer? _watchdogTimer;
+  int _secondsRemaining = _fallbackWatchSeconds;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
     super.initState();
     // Ads/video playback is exactly the kind of screen a player sits
     // and watches without touching anything — without this, a normal
-    // screen-timeout can turn the lights out mid-video, and video_player
-    // losing its rendering surface to a screen-off/on cycle mid-playback
-    // is a plausible way for the stall above to happen in the first
-    // place. Disabled on dispose, same screen-exit path either way
-    // (finished naturally, watchdog fired, or the player backed out).
+    // screen-timeout can turn the lights out mid-video.
     WakelockPlus.enable();
-    _watchdogTimer = Timer(_watchdogCeiling, () {
-      if (!mounted || _canContinue) return;
-      setState(() => _canContinue = true);
+    // Started immediately, independent of the video controller below —
+    // see _fallbackWatchSeconds' doc for why Continue no longer waits on
+    // video_player at all.
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (_secondsRemaining <= 1) {
+        timer.cancel();
+        setState(() {
+          _secondsRemaining = 0;
+          _canContinue = true;
+        });
+      } else {
+        setState(() => _secondsRemaining--);
+      }
     });
     // GameScreen (the only real caller — see _watchAdToContinue) already
     // hides the persistent banner for as long as it's mounted, so this
@@ -119,44 +117,22 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
     _controller = VideoPlayerController.asset('assets/videos/continue_fallback_capitle.mp4');
     _controller
       ..setVolume(0)
+      ..setLooping(true)
       ..initialize().then((_) {
         if (!mounted) return;
-        setState(() {
-          _ready = true;
-          _secondsRemaining = _controller.value.duration.inSeconds;
-        });
+        setState(() => _ready = true);
         _controller.play();
       }).catchError((_) {
-        // A broken/unplayable video shouldn't trap the player on a dead
-        // screen with no way forward — same "never leave a hard stop"
-        // reasoning as every other ad-fallback in this chain.
-        if (!mounted) return;
-        setState(() => _canContinue = true);
+        // Purely cosmetic now (see _fallbackWatchSeconds) — a broken
+        // video just leaves the box blank, Continue still unlocks on
+        // the timer regardless.
       });
-    _controller.addListener(_onVideoTick);
-  }
-
-  void _onVideoTick() {
-    if (!mounted || !_ready || _canContinue) return;
-    final position = _controller.value.position;
-    final duration = _controller.value.duration;
-    if (duration == Duration.zero) return;
-
-    final remainingMs = (duration - position).inMilliseconds;
-    final remainingSeconds = (remainingMs / 1000).ceil().clamp(0, duration.inSeconds);
-    if (remainingSeconds != _secondsRemaining) {
-      setState(() => _secondsRemaining = remainingSeconds);
-    }
-    if (remainingMs <= _completionTolerance.inMilliseconds) {
-      setState(() => _canContinue = true);
-    }
   }
 
   @override
   void dispose() {
-    _watchdogTimer?.cancel();
+    _countdownTimer?.cancel();
     WakelockPlus.disable();
-    _controller.removeListener(_onVideoTick);
     _controller.dispose();
     super.dispose();
   }

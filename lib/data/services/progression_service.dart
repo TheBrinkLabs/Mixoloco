@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _kCreditsKey = 'credits';
 const _kHighestTierKey = 'highest_tier_unlocked';
 const _kHighestTierLevel2Key = 'highest_tier_unlocked_level2';
+const _kHighestTierLevel3Key = 'highest_tier_unlocked_level3';
 const _kHighestLevelReachedKey = 'highest_level_reached';
 // The single old flag is kept as the migration source for menu music —
 // existing installs' one saved preference carries over as their menu
@@ -56,6 +57,19 @@ Future<void> saveHighestTierLevel2(int tier) async {
   await prefs.setInt(_kHighestTierLevel2Key, tier);
 }
 
+/// The highest safari-bar (Level 3) evolution tier ever reached — mirrors
+/// [loadHighestTierLevel2]/[saveHighestTierLevel2], but for
+/// kEvolutionChainLevel3.
+Future<int> loadHighestTierLevel3() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getInt(_kHighestTierLevel3Key) ?? -1;
+}
+
+Future<void> saveHighestTierLevel3(int tier) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(_kHighestTierLevel3Key, tier);
+}
+
 /// The highest bar level ever reached (1 = beach, 2 = rooftop) — once
 /// this reaches 2, every new game starts there directly instead of back
 /// on the beach, and the "Unlocked" display on the home screen shows a
@@ -80,6 +94,7 @@ Future<void> resetTierProgression() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt(_kHighestTierKey, 0);
   await prefs.remove(_kHighestTierLevel2Key);
+  await prefs.remove(_kHighestTierLevel3Key);
   await prefs.setInt(_kHighestLevelReachedKey, 1);
 }
 

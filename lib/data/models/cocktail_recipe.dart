@@ -215,3 +215,14 @@ const kCocktailRecipesLevel3 = [
 ];
 
 CocktailRecipe get kStarterCocktailLevel3 => kCocktailRecipesLevel3.firstWhere((r) => r.id == kStarterCocktailIdLevel3);
+
+/// The cocktail list for [level] — see evolutionChainForLevel (in
+/// ingredient.dart) for the matching evolution-chain split and why a
+/// future Level 4 needs a parallel branch added here too.
+List<CocktailRecipe> cocktailRecipesForLevel(int level) =>
+    level >= 3 ? kCocktailRecipesLevel3 : (level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes);
+
+/// The free starter order for a fresh run at [level] — see
+/// [cocktailRecipesForLevel].
+CocktailRecipe starterCocktailForLevel(int level) =>
+    level >= 3 ? kStarterCocktailLevel3 : (level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail);

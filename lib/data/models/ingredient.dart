@@ -679,7 +679,10 @@ const kEvolutionChainLevel2 = [
       CollisionCircle(offsetY: -0.55, radius: 0.34),
       CollisionCircle(offsetY: -0.15, radius: 0.28),
       CollisionCircle(offsetY: 0.45, radius: 0.07),
-      CollisionCircle(offsetY: 0.95, radius: 0.37),
+      // Foot circle pushed down and widened a touch (was offsetY 0.95,
+      // radius 0.37) — per feedback there was a visible gap between the
+      // glass's drawn foot and where neighbours actually stopped.
+      CollisionCircle(offsetY: 1.0, radius: 0.42),
     ],
   ),
   Ingredient(
@@ -876,13 +879,22 @@ const kEvolutionChainLevel3 = [
   ),
 ];
 
+/// The evolution chain for [level] — 1 is the beach bar, 2 the rooftop,
+/// 3+ the safari (currently the last one with real content; a future
+/// Level 4 needs its own branch added here, same as everywhere else this
+/// three-way split appears — see cocktailRecipesForLevel, GameScreen's
+/// recipe-list lookups, and GameStateNotifier's highest-tier bucket
+/// selection, which all mirror this same level->content mapping).
+List<Ingredient> evolutionChainForLevel(int level) =>
+    level >= 3 ? kEvolutionChainLevel3 : (level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain);
+
 /// The actual throwable pool for a player whose lifetime record within
 /// this level is [highestTierUnlocked] — [kThrowableTierCount] items
 /// normally, growing by one (the very next tier up) once they've reached
-/// [kExtraThrowableUnlockTier]. [level] picks which chain: 1 for the
-/// beach bar, 2 for the rooftop bar, 3+ for the safari bar.
+/// [kExtraThrowableUnlockTier]. [level] picks which chain — see
+/// [evolutionChainForLevel].
 List<Ingredient> throwableIngredientsFor(int level, int highestTierUnlocked) {
-  final chain = level >= 3 ? kEvolutionChainLevel3 : (level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain);
+  final chain = evolutionChainForLevel(level);
   final count = highestTierUnlocked >= kExtraThrowableUnlockTier ? kThrowableTierCount + 1 : kThrowableTierCount;
   return chain.take(count).toList();
 }

@@ -19,6 +19,21 @@ int scoreForMerge(int tier) => 10 * (1 << tier);
 /// cocktail always pays back more in score than it cost in credits.
 int scoreForCocktail(CocktailRecipe recipe) => recipe.price * 10;
 
+/// The highest level with real content right now — once a run reaches
+/// this, there's nothing further to advance to (see _checkLevelUp).
+/// Bump this (and add the matching bucket/branch everywhere
+/// [highestTierBucketForLevel] is used) the day a Level 4 actually has
+/// its own evolution chain and cocktail list.
+const kMaxLevel = 3;
+
+/// Picks the right one of a level's three separately-tracked
+/// highest-tier buckets (see BoardState.highestTierUnlocked/
+/// highestTierUnlockedLevel2/highestTierUnlockedLevel3) — the one spot
+/// all of GameStateNotifier's level-aware reads/writes route through, so
+/// a future Level 4 only needs one new bucket plus one new branch here.
+int highestTierBucketForLevel(int level, {required int l1, required int l2, required int l3}) =>
+    level >= 3 ? l3 : (level >= 2 ? l2 : l1);
+
 /// Credits awarded for reaching a new highest evolution tier, ever.
 const kTierUnlockReward = 200;
 
@@ -39,7 +54,7 @@ const kShopAdCreditReward = 200;
 
 /// Credits to remove every cherry currently on the table, from the
 /// Cherry Bomb button.
-const kCherryBombCost = 100;
+const kCherryBombCost = 50;
 
 /// Credits for the original Shake — impulse pulses only, no size change
 /// — from the Shake button.
@@ -53,7 +68,7 @@ const kMegaShakeCost = 400;
 /// Credits to clear every Vodka, Melon Liqueur, Gin, and Coffee Liqueur
 /// item currently on the table from the Slam Mini-Shots button (see
 /// Ingredient.isMiniShot) — replaced the old, broader Alcohol-Free button.
-const kMiniShotsCost = 500;
+const kMiniShotsCost = 300;
 
 /// Sentinel default for [BoardState.copyWith]'s [order] param, so passing
 /// `order: null` explicitly clears the active order (buying nothing sets
@@ -98,6 +113,11 @@ class BoardState {
   /// lowest, would otherwise be indistinguishable from "never played").
   final int highestTierUnlockedLevel2;
 
+  /// The highest evolution tier ever reached on the safari bar (Level
+  /// 3) — same shape as [highestTierUnlockedLevel2], separate chain
+  /// again.
+  final int highestTierUnlockedLevel3;
+
   /// The highest bar level ever reached, lifetime (1 or 2) — once this
   /// is 2, every new game starts there directly (see _freshGame) instead
   /// of back on the beach, and the home screen's "Unlocked" display shows
@@ -141,6 +161,22 @@ class BoardState {
   /// Resets every game (there's nothing to guard once level resets too).
   final bool levelUpCelebrationShown;
 
+  /// The highest evolution tier reached on *this run's current level*
+  /// (by drop or merge, either counts — same trigger as
+  /// [registerTierSeen]) — the Game Over plaque's "Max Evo" line.
+  /// Deliberately separate from the lifetime highestTierUnlocked*
+  /// fields (which only bump on a genuinely new personal best): this is
+  /// per-run, resets to 0 on every fresh game and again on every
+  /// [GameStateNotifier.enterLevel] (so it reflects the climb on
+  /// whichever chain the run actually ended on, not a tier number
+  /// carried over from a different level's chain).
+  final int runHighestTier;
+
+  /// Whether this run's final [score] beat every previous local high
+  /// score — set once, at [GameStateNotifier._finalizeScore], for the
+  /// Game Over plaque's "PB" badge. Resets every game.
+  final bool isNewHighScore;
+
   const BoardState({
     required this.current,
     required this.upcoming,
@@ -151,6 +187,7 @@ class BoardState {
     required this.credits,
     required this.highestTierUnlocked,
     this.highestTierUnlockedLevel2 = -1,
+    this.highestTierUnlockedLevel3 = -1,
     this.highestLevelReached = 1,
     this.continueOfferUsed = false,
     this.scoreCreditThresholdsAwarded = 0,
@@ -160,6 +197,8 @@ class BoardState {
     this.level = 1,
     this.adBreakThresholdsShown = 0,
     this.levelUpCelebrationShown = false,
+    this.runHighestTier = 0,
+    this.isNewHighScore = false,
   });
 
   /// Whether the score has crossed a new [kAdBreakScoreThreshold]
@@ -177,6 +216,7 @@ class BoardState {
     int? credits,
     int? highestTierUnlocked,
     int? highestTierUnlockedLevel2,
+    int? highestTierUnlockedLevel3,
     int? highestLevelReached,
     bool? continueOfferUsed,
     int? scoreCreditThresholdsAwarded,
@@ -186,6 +226,8 @@ class BoardState {
     int? level,
     int? adBreakThresholdsShown,
     bool? levelUpCelebrationShown,
+    int? runHighestTier,
+    bool? isNewHighScore,
   }) {
     return BoardState(
       current: current ?? this.current,
@@ -197,6 +239,7 @@ class BoardState {
       credits: credits ?? this.credits,
       highestTierUnlocked: highestTierUnlocked ?? this.highestTierUnlocked,
       highestTierUnlockedLevel2: highestTierUnlockedLevel2 ?? this.highestTierUnlockedLevel2,
+      highestTierUnlockedLevel3: highestTierUnlockedLevel3 ?? this.highestTierUnlockedLevel3,
       highestLevelReached: highestLevelReached ?? this.highestLevelReached,
       continueOfferUsed: continueOfferUsed ?? this.continueOfferUsed,
       scoreCreditThresholdsAwarded: scoreCreditThresholdsAwarded ?? this.scoreCreditThresholdsAwarded,
@@ -206,6 +249,8 @@ class BoardState {
       level: level ?? this.level,
       adBreakThresholdsShown: adBreakThresholdsShown ?? this.adBreakThresholdsShown,
       levelUpCelebrationShown: levelUpCelebrationShown ?? this.levelUpCelebrationShown,
+      runHighestTier: runHighestTier ?? this.runHighestTier,
+      isNewHighScore: isNewHighScore ?? this.isNewHighScore,
     );
   }
 }
@@ -239,7 +284,7 @@ class GameStateNotifier extends Notifier<BoardState> {
   @override
   BoardState build() {
     _loadPersisted();
-    return _freshGame(credits: 0, highestTierUnlocked: 0, highestTierUnlockedLevel2: -1, highestLevelReached: 1);
+    return _freshGame(credits: 0, highestTierUnlocked: 0, highestTierUnlockedLevel2: -1, highestTierUnlockedLevel3: -1, highestLevelReached: 1);
   }
 
   /// Credits and the highest-tier records live on disk, not in this
@@ -254,6 +299,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     final credits = await loadCredits();
     final highest = await loadHighestTier();
     final highestLevel2 = await loadHighestTierLevel2();
+    final highestLevel3 = await loadHighestTierLevel3();
     final highestLevelReached = await loadHighestLevelReached();
     final savedJson = await loadGameJson();
     final restored = savedJson == null
@@ -263,6 +309,7 @@ class GameStateNotifier extends Notifier<BoardState> {
             credits: credits,
             highestTierUnlocked: highest,
             highestTierUnlockedLevel2: highestLevel2,
+            highestTierUnlockedLevel3: highestLevel3,
             highestLevelReached: highestLevelReached,
           );
     // Falls back to a freshly-built game (not just a copyWith patch onto
@@ -276,6 +323,7 @@ class GameStateNotifier extends Notifier<BoardState> {
           credits: credits,
           highestTierUnlocked: highest,
           highestTierUnlockedLevel2: highestLevel2,
+          highestTierUnlockedLevel3: highestLevel3,
           highestLevelReached: highestLevelReached,
         );
   }
@@ -303,6 +351,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     'level': s.level,
     'adBreakThresholdsShown': s.adBreakThresholdsShown,
     'levelUpCelebrationShown': s.levelUpCelebrationShown,
+    'runHighestTier': s.runHighestTier,
   };
 
   /// Rebuilds a full BoardState from a previous [_encodeState] — wrapped
@@ -318,13 +367,14 @@ class GameStateNotifier extends Notifier<BoardState> {
     required int credits,
     required int highestTierUnlocked,
     required int highestTierUnlockedLevel2,
+    required int highestTierUnlockedLevel3,
     required int highestLevelReached,
   }) {
     try {
       final map = jsonDecode(json) as Map<String, dynamic>;
       final orderId = map['orderId'] as String?;
       final level = map['level'] as int;
-      final recipes = level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes;
+      final recipes = cocktailRecipesForLevel(level);
       return BoardState(
         current: findIngredientById(map['currentId'] as String),
         upcoming: (map['upcomingIds'] as List).map((id) => findIngredientById(id as String)).toList(),
@@ -335,6 +385,7 @@ class GameStateNotifier extends Notifier<BoardState> {
         credits: credits,
         highestTierUnlocked: highestTierUnlocked,
         highestTierUnlockedLevel2: highestTierUnlockedLevel2,
+        highestTierUnlockedLevel3: highestTierUnlockedLevel3,
         highestLevelReached: highestLevelReached,
         continueOfferUsed: map['continueOfferUsed'] as bool,
         scoreCreditThresholdsAwarded: map['scoreCreditThresholdsAwarded'] as int,
@@ -346,6 +397,10 @@ class GameStateNotifier extends Notifier<BoardState> {
         level: level,
         adBreakThresholdsShown: map['adBreakThresholdsShown'] as int,
         levelUpCelebrationShown: map['levelUpCelebrationShown'] as bool,
+        // Absent in a save written before this field existed — 0 (never
+        // reached anything this run) is the correct read for that case,
+        // same spirit as every other new-field fallback in this method.
+        runHighestTier: map['runHighestTier'] as int? ?? 0,
       );
     } catch (_) {
       return null;
@@ -356,22 +411,29 @@ class GameStateNotifier extends Notifier<BoardState> {
     required int credits,
     required int highestTierUnlocked,
     required int highestTierUnlockedLevel2,
+    required int highestTierUnlockedLevel3,
     required int highestLevelReached,
     int? level,
   }) {
     _ingredientBag = [];
     final resolvedLevel = level ?? highestLevelReached;
-    final highestForLevel = resolvedLevel >= 2 ? highestTierUnlockedLevel2 : highestTierUnlocked;
+    final highestForLevel = highestTierBucketForLevel(
+      resolvedLevel,
+      l1: highestTierUnlocked,
+      l2: highestTierUnlockedLevel2,
+      l3: highestTierUnlockedLevel3,
+    );
     return BoardState(
       current: _randomIngredient(resolvedLevel, highestForLevel),
       upcoming: List.generate(3, (_) => _randomIngredient(resolvedLevel, highestForLevel)),
-      order: resolvedLevel >= 2 ? kStarterCocktailLevel2 : kStarterCocktail,
+      order: starterCocktailForLevel(resolvedLevel),
       cocktailsMade: 0,
       score: 0,
       gameOver: false,
       credits: credits,
       highestTierUnlocked: highestTierUnlocked,
       highestTierUnlockedLevel2: highestTierUnlockedLevel2,
+      highestTierUnlockedLevel3: highestTierUnlockedLevel3,
       highestLevelReached: highestLevelReached,
       level: resolvedLevel,
       // A fresh game that *starts* on Level 2 (because that's already the
@@ -396,6 +458,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     credits: state.credits,
     highestTierUnlocked: state.highestTierUnlocked,
     highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
+    highestTierUnlockedLevel3: state.highestTierUnlockedLevel3,
     highestLevelReached: state.highestLevelReached,
     level: level,
   );
@@ -434,7 +497,12 @@ class GameStateNotifier extends Notifier<BoardState> {
   void advanceQueue() {
     if (state.gameOver) return;
     final nextCurrent = state.upcoming.first;
-    final highestForLevel = state.level >= 2 ? state.highestTierUnlockedLevel2 : state.highestTierUnlocked;
+    final highestForLevel = highestTierBucketForLevel(
+      state.level,
+      l1: state.highestTierUnlocked,
+      l2: state.highestTierUnlockedLevel2,
+      l3: state.highestTierUnlockedLevel3,
+    );
     final nextUpcoming = [...state.upcoming.skip(1), _randomIngredient(state.level, highestForLevel)];
     state = state.copyWith(current: nextCurrent, upcoming: nextUpcoming);
   }
@@ -485,11 +553,22 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// whose lifetime record already includes the capstone tier from a
   /// past run would otherwise never have [jugReached] set on a fresh run.
   void registerTierSeen(int tier) {
-    final isLevel2 = state.level >= 2;
-    final currentHighest = isLevel2 ? state.highestTierUnlockedLevel2 : state.highestTierUnlocked;
+    final level = state.level;
+    if (tier > state.runHighestTier) {
+      state = state.copyWith(runHighestTier: tier);
+    }
+    final currentHighest = highestTierBucketForLevel(
+      level,
+      l1: state.highestTierUnlocked,
+      l2: state.highestTierUnlockedLevel2,
+      l3: state.highestTierUnlockedLevel3,
+    );
     if (tier > currentHighest) {
       final newCredits = state.credits + kTierUnlockReward;
-      if (isLevel2) {
+      if (level >= 3) {
+        state = state.copyWith(highestTierUnlockedLevel3: tier, credits: newCredits);
+        saveHighestTierLevel3(tier);
+      } else if (level >= 2) {
         state = state.copyWith(highestTierUnlockedLevel2: tier, credits: newCredits);
         saveHighestTierLevel2(tier);
       } else {
@@ -498,31 +577,32 @@ class GameStateNotifier extends Notifier<BoardState> {
       }
       saveCredits(newCredits);
     }
-    final chainLastTier = isLevel2 ? kEvolutionChainLevel2.last.tier : kEvolutionChain.last.tier;
+    final chainLastTier = evolutionChainForLevel(level).last.tier;
     if (!state.jugReached && tier == chainLastTier) {
       state = state.copyWith(jugReached: true);
       _checkLevelUp();
     }
   }
 
-  /// Every Level 1 cocktail recipe made at least once, plus the Jug
-  /// reached, on this run — advances to Level 2. With Cocktail Mode off
-  /// (see cocktail_mode_provider.dart), the cocktail requirement drops
-  /// out entirely — reaching the Jug (merging the two highest items) is
-  /// enough on its own. A no-op once already at Level 2 (there's no
-  /// Level 3 to advance to further). Only flips [BoardState.level]
-  /// itself; GameScreen notices that flip and calls [enterLevel] to
-  /// actually reset the table/queue/order for the new chain once its
-  /// celebration sequence has played out (see level_up_overlay.dart) —
-  /// doing that heavy a reset from inside this callback, mid physics-
-  /// contact-resolution, would be a bad time for the whole board to
-  /// change under MixolocoGame's feet.
+  /// Every current-level cocktail recipe made at least once, plus the
+  /// Jug/capstone reached, on this run — advances to the next level.
+  /// With Cocktail Mode off (see cocktail_mode_provider.dart), the
+  /// cocktail requirement drops out entirely — reaching the capstone
+  /// (merging the two highest items) is enough on its own. A no-op once
+  /// already at [kMaxLevel] (nothing further to advance to yet). Only
+  /// flips [BoardState.level] itself; GameScreen notices that flip and
+  /// calls [enterLevel] to actually reset the table/queue/order for the
+  /// new chain once its celebration sequence has played out (see
+  /// level_up_overlay.dart) — doing that heavy a reset from inside this
+  /// callback, mid physics-contact-resolution, would be a bad time for
+  /// the whole board to change under MixolocoGame's feet.
   void _checkLevelUp() {
-    if (state.level >= 2) return;
+    if (state.level >= kMaxLevel) return;
     if (!state.jugReached) return;
     final cocktailModeEnabled = ref.read(cocktailModeProvider);
-    if (!cocktailModeEnabled || state.completedCocktailIds.length >= kCocktailRecipes.length) {
-      state = state.copyWith(level: 2);
+    final recipeCount = cocktailRecipesForLevel(state.level).length;
+    if (!cocktailModeEnabled || state.completedCocktailIds.length >= recipeCount) {
+      state = state.copyWith(level: state.level + 1);
     }
   }
 
@@ -538,7 +618,12 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// does the equivalent reset on the physics side.
   void enterLevel(int level) {
     _ingredientBag = [];
-    final highestForLevel = level >= 2 ? state.highestTierUnlockedLevel2 : state.highestTierUnlocked;
+    final highestForLevel = highestTierBucketForLevel(
+      level,
+      l1: state.highestTierUnlocked,
+      l2: state.highestTierUnlockedLevel2,
+      l3: state.highestTierUnlockedLevel3,
+    );
     final newCurrent = _randomIngredient(level, highestForLevel);
     final newUpcoming = List.generate(3, (_) => _randomIngredient(level, highestForLevel));
     final newHighestLevelReached = level > state.highestLevelReached ? level : state.highestLevelReached;
@@ -546,10 +631,11 @@ class GameStateNotifier extends Notifier<BoardState> {
       level: level,
       current: newCurrent,
       upcoming: newUpcoming,
-      order: level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail,
+      order: starterCocktailForLevel(level),
       jugReached: false,
       completedCocktailIds: {},
       highestLevelReached: newHighestLevelReached,
+      runHighestTier: 0,
     );
     saveHighestLevelReached(newHighestLevelReached);
   }
@@ -652,12 +738,18 @@ class GameStateNotifier extends Notifier<BoardState> {
 
   /// Records the local high score and submits this run's league score —
   /// called exactly once per game, at whichever point the run is truly,
-  /// finally over (see registerGameOver/declineContinue). Both writes
-  /// are fire-and-forget: the high-scores screen reloads from disk
-  /// itself, and league submission silently no-ops without a signed-in
-  /// uid (offline cold start, Firebase not set up, or the player's never
-  /// opened the league screen — see AuthService's own doc comment).
-  void _finalizeScore() {
+  /// finally over (see registerGameOver/declineContinue). The league
+  /// submission is fire-and-forget (silently no-ops without a signed-in
+  /// uid — offline cold start, Firebase not set up, or the player's
+  /// never opened the league screen, see AuthService's own doc comment);
+  /// the local high-score check is awaited just long enough to read the
+  /// previous best *before* recordScore overwrites it, so
+  /// [BoardState.isNewHighScore] (the Game Over plaque's "PB" badge) can
+  /// be set correctly.
+  Future<void> _finalizeScore() async {
+    final previousBest = await loadHighScores();
+    final isNewHighScore = state.score > 0 && (previousBest.isEmpty || state.score > previousBest.first);
+    state = state.copyWith(isNewHighScore: isNewHighScore);
     recordScore(state.score);
     final uid = authService.uid;
     if (uid != null && state.score > 0) {
@@ -669,6 +761,7 @@ class GameStateNotifier extends Notifier<BoardState> {
             level: state.level,
             highestTierUnlocked: state.highestTierUnlocked,
             highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
+            highestTierUnlockedLevel3: state.highestTierUnlockedLevel3,
             highestLevelReached: state.highestLevelReached,
           )
           .catchError((e) {});
@@ -694,6 +787,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     credits: state.credits,
     highestTierUnlocked: state.highestTierUnlocked,
     highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
+    highestTierUnlockedLevel3: state.highestTierUnlockedLevel3,
     highestLevelReached: state.highestLevelReached,
   );
 
@@ -705,7 +799,13 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// "evo and level" reset the Settings row promises, not a full wipe.
   Future<void> resetProgression() async {
     await resetTierProgression();
-    state = _freshGame(credits: state.credits, highestTierUnlocked: 0, highestTierUnlockedLevel2: -1, highestLevelReached: 1);
+    state = _freshGame(
+      credits: state.credits,
+      highestTierUnlocked: 0,
+      highestTierUnlockedLevel2: -1,
+      highestTierUnlockedLevel3: -1,
+      highestLevelReached: 1,
+    );
     await persistGameState();
   }
 }

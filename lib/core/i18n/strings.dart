@@ -59,8 +59,10 @@ const _en = <String, String>{
   'ad_playing': 'Ad playing…',
   'game_over': 'Game Over',
   'cocktails_made_label': 'Cocktails made',
-  'play_again': 'Play Again',
+  'max_evo_label': 'Max Evolution',
+  'new_best_score': 'NEW BEST SCORE!',
   'home': 'Home',
+  'main_menu': 'Main Menu',
   'ads_consent_title': 'Ads Keep Mixoloco Free',
   'ads_consent_body':
       "We'd like to show ads tailored to you, which helps them pay better. "
@@ -72,6 +74,9 @@ const _en = <String, String>{
   'continue_label': 'Continue',
   'new_game': 'New Game',
   'play_choice_title': 'Continue your game, or start a new one?',
+  'lose_progress_title': 'Lose your progress?',
+  'lose_progress_body': "Starting a new game will end your run in progress and its score won't be saved.",
+  'yes_new_game': 'Yes, New Game',
   'choose_level': 'Choose a level',
   'continue_in': 'Continue in',
   'ad_not_ready': 'Ad not ready — try again in a moment',
@@ -138,8 +143,10 @@ const _es = <String, String>{
   'ad_playing': 'Reproduciendo anuncio…',
   'game_over': 'Fin del Juego',
   'cocktails_made_label': 'Cócteles hechos',
-  'play_again': 'Jugar de Nuevo',
+  'max_evo_label': 'Evolución Máxima',
+  'new_best_score': '¡NUEVA MEJOR PUNTUACIÓN!',
   'home': 'Inicio',
+  'main_menu': 'Menú Principal',
   'ads_consent_title': 'Los Anuncios Mantienen Mixoloco Gratis',
   'ads_consent_body':
       'Nos gustaría mostrar anuncios adaptados a ti, lo que ayuda a que paguen mejor. '
@@ -151,6 +158,9 @@ const _es = <String, String>{
   'continue_label': 'Continuar',
   'new_game': 'Nueva Partida',
   'play_choice_title': '¿Continuar tu partida, o empezar una nueva?',
+  'lose_progress_title': '¿Perder tu progreso?',
+  'lose_progress_body': 'Empezar una nueva partida terminará tu partida actual y su puntuación no se guardará.',
+  'yes_new_game': 'Sí, Nueva Partida',
   'choose_level': 'Elige un nivel',
   'continue_in': 'Continuar en',
   'ad_not_ready': 'Anuncio no disponible — inténtalo de nuevo en un momento',

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/i18n/strings.dart';
-import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart';
@@ -49,11 +47,7 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(leagueControllerProvider);
-    final locale = ref.watch(localeProvider);
     final screenSize = MediaQuery.sizeOf(context);
-    const sideMargin = 28.0;
-    final plankWidth = screenSize.width - sideMargin * 2;
-    final plankHeight = plankWidth / kMenuBoard3Aspect;
     final rowWidth = screenSize.width - 32;
 
     return Scaffold(
@@ -71,17 +65,13 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
                       color: AppColors.sunsetOrange,
                       onRefresh: () => ref.read(leagueControllerProvider.notifier).refresh(),
                       child: ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 46, 16, 24),
+                        // No more title plank above the tier plaque (see
+                        // _buildHeader) — it reads as its own header now,
+                        // so this just needs enough clearance to sit
+                        // clear of the back button, not a full title's
+                        // worth of top padding.
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         children: [
-                          WoodTitlePlank(
-                            title: tr(locale, 'leaderboard'),
-                            icon: Icons.leaderboard_rounded,
-                            iconAsset: 'assets/images/leaderboard.png',
-                            width: plankWidth,
-                            height: plankHeight,
-                            assetPath: 'assets/images/menu_board_3.png',
-                          ),
-                          const SizedBox(height: 6),
                           if (!_resultBannerDismissed && state.lastWeekResultIsNew && state.lastWeekResult != null)
                             _WeekResultBanner(result: state.lastWeekResult!, onDismiss: () => setState(() => _resultBannerDismissed = true)),
                           _buildHeader(state, rowWidth),

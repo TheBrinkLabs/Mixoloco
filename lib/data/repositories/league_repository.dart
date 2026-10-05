@@ -29,11 +29,12 @@ class LeagueLeaderboardEntry {
 
   /// This player's lifetime-highest evolution tier reached, same shape
   /// as [BoardState.highestTierUnlocked]/[highestTierUnlockedLevel2]/
-  /// [highestLevelReached] — resolve the actual Ingredient to show with
-  /// [evolutionIngredient] rather than indexing the chains directly at
-  /// every call site.
+  /// [highestTierUnlockedLevel3]/[highestLevelReached] — resolve the
+  /// actual Ingredient to show with [evolutionIngredient] rather than
+  /// indexing the chains directly at every call site.
   final int highestTierUnlocked;
   final int highestTierUnlockedLevel2;
+  final int highestTierUnlockedLevel3;
   final int highestLevelReached;
 
   const LeagueLeaderboardEntry({
@@ -43,15 +44,22 @@ class LeagueLeaderboardEntry {
     this.level = 1,
     this.highestTierUnlocked = 0,
     this.highestTierUnlockedLevel2 = -1,
+    this.highestTierUnlockedLevel3 = -1,
     this.highestLevelReached = 1,
   });
 
   /// The ingredient to show as this entry's "Evolution" badge — same
-  /// level2-outranks-level1 rule the main menu's own Unlocked tab uses
-  /// (see menu_screen.dart).
-  Ingredient get evolutionIngredient => highestLevelReached >= 2
-      ? kEvolutionChainLevel2[highestTierUnlockedLevel2.clamp(0, kEvolutionChainLevel2.length - 1)]
-      : kEvolutionChain[highestTierUnlocked.clamp(0, kEvolutionChain.length - 1)];
+  /// higher-level-outranks-lower rule the main menu's own Unlocked tab
+  /// uses (see menu_screen.dart).
+  Ingredient get evolutionIngredient {
+    if (highestLevelReached >= 3) {
+      return kEvolutionChainLevel3[highestTierUnlockedLevel3.clamp(0, kEvolutionChainLevel3.length - 1)];
+    }
+    if (highestLevelReached >= 2) {
+      return kEvolutionChainLevel2[highestTierUnlockedLevel2.clamp(0, kEvolutionChainLevel2.length - 1)];
+    }
+    return kEvolutionChain[highestTierUnlocked.clamp(0, kEvolutionChain.length - 1)];
+  }
 }
 
 /// Mirrors Capitle's own league_repository.dart, simplified for
@@ -141,10 +149,11 @@ class LeagueRepository {
   /// morning would get filed under the wrong week entirely.
   ///
   /// [level]/[highestTierUnlocked]/[highestTierUnlockedLevel2]/
-  /// [highestLevelReached] are this player's own progress at submit
-  /// time — purely informational extras on top of bestScore (see
-  /// [LeagueLeaderboardEntry]), not subject to firestore.rules'
-  /// bestScore-only validation, so they're free-form here.
+  /// [highestTierUnlockedLevel3]/[highestLevelReached] are this player's
+  /// own progress at submit time — purely informational extras on top of
+  /// bestScore (see [LeagueLeaderboardEntry]), not subject to
+  /// firestore.rules' bestScore-only validation, so they're free-form
+  /// here.
   Future<void> submitWeeklyScore({
     required String uid,
     required int score,
@@ -152,6 +161,7 @@ class LeagueRepository {
     int level = 1,
     int highestTierUnlocked = 0,
     int highestTierUnlockedLevel2 = -1,
+    int highestTierUnlockedLevel3 = -1,
     int highestLevelReached = 1,
   }) async {
     final playedAtUtc = (playedAt ?? DateTime.now()).toUtc();
@@ -168,6 +178,7 @@ class LeagueRepository {
         'level': level,
         'highestTierUnlocked': highestTierUnlocked,
         'highestTierUnlockedLevel2': highestTierUnlockedLevel2,
+        'highestTierUnlockedLevel3': highestTierUnlockedLevel3,
         'highestLevelReached': highestLevelReached,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -225,6 +236,7 @@ class LeagueRepository {
         level: (scoreData?['level'] as int?) ?? 1,
         highestTierUnlocked: (scoreData?['highestTierUnlocked'] as int?) ?? 0,
         highestTierUnlockedLevel2: (scoreData?['highestTierUnlockedLevel2'] as int?) ?? -1,
+        highestTierUnlockedLevel3: (scoreData?['highestTierUnlockedLevel3'] as int?) ?? -1,
         highestLevelReached: (scoreData?['highestLevelReached'] as int?) ?? 1,
       );
     }));

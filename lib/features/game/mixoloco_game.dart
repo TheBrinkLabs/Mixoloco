@@ -114,20 +114,24 @@ class MixolocoGame extends Forge2DGame {
 
   /// Which evolution chain/cocktail list is currently active — 1 for the
   /// beach bar ([kEvolutionChain]/[kCocktailRecipes]), 2 for the rooftop
-  /// bar ([kEvolutionChainLevel2]/[kCocktailRecipesLevel2]). Both
-  /// chains' art is preloaded upfront in onLoad regardless of which is
-  /// active at construction, so [switchToLevel] never needs an async
-  /// await mid-game.
+  /// bar ([kEvolutionChainLevel2]/[kCocktailRecipesLevel2]), 3 for the
+  /// safari bar ([kEvolutionChainLevel3]/[kCocktailRecipesLevel3]). All
+  /// three chains' art is preloaded upfront in onLoad regardless of
+  /// which is active at construction, so [switchToLevel] never needs an
+  /// async await mid-game.
   int _level;
-  List<Ingredient> get _chain => _level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain;
+  List<Ingredient> get _chain => evolutionChainForLevel(_level);
 
   /// The actual physics radius for [tier], including both
-  /// [Ingredient.sizeMultiplier] and — once on the rooftop — the
-  /// progressive per-tier Level 2 bump (see [_level2SizeMultiplier]). The
-  /// single source every radius computation below reads from, so the
-  /// level-2-is-bigger rule can't drift out of sync between them.
+  /// [Ingredient.sizeMultiplier] and — only on the rooftop specifically
+  /// — the progressive per-tier Level 2 bump (see
+  /// [_level2SizeMultiplier]). The single source every radius
+  /// computation below reads from, so the level-2-is-bigger rule can't
+  /// drift out of sync between them. Level 3 deliberately isn't
+  /// included in that bump — it was a Level 2-specific tuning call, not
+  /// a general "levels past 1 are bigger" rule.
   double _radiusForTier(int tier, Ingredient ingredient) =>
-      radiusForTier(tier, kBaseRadiusMeters) * ingredient.sizeMultiplier * (_level >= 2 ? _level2SizeMultiplier(tier) : 1.0);
+      radiusForTier(tier, kBaseRadiusMeters) * ingredient.sizeMultiplier * (_level == 2 ? _level2SizeMultiplier(tier) : 1.0);
 
   /// Items to recreate on the table as soon as the world's ready — a
   /// snapshot taken via [capturePlacedItems] the last time this screen
@@ -339,8 +343,10 @@ class MixolocoGame extends Forge2DGame {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    await preloadIngredientArt([...kEvolutionChain, ...kEvolutionChainLevel2]);
-    await preloadImageAssets([for (final recipe in [...kCocktailRecipes, ...kCocktailRecipesLevel2]) recipe.assetPath]);
+    await preloadIngredientArt([...kEvolutionChain, ...kEvolutionChainLevel2, ...kEvolutionChainLevel3]);
+    await preloadImageAssets([
+      for (final recipe in [...kCocktailRecipes, ...kCocktailRecipesLevel2, ...kCocktailRecipesLevel3]) recipe.assetPath,
+    ]);
     try {
       _mergePool = await FlameAudio.createPool(kMergeSoundFile, minPlayers: 2, maxPlayers: 6);
       _cocktailPool = await FlameAudio.createPool(kCocktailSoundFile, minPlayers: 1, maxPlayers: 2);
@@ -776,15 +782,16 @@ class MixolocoGame extends Forge2DGame {
   /// simulation, so only the one-time resize touches physics — the
   /// wobble/flex the shake actually reads as is all visual.
   ///
-  /// Base 0.825 (17.5% smaller) +/- an 0.03 wobble spans 14.5%-20.5%
-  /// smaller — the requested 15-20% band — per follow-up feedback that
-  /// bumped this up from an initial 10-15%. The X/Y wobble is a full
-  /// half-cycle (pi) out of phase with itself (see shakeSquishScaleFor)
-  /// rather than a smaller offset, so as one axis shrinks toward the
-  /// bottom of that band the other relatively grows toward the top of
-  /// it — a genuine squash-stretch flex instead of both axes pulsing in
-  /// near-lockstep, per feedback that it should "look a bit flexible."
-  static const _shakeSquishBase = 0.825;
+  /// Base 0.725 (27.5% smaller) +/- an 0.03 wobble spans 24.5%-30.5%
+  /// smaller — bumped another 10 points per feedback that Mega-Shake
+  /// wasn't effective enough (was 0.825/17.5%, itself bumped up from an
+  /// initial 10-15%). The X/Y wobble is a full half-cycle (pi) out of
+  /// phase with itself (see shakeSquishScaleFor) rather than a smaller
+  /// offset, so as one axis shrinks toward the bottom of that band the
+  /// other relatively grows toward the top of it — a genuine
+  /// squash-stretch flex instead of both axes pulsing in near-lockstep,
+  /// per feedback that it should "look a bit flexible."
+  static const _shakeSquishBase = 0.725;
   static const _shakeShrinkInDuration = 0.18;
   static const _shakeSettleDuration = 0.35;
   static const _shakeWobbleAmplitude = 0.03;
@@ -792,23 +799,31 @@ class MixolocoGame extends Forge2DGame {
   bool _shakeSquishApplied = false;
   double _shakeSettleElapsed = 0;
 
-  void _startShakeImpulses() {
+  /// Scales every impulse pulse in [_updateShake] — 1.0 for the plain
+  /// Shake, higher for Mega-Shake (see [megaShakeTable]) so items fly
+  /// around more during the pricier purchase without touching the
+  /// cheaper one's feel.
+  double _shakeImpulseMultiplier = 1.0;
+
+  void _startShakeImpulses(double impulseMultiplier) {
     _shakeTimeRemaining = _shakeDuration;
     _shakePulseTimer = 0;
     _shakeSettleElapsed = 0;
+    _shakeImpulseMultiplier = impulseMultiplier;
     world.gravity = Vector2(0, -kGravityMagnitude * _shakeGravityMultiplier);
   }
 
   /// The original Shake purchase — the impulse-pulse jostle only, no
   /// size change. See [megaShakeTable] for the shrink/wobble/flex
   /// version.
-  void shakeTable() => _startShakeImpulses();
+  void shakeTable() => _startShakeImpulses(1.0);
 
-  /// Mega-Shake — the same impulse pulses as [shakeTable], plus every
-  /// live item shrinking/wobbling/flexing for the duration (see
-  /// _shakeSquishBase's doc and shakeSquishScaleFor).
+  /// Mega-Shake — the same impulse pulses as [shakeTable] but 30%
+  /// stronger ("fly around a little bit more"), plus every live item
+  /// shrinking/wobbling/flexing for the duration (see _shakeSquishBase's
+  /// doc and shakeSquishScaleFor).
   void megaShakeTable() {
-    _startShakeImpulses();
+    _startShakeImpulses(1.3);
     // Guarded — a second Mega-Shake purchase fired while the first's
     // items are still settling back to size would otherwise shrink
     // already-shrunk bodies a second time.
@@ -847,9 +862,9 @@ class MixolocoGame extends Forge2DGame {
           // given the camera's angle) rather than a subtle
           // omnidirectional jitter. Every magnitude doubled ("twice as
           // aggressive") per feedback.
-          final horizontal = (_shakeRandom.nextDouble() - 0.5) * 2.4 * b.body.mass;
+          final horizontal = (_shakeRandom.nextDouble() - 0.5) * 2.4 * _shakeImpulseMultiplier * b.body.mass;
           final verticalSign = _shakeRandom.nextBool() ? 1.0 : -1.0;
-          final vertical = verticalSign * (2.6 + _shakeRandom.nextDouble() * 2.2) * b.body.mass;
+          final vertical = verticalSign * (2.6 + _shakeRandom.nextDouble() * 2.2) * _shakeImpulseMultiplier * b.body.mass;
           b.body.applyLinearImpulse(Vector2(horizontal, vertical));
         }
       }

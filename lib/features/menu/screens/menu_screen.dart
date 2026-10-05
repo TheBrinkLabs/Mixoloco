@@ -175,6 +175,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
     if (choice == _PlayChoice.continueGame) {
       _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const GameScreen()));
     } else {
+      // A real run was actually in progress (that's how we got here —
+      // see the inProgress check above), so New Game means throwing it
+      // away — confirm before doing that, same as Settings' own Reset
+      // Progress confirm.
+      final confirmed = await showDialog<bool>(context: context, builder: (_) => _LoseProgressDialog(locale: locale));
+      if (!mounted || confirmed != true) return;
       await _startNewGame();
     }
   }
@@ -445,15 +451,18 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                                               label: tr(locale, 'unlocked'),
                                               width: hudTabWidth,
                                               height: hudTabHeight,
-                                              // Once the rooftop bar's ever been reached, its lowest
-                                              // tier still outranks every beach-bar tier, so the
+                                              // Once a higher bar's ever been reached, its lowest
+                                              // tier still outranks every lower-bar tier, so the
                                               // display switches over regardless of how far into
-                                              // that chain highestTierUnlockedLevel2 itself is (it
-                                              // can briefly be -1, right at the moment of leveling
-                                              // up before the first Level 2 tier's actually been
-                                              // seen — clamped to 0/Cherry rather than crashing).
+                                              // that chain the matching highestTierUnlockedLevelN
+                                              // itself is (it can briefly be -1, right at the
+                                              // moment of leveling up before that chain's first
+                                              // tier's actually been seen — clamped to 0/Cherry
+                                              // rather than crashing).
                                               content: GlassVisual(
-                                                ingredient: board.highestLevelReached >= 2
+                                                ingredient: board.highestLevelReached >= 3
+                                                    ? kEvolutionChainLevel3[board.highestTierUnlockedLevel3.clamp(0, kEvolutionChainLevel3.length - 1)]
+                                                    : board.highestLevelReached >= 2
                                                     ? kEvolutionChainLevel2[board.highestTierUnlockedLevel2.clamp(0, kEvolutionChainLevel2.length - 1)]
                                                     : kEvolutionChain[board.highestTierUnlocked],
                                                 size: hudTabHeight * 0.4,
@@ -734,6 +743,70 @@ class _PlayChoiceDialog extends StatelessWidget {
                   border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
                 ),
                 child: Center(child: Text(tr(locale, 'new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textLight))),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Are you sure?" gate on top of [_PlayChoiceDialog]'s own New Game
+/// option specifically — picking New Game there means throwing away a
+/// real run already in progress (that's the only way this dialog gets
+/// offered at all), so it gets the same confirm-before-destroying
+/// treatment as Settings' own Reset Progress row, not an instant wipe.
+class _LoseProgressDialog extends StatelessWidget {
+  final AppLocale locale;
+  const _LoseProgressDialog({required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              tr(locale, 'lose_progress_title'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textLight),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              tr(locale, 'lose_progress_body'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(true),
+              child: Container(
+                width: double.infinity,
+                height: 46,
+                decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(14)),
+                child: Center(
+                  child: Text(tr(locale, 'yes_new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(false),
+              child: SizedBox(
+                width: double.infinity,
+                height: 40,
+                child: Center(
+                  child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+                ),
               ),
             ),
           ],
