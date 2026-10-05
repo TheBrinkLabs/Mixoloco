@@ -63,11 +63,21 @@ dependencies {
     // needs no separate account (LevelPlay itself is a Unity product).
     // Exact SDK/adapter version pairing per Unity's own published
     // versions.json for this adapter release — same pairing already
-    // proven working in Capitle. Add Vungle/Meta/Mintegral adapters here
-    // later the same way if those accounts get set up for Mixoloco too
-    // (see Capitle's own build.gradle.kts for that exact pattern).
+    // proven working in Capitle. Add Meta/Mintegral adapters here later
+    // the same way if those accounts get set up for Mixoloco too (see
+    // Capitle's own build.gradle.kts for that exact pattern).
     implementation("com.unity3d.ads:unity-ads:4.20.0")
     implementation("com.unity3d.ads-mediation:unityads-adapter:5.12.0")
+
+    // Vungle (Liftoff Monetize) — mediated through LevelPlay (see the
+    // unity_levelplay_mediation Flutter plugin) rather than called
+    // directly. Same exact SDK/adapter version pairing as Capitle
+    // (7.7.8/5.14.0 — the vungle-adapter's own versions.json requirement;
+    // an older pairing caused a real runtime class-resolution failure
+    // there, silently preventing Vungle from ever initializing through
+    // LevelPlay even though "no fill" was the visible symptom).
+    implementation("com.vungle:vungle-ads:7.7.8")
+    implementation("com.unity3d.ads-mediation:vungle-adapter:5.14.0")
 }
 
 flutter {

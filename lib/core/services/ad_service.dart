@@ -7,25 +7,25 @@ import 'package:unity_levelplay_mediation/unity_levelplay_mediation.dart';
 /// rewarded slot).
 enum RewardedAdSlot { continueGame, shopCredits }
 
-/// Unity LevelPlay mediates ads — currently just Unity Ads itself (the
-/// one network LevelPlay ships with, needing no separate account setup);
-/// see android/app/build.gradle.kts for where Vungle/Meta/Mintegral would
-/// be added the same way Capitle's sibling app does, once/if those
-/// accounts exist for Mixoloco too. Four ad units: the persistent bottom
-/// banner, the score-milestone MREC (see ad_break_screen.dart), the
-/// end-of-level interstitial, and the shop/continue-after-game-over
-/// rewarded video.
+/// Unity LevelPlay mediates ads — Unity Ads is live (the one network
+/// LevelPlay ships with, needing no separate account setup); Vungle is
+/// being added next the same way Capitle's sibling app does (see
+/// android/app/build.gradle.kts for the adapter dependencies once that
+/// network instance is linked in the LevelPlay dashboard), Meta/Mintegral
+/// to follow. Four ad units: the persistent bottom banner, the
+/// score-milestone MREC (see ad_break_screen.dart), the end-of-level
+/// interstitial, and the shop/continue-after-game-over rewarded video.
 class AdService implements LevelPlayInitListener {
-  // TODO: replace with Mixoloco's own LevelPlay app key + ad unit ids,
-  // from a NEW app entry in the LevelPlay dashboard registered against
-  // com.brinklabs.mixoloco — these must NOT be Capitle's (its app key is
-  // tied to com.brinklabs.capitle and won't serve ads for a different
-  // bundle id). Everything below works as soon as real values land here.
-  static const _levelPlayAppKey = 'TODO_MIXOLOCO_LEVELPLAY_APP_KEY';
-  static const _levelPlayBannerAdUnitId = 'TODO_MIXOLOCO_BANNER_AD_UNIT_ID';
-  static const _levelPlayMrecAdUnitId = 'TODO_MIXOLOCO_MREC_AD_UNIT_ID';
-  static const _levelPlayInterstitialAdUnitId = 'TODO_MIXOLOCO_INTERSTITIAL_AD_UNIT_ID';
-  static const _levelPlayRewardedAdUnitId = 'TODO_MIXOLOCO_REWARDED_AD_UNIT_ID';
+  // Mixoloco's own LevelPlay app key + ad unit ids, from its own app
+  // entry in the LevelPlay dashboard (registered against
+  // com.brinklabs.mixoloco — deliberately not Capitle's, since its app
+  // key is tied to com.brinklabs.capitle and won't serve ads for a
+  // different bundle id).
+  static const _levelPlayAppKey = '2884bb915';
+  static const _levelPlayBannerAdUnitId = 'gnia6fbjeqnkk528';
+  static const _levelPlayMrecAdUnitId = '6smnc6a5j3b9i5t2';
+  static const _levelPlayInterstitialAdUnitId = 'f20mh6miux9i9tm7';
+  static const _levelPlayRewardedAdUnitId = 'hsn1tjs54f5fkbk3';
 
   bool _isLevelPlayInitialized = false;
 
@@ -62,7 +62,13 @@ class AdService implements LevelPlayInitListener {
 
   Future<void> _applyConsent(bool granted) async {
     try {
-      await LevelPlayPrivacySettings.setGDPRConsents({'UnityAds': granted});
+      // Exact network key strings LevelPlay expects — confirmed against
+      // Unity's own docs (and already proven in Capitle), not guessed:
+      // case-sensitive, "UnityAds" not "Unity". Meta/Mintegral can join
+      // this map the same way once those accounts exist for Mixoloco too
+      // — an inert entry for a network with no active instance is
+      // harmless.
+      await LevelPlayPrivacySettings.setGDPRConsents({'UnityAds': granted, 'Vungle': granted});
       await LevelPlayPrivacySettings.setCCPA(!granted); // CCPA flag = "opted out of sale"
     } catch (e, st) {
       debugPrint('Failed to apply ad consent: $e\n$st');
