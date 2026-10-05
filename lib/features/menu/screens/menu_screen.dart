@@ -392,7 +392,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                                   label: tr(locale, 'info'),
                                   icon: Icons.menu_book_rounded,
                                   iconAsset: 'assets/images/info.png',
-                                  iconScale: 1.2,
+                                  // 10% bigger again per feedback (was 1.2),
+                                  // nudged left a touch so it doesn't read
+                                  // as crowding the title text now that
+                                  // it's bigger still.
+                                  iconScale: 1.32,
+                                  iconShiftLeft: 0.1,
                                   width: plankWidth,
                                   height: plankHeight,
                                   onTap: () => _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const InfoScreen())),
@@ -589,9 +594,18 @@ class _MenuPlankTile extends StatefulWidget {
   final PlankShadowStyle shadowStyle;
 
   /// Grows [iconAsset]'s rendered size relative to the standard
-  /// `height * 0.529` — Info, 20% bigger per feedback. 1.0 (every other
-  /// tile) keeps the original size.
+  /// `height * 0.529` — Info, per feedback. 1.0 (every other tile) keeps
+  /// the original size. Rendered inside a fixed-size slot (see build's
+  /// own comment) so a scaled-up icon grows without shifting where the
+  /// title text starts — every tile's title lines up regardless of
+  /// iconScale.
   final double iconScale;
+
+  /// Shifts the icon left within its slot, as a fraction of [height] —
+  /// Info's own icon per feedback. 0 (every other tile) keeps it
+  /// centered. Purely visual: doesn't move the title text, same
+  /// decoupling as [iconScale].
+  final double iconShiftLeft;
 
   const _MenuPlankTile({
     required this.label,
@@ -606,6 +620,7 @@ class _MenuPlankTile extends StatefulWidget {
     this.comingSoon = false,
     this.soonLabel = 'SOON',
     this.iconScale = 1.0,
+    this.iconShiftLeft = 0.0,
   });
 
   @override
@@ -636,11 +651,25 @@ class _MenuPlankTileState extends State<_MenuPlankTile> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.iconAsset != null)
-                  Image.asset(
-                    widget.iconAsset!,
-                    width: widget.height * 0.529 * widget.iconScale,
-                    height: widget.height * 0.529 * widget.iconScale,
-                    fit: BoxFit.contain,
+                  // A fixed-size slot at the *standard* (unscaled) icon
+                  // size — iconScale grows the image drawn inside it,
+                  // not the slot itself, so the title text after it
+                  // (sized off the Row's total width) starts at the same
+                  // x on every tile regardless of iconScale. iconShiftLeft
+                  // nudges the image within that slot, same independence
+                  // from the text's position.
+                  SizedBox(
+                    width: widget.height * 0.529,
+                    height: widget.height * 0.529,
+                    child: Transform.translate(
+                      offset: Offset(-widget.height * widget.iconShiftLeft, 0),
+                      child: Image.asset(
+                        widget.iconAsset!,
+                        width: widget.height * 0.529 * widget.iconScale,
+                        height: widget.height * 0.529 * widget.iconScale,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   )
                 else
                   Icon(

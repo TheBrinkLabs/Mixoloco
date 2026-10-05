@@ -35,7 +35,12 @@ int highestTierBucketForLevel(int level, {required int l1, required int l2, requ
     level >= 3 ? l3 : (level >= 2 ? l2 : l1);
 
 /// Credits awarded for reaching a new highest evolution tier, ever.
-const kTierUnlockReward = 200;
+/// Halved from 200 — per feedback, climbing a whole 12-step chain (2400
+/// credits at the old rate) handed out roughly 1000-1200 more than
+/// buying every cocktail on that chain actually costs, well past
+/// "enough to afford what you've unlocked" into "credits piling up
+/// regardless."
+const kTierUnlockReward = 100;
 
 /// Credits awarded for every [kScoreCreditThreshold] points of score
 /// reached within a single game — a repeatable, per-run milestone
