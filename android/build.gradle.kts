@@ -6,10 +6,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // Mintegral publishes its SDK to its own Maven repo rather than
-        // Maven Central — required for its LevelPlay mediation adapter
-        // (see android/app/build.gradle.kts). Same repo Capitle uses.
-        maven { url = uri("https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea") }
     }
 }
 
