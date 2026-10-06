@@ -4,6 +4,7 @@ import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/bar_backdrop.dart';
+import '../../../core/widgets/notification_tablet.dart';
 import '../../../core/widgets/wood_plank.dart';
 
 /// Shown exactly once, before the very first MenuScreen — the real
@@ -55,37 +56,23 @@ class _AdConsentScreenState extends ConsumerState<AdConsentScreen> {
                     assetPath: 'assets/images/menu_board_3.png',
                   ),
                   const SizedBox(height: 18),
-                  Container(
+                  NotificationTablet(
                     width: plankWidth,
                     padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                    ),
                     child: Text(
                       tr(locale, 'ads_consent_body'),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 14, height: 1.4, color: AppColors.textMuted),
+                      style: const TextStyle(fontSize: 14, height: 1.4, color: AppColors.textOnStoneMuted),
                     ),
                   ),
                   const SizedBox(height: 24),
-                  GestureDetector(
-                    onTap: _submitting ? null : () => _answer(true),
-                    child: Opacity(
-                      opacity: _submitting ? 0.6 : 1.0,
-                      child: Container(
-                        width: plankWidth,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          gradient: AppColors.gradientSunset,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [BoxShadow(color: AppColors.sunsetOrange.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 5))],
-                        ),
-                        child: Center(
-                          child: Text(tr(locale, 'allow'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
-                        ),
-                      ),
+                  Opacity(
+                    opacity: _submitting ? 0.6 : 1.0,
+                    child: StoneButton(
+                      onTap: _submitting ? null : () => _answer(true),
+                      width: plankWidth,
+                      height: 54,
+                      child: Text(tr(locale, 'allow'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
                     ),
                   ),
                   const SizedBox(height: 12),

@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/utils/progress_sync.dart';
 import '../../../core/widgets/bar_backdrop.dart';
+import '../../../core/widgets/notification_tablet.dart';
 import '../../../core/widgets/wood_plank.dart';
 import '../../../data/repositories/league_repository.dart';
 import '../../game/providers/game_state_provider.dart';
@@ -400,38 +401,25 @@ class _ResetProgressPlankRow extends StatelessWidget {
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-          ),
+        child: NotificationTablet(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 tr(locale, 'reset_progress_confirm_title'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textLight),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone),
               ),
               const SizedBox(height: 8),
               Text(
                 tr(locale, 'reset_progress_confirm_body'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                style: const TextStyle(fontSize: 13, color: AppColors.textOnStoneMuted),
               ),
               const SizedBox(height: 20),
-              GestureDetector(
+              StoneButton(
                 onTap: () => Navigator.of(context).pop(true),
-                child: Container(
-                  width: double.infinity,
-                  height: 46,
-                  decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(14)),
-                  child: Center(
-                    child: Text(tr(locale, 'reset_progress_button'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
-                  ),
-                ),
+                child: Text(tr(locale, 'reset_progress_button'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
               ),
               const SizedBox(height: 10),
               GestureDetector(
@@ -440,7 +428,7 @@ class _ResetProgressPlankRow extends StatelessWidget {
                   width: double.infinity,
                   height: 40,
                   child: Center(
-                    child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+                    child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
                   ),
                 ),
               ),

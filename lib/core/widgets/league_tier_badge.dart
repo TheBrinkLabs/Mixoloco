@@ -28,14 +28,19 @@ String labelForTier(String tier) {
 
 /// bronze_league.png's own aspect once cropped tight to its plate (was
 /// 1408x768 with a lot of transparent padding baked in, cropped down
-/// to 1238x452) — used to size it without letterboxing.
+/// to 1238x452) — used to size it without letterboxing. gold_league.png/
+/// silver_league.png were supplied and cropped the same way, landing
+/// within a pixel or two of the same aspect, so this one constant covers
+/// all three.
 const kLeaguePlateAspect = 1238 / 452;
 
-/// The engraved-metal plate art for a tier, once made — currently only
-/// bronze; silver/gold fall back to the plain colour-coded pill below
-/// until their own plates are supplied.
+/// The engraved-metal plate art for every tier.
 String? leagueAssetForTier(String tier) {
   switch (tier) {
+    case 'gold':
+      return 'assets/images/gold_league.png';
+    case 'silver':
+      return 'assets/images/silver_league.png';
     case 'bronze':
       return 'assets/images/bronze_league.png';
     default:

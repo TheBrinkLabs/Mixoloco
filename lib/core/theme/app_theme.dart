@@ -18,6 +18,14 @@ class AppColors {
   static const textLight = Color(0xFFFFF6EC);
   static const textMuted = Color(0xFFB9D6D4);
 
+  // textLight/textMuted were tuned for the old dark AppColors.surface
+  // dialog background — on the new light stone NotificationTablet (see
+  // core/widgets/notification_tablet.dart) they read as washed-out to
+  // invisible. These two are that same light-text/muted-text pairing's
+  // dark-on-light mirror, for any text actually sitting on the stone.
+  static const textOnStone = Color(0xFF3A2E22);
+  static const textOnStoneMuted = Color(0xFF6B5D4F);
+
   static const gradientSunset = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,

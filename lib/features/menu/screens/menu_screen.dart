@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/utils/progress_sync.dart';
 import '../../../core/widgets/bar_backdrop.dart';
+import '../../../core/widgets/notification_tablet.dart';
 import '../../../core/widgets/game_logo.dart';
 import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/wood_plank.dart';
@@ -756,44 +757,24 @@ class _PlayChoiceDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-        ),
+      child: NotificationTablet(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               tr(locale, 'play_choice_title'),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textLight),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone),
             ),
             const SizedBox(height: 20),
-            GestureDetector(
+            StoneButton(
               onTap: () => Navigator.of(context).pop(_PlayChoice.continueGame),
-              child: Container(
-                width: double.infinity,
-                height: 46,
-                decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(14)),
-                child: Center(child: Text(tr(locale, 'continue_label'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black))),
-              ),
+              child: Text(tr(locale, 'continue_label'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
             ),
             const SizedBox(height: 10),
-            GestureDetector(
+            StoneButton(
               onTap: () => Navigator.of(context).pop(_PlayChoice.newGame),
-              child: Container(
-                width: double.infinity,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppColors.surface2,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                ),
-                child: Center(child: Text(tr(locale, 'new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textLight))),
-              ),
+              child: Text(tr(locale, 'new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
             ),
           ],
         ),
@@ -815,38 +796,25 @@ class _LoseProgressDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-        ),
+      child: NotificationTablet(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               tr(locale, 'lose_progress_title'),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textLight),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone),
             ),
             const SizedBox(height: 8),
             Text(
               tr(locale, 'lose_progress_body'),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+              style: const TextStyle(fontSize: 13, color: AppColors.textOnStoneMuted),
             ),
             const SizedBox(height: 20),
-            GestureDetector(
+            StoneButton(
               onTap: () => Navigator.of(context).pop(true),
-              child: Container(
-                width: double.infinity,
-                height: 46,
-                decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(14)),
-                child: Center(
-                  child: Text(tr(locale, 'yes_new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
-                ),
-              ),
+              child: Text(tr(locale, 'yes_new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
             ),
             const SizedBox(height: 10),
             GestureDetector(
@@ -855,7 +823,7 @@ class _LoseProgressDialog extends StatelessWidget {
                 width: double.infinity,
                 height: 40,
                 child: Center(
-                  child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+                  child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
                 ),
               ),
             ),
@@ -886,37 +854,21 @@ class _LevelPickerDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-        ),
+      child: NotificationTablet(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(tr(locale, 'choose_level'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textLight)),
+            Text(tr(locale, 'choose_level'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone)),
             const SizedBox(height: 18),
             for (var level = maxLevel; level >= 1; level--) ...[
               if (level != maxLevel) const SizedBox(height: 10),
-              GestureDetector(
+              StoneButton(
                 onTap: () => Navigator.of(context).pop(level),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: level == initialLevel ? AppColors.gradientSunset : null,
-                    color: level == initialLevel ? null : AppColors.surface2,
-                    borderRadius: BorderRadius.circular(14),
-                    border: level == initialLevel ? null : Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${tr(locale, 'level')} $level — ${_levelName(level)}',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: level == initialLevel ? Colors.black : AppColors.textLight),
-                    ),
-                  ),
+                selected: level == initialLevel,
+                height: 48,
+                child: Text(
+                  '${tr(locale, 'level')} $level — ${_levelName(level)}',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black),
                 ),
               ),
             ],

@@ -17,6 +17,7 @@ import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/continue_fallback_video_screen.dart';
 import '../../../core/widgets/game_logo.dart';
 import '../../../core/widgets/glass_visual.dart';
+import '../../../core/widgets/notification_tablet.dart';
 import '../../../core/widgets/wood_plank.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
@@ -951,34 +952,23 @@ class _ContinueOfferOverlay extends StatelessWidget {
       child: Container(
         color: Colors.black.withValues(alpha: 0.55),
         child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-            ),
+          child: NotificationTablet(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(tr(locale, 'table_full_title'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textLight)),
+                Text(tr(locale, 'table_full_title'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textOnStone)),
                 const SizedBox(height: 8),
                 Text(
                   tr(locale, 'table_full_body'),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+                  style: const TextStyle(fontSize: 14, color: AppColors.textOnStoneMuted),
                 ),
                 const SizedBox(height: 18),
-                GestureDetector(
+                StoneButton(
                   onTap: onWatchAd,
-                  child: Container(
-                    width: 230,
-                    height: 50,
-                    decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(16)),
-                    child: Center(
-                      child: Text(tr(locale, 'watch_ad_clear'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.black)),
-                    ),
-                  ),
+                  width: 230,
+                  height: 50,
+                  child: Text(tr(locale, 'watch_ad_clear'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.black)),
                 ),
                 const SizedBox(height: 10),
                 GestureDetector(
@@ -988,10 +978,10 @@ class _ContinueOfferOverlay extends StatelessWidget {
                     height: 46,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                      border: Border.all(color: AppColors.textOnStoneMuted.withValues(alpha: 0.5)),
                     ),
                     child: Center(
-                      child: Text(tr(locale, 'end_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textLight)),
+                      child: Text(tr(locale, 'end_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textOnStone)),
                     ),
                   ),
                 ),
