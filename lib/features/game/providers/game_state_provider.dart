@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/cocktail_mode_provider.dart';
@@ -524,6 +525,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       final newCredits = state.credits + crossed * kScoreCreditReward;
       state = state.copyWith(score: newScore, credits: newCredits, scoreCreditThresholdsAwarded: newThresholdCount);
       saveCredits(newCredits);
+      _pushProgressToServer();
     } else {
       state = state.copyWith(score: newScore);
     }
@@ -581,6 +583,7 @@ class GameStateNotifier extends Notifier<BoardState> {
         saveHighestTier(tier);
       }
       saveCredits(newCredits);
+      _pushProgressToServer();
     }
     final chainLastTier = evolutionChainForLevel(level).last.tier;
     if (!state.jugReached && tier == chainLastTier) {
@@ -643,6 +646,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       runHighestTier: 0,
     );
     saveHighestLevelReached(newHighestLevelReached);
+    _pushProgressToServer();
   }
 
   /// Marks the current score-based ad-break milestone as shown — called
@@ -668,6 +672,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     final newCredits = state.credits + amount;
     state = state.copyWith(credits: newCredits);
     saveCredits(newCredits);
+    _pushProgressToServer();
   }
 
   /// Adds credits claimed from a past league week's result (a promotion
@@ -680,16 +685,25 @@ class GameStateNotifier extends Notifier<BoardState> {
     final newCredits = state.credits + amount;
     state = state.copyWith(credits: newCredits);
     saveCredits(newCredits);
+    _pushProgressToServer();
   }
 
   /// Spends [amount] credits if there are enough; returns whether it
   /// went through. Used by both the Shaker Maker and the Cocktail Menu —
   /// callers only act on the physics/order side once this returns true.
+  /// Also pushed to the server immediately (see _pushProgressToServer) —
+  /// important here specifically, since the Google-backup merge is a
+  /// max() per field (see progress_sync.dart): a spend is this provider's
+  /// only path where credits ever go DOWN, and a sync running against a
+  /// stale pre-spend server value would otherwise hand the spent credits
+  /// right back. Pushing straight after narrows that window to "offline
+  /// right at the moment of a spend," not a routinely hittable case.
   bool spendCredits(int amount) {
     if (state.credits < amount) return false;
     final newCredits = state.credits - amount;
     state = state.copyWith(credits: newCredits);
     saveCredits(newCredits);
+    _pushProgressToServer();
     return true;
   }
 
@@ -771,6 +785,41 @@ class GameStateNotifier extends Notifier<BoardState> {
           )
           .catchError((e) {});
     }
+    _pushProgressToServer();
+  }
+
+  /// Backs up this player's lifetime progress (credits, evolution tiers,
+  /// highest level, local high scores) to their Google-account doc — see
+  /// progress_sync.dart for the matching restore/merge side. A no-op
+  /// without a signed-in uid, same "unavailable for now" treatment as
+  /// every other league/Firestore call in this file; silently swallows
+  /// failures (offline, Firestore rules rejecting a malformed write) since
+  /// this is a background backup, never something gameplay should block
+  /// or visibly fail on. Called after every point above that already
+  /// calls a local save* function — see each call site.
+  void _pushProgressToServer() {
+    final uid = authService.uid;
+    if (uid == null) return;
+    () async {
+      try {
+        final highScores = await loadHighScores();
+        await ref
+            .read(leagueRepositoryProvider)
+            .pushProgress(
+              uid: uid,
+              progress: PlayerProgress(
+                credits: state.credits,
+                highestTierUnlocked: state.highestTierUnlocked,
+                highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
+                highestTierUnlockedLevel3: state.highestTierUnlockedLevel3,
+                highestLevelReached: state.highestLevelReached,
+                highScores: highScores,
+              ),
+            );
+      } catch (e, st) {
+        debugPrint('Progress push failed (non-fatal): $e\n$st');
+      }
+    }();
   }
 
   /// Snapshots whatever's currently on the table so it can be restored
@@ -802,6 +851,9 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// save was on disk so a cold restart afterward can't resurrect the
   /// pre-reset run. Credits are untouched — this is specifically the
   /// "evo and level" reset the Settings row promises, not a full wipe.
+  /// Also pushed to the server (see _pushProgressToServer) — without
+  /// this, a signed-in player's next sync would just pull the pre-reset
+  /// tiers/level straight back down via the Google-backup's max() merge.
   Future<void> resetProgression() async {
     await resetTierProgression();
     state = _freshGame(
@@ -812,6 +864,25 @@ class GameStateNotifier extends Notifier<BoardState> {
       highestLevelReached: 1,
     );
     await persistGameState();
+    _pushProgressToServer();
+  }
+
+  /// Re-reads the lifetime fields (credits, highest tiers, highest level)
+  /// from disk into live state — called after progress_sync.dart merges a
+  /// Google-account backup into SharedPreferences, since that write
+  /// bypasses this notifier entirely and otherwise wouldn't show up until
+  /// the next full app restart (state doesn't re-read from disk on its
+  /// own). Deliberately leaves everything about the CURRENT run (score,
+  /// table, order) untouched — only the lifetime stats actually came from
+  /// the merge.
+  Future<void> refreshLifetimeFieldsFromDisk() async {
+    state = state.copyWith(
+      credits: await loadCredits(),
+      highestTierUnlocked: await loadHighestTier(),
+      highestTierUnlockedLevel2: await loadHighestTierLevel2(),
+      highestTierUnlockedLevel3: await loadHighestTierLevel3(),
+      highestLevelReached: await loadHighestLevelReached(),
+    );
   }
 }
 

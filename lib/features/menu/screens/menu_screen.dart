@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/audio_settings_provider.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
+import '../../../core/utils/progress_sync.dart';
 import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/game_logo.dart';
 import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/wood_plank.dart';
 import '../../../data/models/ingredient.dart';
+import '../../../data/repositories/league_repository.dart';
 import '../../game/providers/game_state_provider.dart';
 import '../../game/screens/game_screen.dart';
 import '../../league/providers/league_provider.dart';
@@ -97,6 +100,24 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
     // covered) while a pushed screen sits on top, so this doesn't
     // re-trigger just from returning here via _goHome; see GameScreen.
     ref.read(audioSettingsProvider.notifier).playMenuMusic();
+    _maybeSyncProgress();
+  }
+
+  /// Pulls down this player's Google-account progress backup (if any) and
+  /// merges it into local state on every launch — see progress_sync.dart.
+  /// Only meaningful once actually linked (an unlinked anonymous player
+  /// has nothing to restore and nowhere to push that would ever come
+  /// back), and only worth doing once per app launch, not every time this
+  /// screen re-mounts — same "fires once per push" reasoning as the
+  /// menu-music call above, since MenuScreen is only ever pushed once.
+  Future<void> _maybeSyncProgress() async {
+    if (!authService.isLinkedToGoogle) return;
+    final uid = authService.uid;
+    if (uid == null) return;
+    final changed = await syncProgress(ref.read(leagueRepositoryProvider), uid);
+    if (changed && mounted) {
+      await ref.read(gameStateProvider.notifier).refreshLifetimeFieldsFromDisk();
+    }
   }
 
   @override

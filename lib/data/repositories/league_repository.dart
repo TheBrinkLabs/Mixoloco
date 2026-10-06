@@ -62,6 +62,30 @@ class LeagueLeaderboardEntry {
   }
 }
 
+/// A snapshot of a player's lifetime economy/evolution progress — the
+/// Google-account backup (see [LeagueRepository.pushProgress]/
+/// [fetchProgress]), not anything league-ranking-related (that's
+/// [LeagueLeaderboardEntry]/submitWeeklyScore's job). Same field shapes as
+/// [BoardState]'s own lifetime fields plus the local high-scores list (see
+/// high_scores_service.dart).
+class PlayerProgress {
+  final int credits;
+  final int highestTierUnlocked;
+  final int highestTierUnlockedLevel2;
+  final int highestTierUnlockedLevel3;
+  final int highestLevelReached;
+  final List<int> highScores;
+
+  const PlayerProgress({
+    required this.credits,
+    required this.highestTierUnlocked,
+    required this.highestTierUnlockedLevel2,
+    required this.highestTierUnlockedLevel3,
+    required this.highestLevelReached,
+    required this.highScores,
+  });
+}
+
 /// Mirrors Capitle's own league_repository.dart, simplified for
 /// Mixoloco's single game mode: there's one score per player per week
 /// (players/{uid}/scores/{weekId}, a single `bestScore` field — the
@@ -243,5 +267,40 @@ class LeagueRepository {
 
     entries.sort((a, b) => (b.score - a.score) != 0 ? b.score - a.score : a.uid.compareTo(b.uid));
     return entries;
+  }
+
+  /// Writes this player's full progress snapshot to
+  /// players/{uid}/progress/current — the Google-account backup (see
+  /// progress_sync.dart, which owns *when* this gets called and the
+  /// merge logic around it). A plain overwrite, not a merge: every field
+  /// is always supplied together, so there's no stale-field risk the way
+  /// a partial merge could leave behind.
+  Future<void> pushProgress({required String uid, required PlayerProgress progress}) async {
+    await _players.doc(uid).collection('progress').doc('current').set({
+      'credits': progress.credits,
+      'highestTierUnlocked': progress.highestTierUnlocked,
+      'highestTierUnlockedLevel2': progress.highestTierUnlockedLevel2,
+      'highestTierUnlockedLevel3': progress.highestTierUnlockedLevel3,
+      'highestLevelReached': progress.highestLevelReached,
+      'highScores': progress.highScores,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Reads this player's backed-up progress, or null if they've never
+  /// pushed one (never signed in with Google, or signed in but nothing's
+  /// synced yet).
+  Future<PlayerProgress?> fetchProgress(String uid) async {
+    final doc = await _players.doc(uid).collection('progress').doc('current').get();
+    final data = doc.data();
+    if (data == null) return null;
+    return PlayerProgress(
+      credits: (data['credits'] as int?) ?? 0,
+      highestTierUnlocked: (data['highestTierUnlocked'] as int?) ?? 0,
+      highestTierUnlockedLevel2: (data['highestTierUnlockedLevel2'] as int?) ?? -1,
+      highestTierUnlockedLevel3: (data['highestTierUnlockedLevel3'] as int?) ?? -1,
+      highestLevelReached: (data['highestLevelReached'] as int?) ?? 1,
+      highScores: ((data['highScores'] as List?) ?? const []).cast<int>(),
+    );
   }
 }

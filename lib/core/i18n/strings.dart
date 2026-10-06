@@ -100,6 +100,12 @@ const _en = <String, String>{
   'ads_free_monthly': '1 Month',
   'ads_free_yearly': '1 Year',
   'ads_free_forever': 'Forever',
+  'back_up_progress': 'Google Backup',
+  'sign_in_with_google': 'Sign In',
+  'connected': 'Connected',
+  'google_sign_in_restored': 'Welcome back — your previous progress has been restored.',
+  'google_sign_in_backed_up': 'Your progress is now backed up.',
+  'google_sign_in_failed': "Couldn't sign in — try again in a bit.",
 };
 
 const _es = <String, String>{
@@ -184,4 +190,10 @@ const _es = <String, String>{
   'ads_free_monthly': '1 Mes',
   'ads_free_yearly': '1 Año',
   'ads_free_forever': 'Para Siempre',
+  'back_up_progress': 'Copia en Google',
+  'sign_in_with_google': 'Iniciar',
+  'connected': 'Conectado',
+  'google_sign_in_restored': 'Bienvenido de nuevo — se ha restaurado tu progreso anterior.',
+  'google_sign_in_backed_up': 'Tu progreso ya está respaldado.',
+  'google_sign_in_failed': 'No se pudo iniciar sesión — inténtalo de nuevo en un momento.',
 };

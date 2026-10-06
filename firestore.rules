@@ -98,6 +98,27 @@ service cloud.firestore {
         allow read: if true;
         allow write: if false; // rollover job only
       }
+
+      // The one-doc Google-account progress backup (credits, evolution
+      // tiers, lifetime level, local high scores) — see
+      // LeagueRepository.pushProgress/fetchProgress. Deliberately a
+      // separate doc from players/{uid} itself rather than new fields on
+      // it: that doc's own update rule is a narrow allow-list guarding
+      // tier/roomId integrity, and this data has none of those
+      // league-ranking stakes — just this player's own economy, private
+      // (unlike the public profile/scores above) since there's no reason
+      // for anyone else to read it.
+      match /progress/current {
+        allow read: if isSignedInAs(uid);
+        allow write: if isSignedInAs(uid)
+          && request.resource.data.credits is int && request.resource.data.credits >= 0
+          && request.resource.data.highestTierUnlocked is int
+          && request.resource.data.highestTierUnlockedLevel2 is int
+          && request.resource.data.highestTierUnlockedLevel3 is int
+          && request.resource.data.highestLevelReached is int && request.resource.data.highestLevelReached >= 1
+          && request.resource.data.highScores is list
+          && request.resource.data.updatedAt == request.time;
+      }
     }
 
     match /leagueRooms/{roomId} {

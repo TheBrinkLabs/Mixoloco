@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/audio_settings_provider.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../core/services/cocktail_mode_provider.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
+import '../../../core/utils/progress_sync.dart';
 import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/wood_plank.dart';
+import '../../../data/repositories/league_repository.dart';
 import '../../game/providers/game_state_provider.dart';
 
 /// Music-in-menu, music-in-game, sound-effects, and language toggles —
@@ -95,6 +98,8 @@ class SettingsScreen extends ConsumerWidget {
                       width: plankWidth,
                       height: plankHeight,
                     ),
+                    const SizedBox(height: 10),
+                    _GoogleSignInPlankRow(locale: locale, width: plankWidth, height: plankHeight),
                     const SizedBox(height: 10),
                     _ResetProgressPlankRow(
                       locale: locale,
@@ -276,6 +281,100 @@ class _LanguageDropdown extends StatelessWidget {
             SizedBox(width: height * 0.03),
             Icon(Icons.arrow_drop_down_rounded, color: AppColors.sunsetGold, size: height * 0.26),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Links the anonymous account to a real Google credential so progress
+/// (credits, evolution tiers, level, local high scores — see
+/// progress_sync.dart) survives a reinstall or a new device — see
+/// AuthService.linkGoogle. A ConsumerStatefulWidget of its own (rather
+/// than folding into SettingsScreen) since the linked/not-linked status
+/// isn't itself a Riverpod-watched value (FirebaseAuth's own current-user
+/// state), so this needs its own setState after a successful sign-in.
+class _GoogleSignInPlankRow extends ConsumerStatefulWidget {
+  final AppLocale locale;
+  final double width;
+  final double height;
+  const _GoogleSignInPlankRow({required this.locale, required this.width, required this.height});
+
+  @override
+  ConsumerState<_GoogleSignInPlankRow> createState() => _GoogleSignInPlankRowState();
+}
+
+class _GoogleSignInPlankRowState extends ConsumerState<_GoogleSignInPlankRow> {
+  late bool _linked = authService.isLinkedToGoogle;
+
+  Future<void> _handleTap() async {
+    if (_linked) {
+      final email = authService.linkedGoogleEmail;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(email ?? tr(widget.locale, 'connected'))));
+      return;
+    }
+    try {
+      final result = await authService.linkGoogle();
+      final uid = authService.uid;
+      if (uid != null) {
+        // Pulls down whatever this Google account already has on record
+        // and merges it with whatever this device played anonymously
+        // before signing in — see progress_sync.dart's own doc for why
+        // this is a safe max()-per-field merge rather than an overwrite
+        // either direction.
+        final changed = await syncProgress(ref.read(leagueRepositoryProvider), uid);
+        if (changed) await ref.read(gameStateProvider.notifier).refreshLifetimeFieldsFromDisk();
+      }
+      if (!mounted) return;
+      setState(() => _linked = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(widget.locale, result.restoredExistingAccount ? 'google_sign_in_restored' : 'google_sign_in_backed_up'),
+          ),
+        ),
+      );
+    } catch (e, st) {
+      debugPrint('Google sign-in link failed: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(widget.locale, 'google_sign_in_failed'))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _handleTap,
+      child: WoodPlank(
+        width: widget.width,
+        height: widget.height,
+        assetPath: 'assets/images/menu_board_3.png',
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: widget.width * 0.06),
+          child: Row(
+            children: [
+              Icon(Icons.cloud_upload_rounded, size: widget.height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
+              SizedBox(width: widget.width * 0.03),
+              Expanded(
+                child: ColorfulPlankText(
+                  text: tr(widget.locale, 'back_up_progress'),
+                  fontSize: widget.height * 0.22,
+                  variant: kPlankTextVariant,
+                  font: kPlankTextFont,
+                  shadowStyle: kPlankShadowStyle,
+                ),
+              ),
+              if (_linked)
+                Icon(Icons.check_circle_rounded, size: widget.height * 0.26, color: AppColors.sunsetGold)
+              else
+                Text(
+                  tr(widget.locale, 'sign_in_with_google'),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+                ),
+            ],
+          ),
         ),
       ),
     );
