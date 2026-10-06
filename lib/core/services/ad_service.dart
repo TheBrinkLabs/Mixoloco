@@ -7,14 +7,15 @@ import 'package:unity_levelplay_mediation/unity_levelplay_mediation.dart';
 /// rewarded slot).
 enum RewardedAdSlot { continueGame, shopCredits }
 
-/// Unity LevelPlay mediates ads — Unity Ads is live (the one network
-/// LevelPlay ships with, needing no separate account setup); Vungle is
-/// being added next the same way Capitle's sibling app does (see
-/// android/app/build.gradle.kts for the adapter dependencies once that
-/// network instance is linked in the LevelPlay dashboard), Meta/Mintegral
-/// to follow. Four ad units: the persistent bottom banner, the
-/// score-milestone MREC (see ad_break_screen.dart), the end-of-level
-/// interstitial, and the shop/continue-after-game-over rewarded video.
+/// Unity LevelPlay mediates ads — Unity Ads and Vungle are both live;
+/// Meta and Mintegral are wired the same way (see
+/// android/app/build.gradle.kts for the adapter dependencies) but stay
+/// inert bidders until each one's own app is actually linked as a
+/// network instance under every ad unit in the LevelPlay dashboard (see
+/// Setup -> Networks there) — same staged rollout Capitle used. Four ad
+/// units: the persistent bottom banner, the score-milestone MREC (see
+/// ad_break_screen.dart), the end-of-level interstitial, and the
+/// shop/continue-after-game-over rewarded video.
 class AdService implements LevelPlayInitListener {
   // Mixoloco's own LevelPlay app key + ad unit ids, from its own app
   // entry in the LevelPlay dashboard (registered against
@@ -64,11 +65,17 @@ class AdService implements LevelPlayInitListener {
     try {
       // Exact network key strings LevelPlay expects — confirmed against
       // Unity's own docs (and already proven in Capitle), not guessed:
-      // case-sensitive, "UnityAds" not "Unity". Meta/Mintegral can join
-      // this map the same way once those accounts exist for Mixoloco too
-      // — an inert entry for a network with no active instance is
-      // harmless.
-      await LevelPlayPrivacySettings.setGDPRConsents({'UnityAds': granted, 'Vungle': granted});
+      // case-sensitive, "UnityAds" not "Unity". Facebook/Mintegral are
+      // included even though their dashboard-side network instances
+      // aren't linked yet — an inert entry for a network with no active
+      // instance is harmless, same as Capitle's own Mintegral entry
+      // while its account sat under review.
+      await LevelPlayPrivacySettings.setGDPRConsents({
+        'UnityAds': granted,
+        'Vungle': granted,
+        'Facebook': granted,
+        'Mintegral': granted,
+      });
       await LevelPlayPrivacySettings.setCCPA(!granted); // CCPA flag = "opted out of sale"
     } catch (e, st) {
       debugPrint('Failed to apply ad consent: $e\n$st');

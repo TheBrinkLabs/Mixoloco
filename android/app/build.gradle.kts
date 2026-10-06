@@ -63,9 +63,7 @@ dependencies {
     // needs no separate account (LevelPlay itself is a Unity product).
     // Exact SDK/adapter version pairing per Unity's own published
     // versions.json for this adapter release — same pairing already
-    // proven working in Capitle. Add Meta/Mintegral adapters here later
-    // the same way if those accounts get set up for Mixoloco too (see
-    // Capitle's own build.gradle.kts for that exact pattern).
+    // proven working in Capitle.
     implementation("com.unity3d.ads:unity-ads:4.20.0")
     implementation("com.unity3d.ads-mediation:unityads-adapter:5.12.0")
 
@@ -78,6 +76,23 @@ dependencies {
     // LevelPlay even though "no fill" was the visible symptom).
     implementation("com.vungle:vungle-ads:7.7.8")
     implementation("com.unity3d.ads-mediation:vungle-adapter:5.14.0")
+
+    // Meta Audience Network — mediated through LevelPlay, same as Vungle
+    // above. Inert until Mixoloco's own Meta app is linked as a network
+    // instance in the LevelPlay dashboard (see Setup -> Networks) — same
+    // SDK version already proven working in Capitle.
+    implementation("com.facebook.android:audience-network-sdk:6.22.0")
+    implementation("com.unity3d.ads-mediation:facebook-adapter:5.4.0")
+
+    // Mintegral — also mediated through LevelPlay. Capitle's own
+    // Mintegral account sat under manual review for a while before going
+    // live, so this is committed ahead of that same approval landing for
+    // Mixoloco — inert (no bids) until an instance under each ad unit
+    // actually references real credentials, same spirit as every other
+    // network here before its dashboard side is linked. Same SDK version
+    // already proven working in Capitle.
+    implementation("com.mbridge.msdk.oversea:mbridge_android_sdk:17.1.81")
+    implementation("com.unity3d.ads-mediation:mintegral-adapter:5.19.0")
 }
 
 flutter {
