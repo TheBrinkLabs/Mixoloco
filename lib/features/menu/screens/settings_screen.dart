@@ -55,7 +55,6 @@ class SettingsScreen extends ConsumerWidget {
                       assetPath: 'assets/images/menu_board_3.png',
                       iconAsset: 'assets/images/settings.png',
                     ),
-                    const SizedBox(height: 10),
                     _SettingPlankRow(
                       icon: Icons.music_note_rounded,
                       label: tr(locale, 'music_in_menu'),
@@ -64,7 +63,6 @@ class SettingsScreen extends ConsumerWidget {
                       width: plankWidth,
                       height: plankHeight,
                     ),
-                    const SizedBox(height: 10),
                     _SettingPlankRow(
                       icon: Icons.videogame_asset_rounded,
                       label: tr(locale, 'music_in_game'),
@@ -73,7 +71,6 @@ class SettingsScreen extends ConsumerWidget {
                       width: plankWidth,
                       height: plankHeight,
                     ),
-                    const SizedBox(height: 10),
                     _SettingPlankRow(
                       icon: Icons.graphic_eq_rounded,
                       label: tr(locale, 'sound_effects'),
@@ -82,7 +79,6 @@ class SettingsScreen extends ConsumerWidget {
                       width: plankWidth,
                       height: plankHeight,
                     ),
-                    const SizedBox(height: 10),
                     _SettingPlankRow(
                       icon: Icons.local_bar_rounded,
                       label: tr(locale, 'cocktail_mode'),
@@ -91,7 +87,6 @@ class SettingsScreen extends ConsumerWidget {
                       width: plankWidth,
                       height: plankHeight,
                     ),
-                    const SizedBox(height: 10),
                     _LanguagePlankRow(
                       label: tr(locale, 'language'),
                       value: locale,
@@ -99,9 +94,7 @@ class SettingsScreen extends ConsumerWidget {
                       width: plankWidth,
                       height: plankHeight,
                     ),
-                    const SizedBox(height: 10),
                     _GoogleSignInPlankRow(locale: locale, width: plankWidth, height: plankHeight),
-                    const SizedBox(height: 10),
                     _ResetProgressPlankRow(
                       locale: locale,
                       onReset: () => ref.read(gameStateProvider.notifier).resetProgression(),
