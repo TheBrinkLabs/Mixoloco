@@ -40,12 +40,8 @@ class AuthService {
   // The web (client_type: 3) OAuth client from Mixoloco's own
   // google-services.json — needed as serverClientId so the ID token
   // GoogleSignIn returns is audienced correctly for Firebase's
-  // GoogleAuthProvider.credential() to accept. Only exists once Google
-  // Sign-In is enabled for the mixoloco-dcb85 Firebase project AND the
-  // app's signing SHA-1 is registered against it (see Project Settings ->
-  // your apps) — until then this stays a placeholder and linkGoogle()
-  // will fail (non-fatally; the Settings row just shows an error).
-  static const _webClientId = 'TODO_MIXOLOCO_GOOGLE_WEB_CLIENT_ID';
+  // GoogleAuthProvider.credential() to accept.
+  static const _webClientId = '727783490936-behtcegpukusknibes1p8n4ghm155aeh.apps.googleusercontent.com';
 
   bool _googleInitialized = false;
 

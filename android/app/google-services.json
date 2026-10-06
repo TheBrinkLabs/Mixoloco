@@ -12,7 +12,20 @@
           "package_name": "com.brinklabs.mixoloco"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "727783490936-8fvd4dvkq0aqvtj9pnp0okcof7j5jfv9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.brinklabs.mixoloco",
+            "certificate_hash": "133a49179d7ccf1cfc46e288099ca8a301078eb6"
+          }
+        },
+        {
+          "client_id": "727783490936-behtcegpukusknibes1p8n4ghm155aeh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDLBaFQVPICtmaMjqzwNzyVKeKIEAEN7go"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "727783490936-behtcegpukusknibes1p8n4ghm155aeh.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
