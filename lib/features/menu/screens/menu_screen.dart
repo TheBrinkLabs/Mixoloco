@@ -817,15 +817,10 @@ class _LoseProgressDialog extends StatelessWidget {
               child: Text(tr(locale, 'yes_new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
             ),
             const SizedBox(height: 10),
-            GestureDetector(
+            StoneButton(
               onTap: () => Navigator.of(context).pop(false),
-              child: SizedBox(
-                width: double.infinity,
-                height: 40,
-                child: Center(
-                  child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
-                ),
-              ),
+              height: 40,
+              child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
             ),
           ],
         ),

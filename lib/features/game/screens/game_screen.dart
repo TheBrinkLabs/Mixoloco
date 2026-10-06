@@ -971,19 +971,11 @@ class _ContinueOfferOverlay extends StatelessWidget {
                   child: Text(tr(locale, 'watch_ad_clear'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.black)),
                 ),
                 const SizedBox(height: 10),
-                GestureDetector(
+                StoneButton(
                   onTap: onEndGame,
-                  child: Container(
-                    width: 230,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.textOnStoneMuted.withValues(alpha: 0.5)),
-                    ),
-                    child: Center(
-                      child: Text(tr(locale, 'end_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textOnStone)),
-                    ),
-                  ),
+                  width: 230,
+                  height: 46,
+                  child: Text(tr(locale, 'end_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textOnStone)),
                 ),
               ],
             ),

@@ -58,7 +58,6 @@ class _AdConsentScreenState extends ConsumerState<AdConsentScreen> {
                   const SizedBox(height: 18),
                   NotificationTablet(
                     width: plankWidth,
-                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
                     child: Text(
                       tr(locale, 'ads_consent_body'),
                       textAlign: TextAlign.center,
@@ -76,17 +75,13 @@ class _AdConsentScreenState extends ConsumerState<AdConsentScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: _submitting ? null : () => _answer(false),
-                    child: Opacity(
-                      opacity: _submitting ? 0.6 : 1.0,
-                      child: SizedBox(
-                        width: plankWidth,
-                        height: 44,
-                        child: Center(
-                          child: Text(tr(locale, 'no_thanks'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-                        ),
-                      ),
+                  Opacity(
+                    opacity: _submitting ? 0.6 : 1.0,
+                    child: StoneButton(
+                      onTap: _submitting ? null : () => _answer(false),
+                      width: plankWidth,
+                      height: 44,
+                      child: Text(tr(locale, 'no_thanks'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
                     ),
                   ),
                 ],
