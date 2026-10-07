@@ -106,6 +106,13 @@ const _en = <String, String>{
   'google_sign_in_restored': 'Welcome back — your previous progress has been restored.',
   'google_sign_in_backed_up': 'Your progress is now backed up.',
   'google_sign_in_failed': "Couldn't sign in — try again in a bit.",
+  'nickname_label': 'Nickname',
+  'nickname_not_set': 'Not set',
+  'edit_nickname_title': 'Choose your leaderboard name',
+  'edit_nickname_hint': 'Enter a nickname…',
+  'edit_nickname_empty_error': 'Enter a nickname to continue',
+  'edit_nickname_failed': "Couldn't save — try again in a bit",
+  'save': 'Save',
 };
 
 const _es = <String, String>{
@@ -196,4 +203,11 @@ const _es = <String, String>{
   'google_sign_in_restored': 'Bienvenido de nuevo — se ha restaurado tu progreso anterior.',
   'google_sign_in_backed_up': 'Tu progreso ya está respaldado.',
   'google_sign_in_failed': 'No se pudo iniciar sesión — inténtalo de nuevo en un momento.',
+  'nickname_label': 'Apodo',
+  'nickname_not_set': 'No establecido',
+  'edit_nickname_title': 'Elige tu nombre para la clasificación',
+  'edit_nickname_hint': 'Introduce un apodo…',
+  'edit_nickname_empty_error': 'Introduce un apodo para continuar',
+  'edit_nickname_failed': 'No se pudo guardar — inténtalo de nuevo en un momento',
+  'save': 'Guardar',
 };

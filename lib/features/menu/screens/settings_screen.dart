@@ -8,11 +8,14 @@ import '../../../core/services/cocktail_mode_provider.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
+import '../../../core/utils/device_id_service.dart';
+import '../../../core/utils/nickname_generator.dart';
 import '../../../core/utils/progress_sync.dart';
 import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/notification_tablet.dart';
 import '../../../core/widgets/wood_plank.dart';
 import '../../../data/repositories/league_repository.dart';
+import '../../../data/services/league_local_service.dart';
 import '../../game/providers/game_state_provider.dart';
 
 /// Music-in-menu, music-in-game, sound-effects, and language toggles —
@@ -94,6 +97,7 @@ class SettingsScreen extends ConsumerWidget {
                       width: plankWidth,
                       height: plankHeight,
                     ),
+                    _NicknamePlankRow(locale: locale, width: plankWidth, height: plankHeight),
                     _GoogleSignInPlankRow(locale: locale, width: plankWidth, height: plankHeight),
                     _ResetProgressPlankRow(
                       locale: locale,
@@ -274,6 +278,182 @@ class _LanguageDropdown extends StatelessWidget {
             ),
             SizedBox(width: height * 0.03),
             Icon(Icons.arrow_drop_down_rounded, color: AppColors.sunsetGold, size: height * 0.26),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets a player change the name the Leaderboard shows for them after
+/// its one-time setup screen (nickname_setup_screen.dart) — that screen
+/// only ever runs once, the first time "Leaderboard" is tapped, with no
+/// way back into it afterward. Loads the locally-cached nickname (see
+/// league_local_service.dart) on its own rather than watching
+/// leagueControllerProvider, same reasoning as _GoogleSignInPlankRow's
+/// own doc comment — this is a lightweight local read, not worth a
+/// Firestore round trip just to label a Settings row. Shown regardless
+/// of whether a nickname's ever been set (reads "Not set" until it has)
+/// — tapping it either way opens the same edit dialog, which doubles as
+/// first-time setup for a player who reaches it before ever visiting
+/// the Leaderboard.
+class _NicknamePlankRow extends ConsumerStatefulWidget {
+  final AppLocale locale;
+  final double width;
+  final double height;
+  const _NicknamePlankRow({required this.locale, required this.width, required this.height});
+
+  @override
+  ConsumerState<_NicknamePlankRow> createState() => _NicknamePlankRowState();
+}
+
+class _NicknamePlankRowState extends ConsumerState<_NicknamePlankRow> {
+  String? _nickname;
+
+  @override
+  void initState() {
+    super.initState();
+    loadNickname().then((value) {
+      if (mounted) setState(() => _nickname = value);
+    });
+  }
+
+  Future<void> _edit() async {
+    final controller = TextEditingController(text: _nickname ?? generateFallbackNickname());
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => _NicknameEditDialog(locale: widget.locale, controller: controller),
+    );
+    controller.dispose();
+    if (result == null || !mounted) return;
+
+    try {
+      await authService.ensureSignedIn();
+      final uid = authService.uid;
+      if (uid == null) throw Exception('not signed in');
+      final repo = ref.read(leagueRepositoryProvider);
+      await repo.ensurePlayerDocument(uid: uid, nickname: result, deviceId: await deviceIdService.getDeviceId());
+      await repo.syncNickname(uid: uid, nickname: result);
+      await saveNickname(result);
+      if (!mounted) return;
+      setState(() => _nickname = result);
+    } catch (e, st) {
+      debugPrint('Nickname save failed: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(widget.locale, 'edit_nickname_failed'))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _edit,
+      child: WoodPlank(
+        width: widget.width,
+        height: widget.height,
+        assetPath: 'assets/images/menu_board_3.png',
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: widget.width * 0.06),
+          child: Row(
+            children: [
+              Icon(Icons.badge_rounded, size: widget.height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
+              SizedBox(width: widget.width * 0.03),
+              Expanded(
+                child: ColorfulPlankText(
+                  text: tr(widget.locale, 'nickname_label'),
+                  fontSize: widget.height * 0.22,
+                  variant: kPlankTextVariant,
+                  font: kPlankTextFont,
+                  shadowStyle: kPlankShadowStyle,
+                ),
+              ),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: widget.width * 0.4),
+                child: Text(
+                  _nickname ?? tr(widget.locale, 'nickname_not_set'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The stone-tablet edit dialog itself — split out from
+/// [_NicknamePlankRowState._edit] since a TextField needs its own
+/// StatefulWidget to manage focus/rebuilds on every keystroke without
+/// rebuilding the whole Settings screen underneath it.
+class _NicknameEditDialog extends StatefulWidget {
+  final AppLocale locale;
+  final TextEditingController controller;
+  const _NicknameEditDialog({required this.locale, required this.controller});
+
+  @override
+  State<_NicknameEditDialog> createState() => _NicknameEditDialogState();
+}
+
+class _NicknameEditDialogState extends State<_NicknameEditDialog> {
+  String? _error;
+
+  void _submit() {
+    final value = widget.controller.text.trim();
+    if (value.isEmpty) {
+      setState(() => _error = tr(widget.locale, 'edit_nickname_empty_error'));
+      return;
+    }
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: NotificationTablet(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              tr(widget.locale, 'edit_nickname_title'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: widget.controller,
+              maxLength: 20,
+              autofocus: true,
+              textAlign: TextAlign.center,
+              onSubmitted: (_) => _submit(),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textOnStone),
+              decoration: InputDecoration(
+                hintText: tr(widget.locale, 'edit_nickname_hint'),
+                hintStyle: const TextStyle(color: AppColors.textOnStoneMuted),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.5),
+                counterStyle: const TextStyle(color: AppColors.textOnStoneMuted, fontSize: 11),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 4),
+              Text(_error!, style: const TextStyle(fontSize: 12, color: AppColors.coral)),
+            ],
+            const SizedBox(height: 12),
+            StoneButton(
+              onTap: _submit,
+              child: Text(tr(widget.locale, 'save'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
+            ),
+            const SizedBox(height: 10),
+            StoneButton(
+              onTap: () => Navigator.of(context).pop(),
+              height: 40,
+              child: Text(tr(widget.locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
+            ),
           ],
         ),
       ),
