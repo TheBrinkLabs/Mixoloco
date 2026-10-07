@@ -332,6 +332,21 @@ class GameStateNotifier extends Notifier<BoardState> {
           highestTierUnlockedLevel3: highestLevel3,
           highestLevelReached: highestLevelReached,
         );
+    // A restored run can already satisfy _checkLevelUp's conditions
+    // (jugReached + every cocktail) without anything here ever having
+    // re-evaluated them — that only ever ran reactively, from
+    // registerTierSeen/registerCocktailComplete, at the moment each one
+    // was first satisfied. A player who hit both before this exact
+    // check existed (the old level>=2 early-return bug, or simply
+    // because nothing ever re-checks on its own) would otherwise stay
+    // silently stuck on their current level forever, since nothing
+    // about sitting at the capstone tier with every cocktail already
+    // made generates a new tier-seen/cocktail-complete event to
+    // re-trigger it — there's no higher tier to merge into, and no
+    // uncompleted cocktail left to buy. Re-running it once after every
+    // load is a cheap, idempotent way to unstick exactly that case
+    // (every one of its own guards already make it a no-op otherwise).
+    if (restored != null) _checkLevelUp();
   }
 
   /// Writes the entire current run to disk — called whenever the table's
