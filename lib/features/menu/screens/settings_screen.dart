@@ -147,12 +147,15 @@ class _SettingPlankRow extends StatelessWidget {
             Icon(icon, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
             SizedBox(width: width * 0.03),
             Expanded(
-              child: ColorfulPlankText(
-                text: label,
-                fontSize: height * 0.22,
-                variant: kPlankTextVariant,
-                font: kPlankTextFont,
-                shadowStyle: kPlankShadowStyle,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ColorfulPlankText(
+                  text: label,
+                  fontSize: height * 0.22,
+                  variant: kPlankTextVariant,
+                  font: kPlankTextFont,
+                  shadowStyle: kPlankShadowStyle,
+                ),
               ),
             ),
             PlankToggle(value: value, onChanged: onChanged, height: height),
@@ -285,6 +288,42 @@ class _LanguageDropdown extends StatelessWidget {
   }
 }
 
+/// The same carved wood-grain pill [_LanguageDropdown] shows its value
+/// in, pulled out for reuse wherever another row needs to display a
+/// short "current value" — plain colored text sitting directly on the
+/// wood grain (sunsetGold, textMuted, anything) didn't read clearly
+/// enough per feedback; this dark pill behind ColorfulPlankText is the
+/// one trailing-value treatment on this screen that's proven legible,
+/// so every row's value now uses it instead of inventing another look.
+class _ValuePill extends StatelessWidget {
+  final String text;
+  final double height;
+  const _ValuePill({required this.text, required this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: height * 0.14, vertical: height * 0.07),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF8B5A2B), Color(0xFF5A3818)]),
+        border: Border.all(color: const Color(0xFF3B2412), width: 1.3),
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, blurRadius: 3, offset: Offset(0, 2)),
+          BoxShadow(color: Colors.white24, blurRadius: 0, offset: Offset(0, 1)),
+        ],
+      ),
+      child: ColorfulPlankText(
+        text: text,
+        fontSize: height * 0.17,
+        variant: PlankTextVariant.sunsetGradient,
+        font: kPlankTextFont,
+        shadowStyle: PlankShadowStyle.hardOffset,
+      ),
+    );
+  }
+}
+
 /// Lets a player change the name the Leaderboard shows for them after
 /// its one-time setup screen (nickname_setup_screen.dart) — that screen
 /// only ever runs once, the first time "Leaderboard" is tapped, with no
@@ -344,6 +383,16 @@ class _NicknamePlankRowState extends ConsumerState<_NicknamePlankRow> {
     }
   }
 
+  // ColorfulPlankText's per-glyph Row has no overflow/ellipsis support
+  // (see colorful_plank_text.dart), so a long nickname (up to the edit
+  // dialog's 20-char max) is clipped here in plain Dart before it ever
+  // reaches the pill, rather than relying on Flutter's text layout to
+  // truncate it for us.
+  static String _displayValue(String? nickname, AppLocale locale) {
+    final raw = nickname ?? tr(locale, 'nickname_not_set');
+    return raw.length > 10 ? '${raw.substring(0, 10)}…' : raw;
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -359,23 +408,18 @@ class _NicknamePlankRowState extends ConsumerState<_NicknamePlankRow> {
               Icon(Icons.badge_rounded, size: widget.height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
               SizedBox(width: widget.width * 0.03),
               Expanded(
-                child: ColorfulPlankText(
-                  text: tr(widget.locale, 'nickname_label'),
-                  fontSize: widget.height * 0.22,
-                  variant: kPlankTextVariant,
-                  font: kPlankTextFont,
-                  shadowStyle: kPlankShadowStyle,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ColorfulPlankText(
+                    text: tr(widget.locale, 'nickname_label'),
+                    fontSize: widget.height * 0.22,
+                    variant: kPlankTextVariant,
+                    font: kPlankTextFont,
+                    shadowStyle: kPlankShadowStyle,
+                  ),
                 ),
               ),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: widget.width * 0.4),
-                child: Text(
-                  _nickname ?? tr(widget.locale, 'nickname_not_set'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textMuted),
-                ),
-              ),
+              _ValuePill(text: _displayValue(_nickname, widget.locale), height: widget.height),
             ],
           ),
         ),
@@ -532,21 +576,21 @@ class _GoogleSignInPlankRowState extends ConsumerState<_GoogleSignInPlankRow> {
               Icon(Icons.cloud_upload_rounded, size: widget.height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
               SizedBox(width: widget.width * 0.03),
               Expanded(
-                child: ColorfulPlankText(
-                  text: tr(widget.locale, 'back_up_progress'),
-                  fontSize: widget.height * 0.22,
-                  variant: kPlankTextVariant,
-                  font: kPlankTextFont,
-                  shadowStyle: kPlankShadowStyle,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ColorfulPlankText(
+                    text: tr(widget.locale, 'back_up_progress'),
+                    fontSize: widget.height * 0.22,
+                    variant: kPlankTextVariant,
+                    font: kPlankTextFont,
+                    shadowStyle: kPlankShadowStyle,
+                  ),
                 ),
               ),
               if (_linked)
                 Icon(Icons.check_circle_rounded, size: widget.height * 0.26, color: AppColors.sunsetGold)
               else
-                Text(
-                  tr(widget.locale, 'sign_in_with_google'),
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted),
-                ),
+                _ValuePill(text: tr(widget.locale, 'sign_in_with_google'), height: widget.height),
             ],
           ),
         ),
