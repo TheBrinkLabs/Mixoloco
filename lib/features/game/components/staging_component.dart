@@ -42,6 +42,20 @@ class StagingComponent extends PositionComponent with DragCallbacks {
   double _aimX = 0;
   bool _visible = true;
 
+  /// Whether the drag currently in progress (if any) started while a
+  /// glass was actually visible and aimable. A touch that lands during
+  /// the brief hidden gap between a drop and the next glass revealing
+  /// (see MixolocoGame.kThrowCooldown) still gets delivered to this
+  /// component — it spans the whole table, not just the glass sprite —
+  /// so without this guard, a reveal landing mid-drag would resume
+  /// dragging from [_aimX]'s stale leftover position (wherever the
+  /// *previous* drop was aimed) instead of the finger's actual current
+  /// position, letting a release commit a throw aimed somewhere the
+  /// player never actually pointed at. Armed only by a drag that starts
+  /// while visible; a drag that starts hidden is ignored start to
+  /// finish, same as if nothing were there to drag yet.
+  bool _dragArmed = false;
+
   /// A short slide-up-and-pop-in for each newly staged glass — sells the
   /// throw cooldown (see MixolocoGame.kThrowCooldown) as the next item
   /// arriving into position, rather than just instantly appearing.
@@ -79,20 +93,23 @@ class StagingComponent extends PositionComponent with DragCallbacks {
   @override
   void onDragStart(DragStartEvent event) {
     super.onDragStart(event);
-    if (!_visible) return;
+    _dragArmed = _visible;
+    if (!_dragArmed) return;
     _aimX = _clampAim(event.localPosition.x);
   }
 
   @override
   void onDragUpdate(DragUpdateEvent event) {
-    if (!_visible) return;
+    if (!_dragArmed || !_visible) return;
     _aimX = _clampAim(_aimX + event.localDelta.x);
   }
 
   @override
   void onDragEnd(DragEndEvent event) {
     super.onDragEnd(event);
-    if (!_visible || _ingredient == null) return;
+    final armed = _dragArmed;
+    _dragArmed = false;
+    if (!armed || !_visible || _ingredient == null) return;
     onDrop(_aimX);
     hide();
   }

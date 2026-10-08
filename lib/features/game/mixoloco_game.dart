@@ -15,7 +15,7 @@ import 'components/ingredient_sprite.dart';
 import 'components/merge_explosion_component.dart';
 import 'components/staging_component.dart';
 import 'components/table_boundary_component.dart';
-import 'providers/game_state_provider.dart' show BoardState, PlacedItem;
+import 'providers/game_state_provider.dart' show BoardState, PlacedItem, kMaxLevel;
 
 /// The physics world is laid out in meters (Box2D's own comfortable
 /// range), with the table's width fixed at this many of them — its
@@ -38,6 +38,12 @@ const kBaseRadiusMeters = 0.19 * 0.95 * 0.95;
 /// as a flat 5% for every tier per earlier feedback, then changed to
 /// this progressive step per further feedback.
 double _level2SizeMultiplier(int tier) => 1.0 + (tier + 1) * 0.01;
+
+/// How much bigger Level 3 (safari) plays than Level 1, flat across every
+/// tier — per feedback the safari table was reading too easy; unlike
+/// Level 2's progressive per-tier bump above, this is a straightforward
+/// flat increase at every tier.
+const kLevel3SizeMultiplier = 1.15;
 
 /// Pulls items toward the far/serving edge (small y) — "the table slopes
 /// away from us," so a dropped item accelerates that direction on its
@@ -104,6 +110,7 @@ class MixolocoGame extends Forge2DGame {
     required this.onMerge,
     required this.onCocktailComplete,
     required this.onGameOver,
+    required this.onGameComplete,
     required this.onThrowCommitted,
     required this.onTierSeen,
     this.initialItems = const [],
@@ -123,15 +130,14 @@ class MixolocoGame extends Forge2DGame {
   List<Ingredient> get _chain => evolutionChainForLevel(_level);
 
   /// The actual physics radius for [tier], including both
-  /// [Ingredient.sizeMultiplier] and — only on the rooftop specifically
-  /// — the progressive per-tier Level 2 bump (see
-  /// [_level2SizeMultiplier]). The single source every radius
-  /// computation below reads from, so the level-2-is-bigger rule can't
-  /// drift out of sync between them. Level 3 deliberately isn't
-  /// included in that bump — it was a Level 2-specific tuning call, not
-  /// a general "levels past 1 are bigger" rule.
-  double _radiusForTier(int tier, Ingredient ingredient) =>
-      radiusForTier(tier, kBaseRadiusMeters) * ingredient.sizeMultiplier * (_level == 2 ? _level2SizeMultiplier(tier) : 1.0);
+  /// [Ingredient.sizeMultiplier] and whichever per-level bump applies —
+  /// Level 2's progressive per-tier bump (see [_level2SizeMultiplier])
+  /// or Level 3's flat [kLevel3SizeMultiplier]. The single source every
+  /// radius computation below reads from, so neither rule can drift out
+  /// of sync between them.
+  double _radiusForTier(int tier, Ingredient ingredient) => radiusForTier(tier, kBaseRadiusMeters) *
+      ingredient.sizeMultiplier *
+      (_level == 2 ? _level2SizeMultiplier(tier) : (_level == 3 ? kLevel3SizeMultiplier : 1.0));
 
   /// Items to recreate on the table as soon as the world's ready — a
   /// snapshot taken via [capturePlacedItems] the last time this screen
@@ -156,6 +162,11 @@ class MixolocoGame extends Forge2DGame {
   /// The 25%-line has had an item entirely past it for two drops running
   /// — the run is over.
   final void Function() onGameOver;
+
+  /// Two items at the very top of the *final* level's chain just
+  /// merged — there's no higher tier for them to become, so this is the
+  /// actual win condition rather than a no-op (see [_tryMerge]).
+  final void Function() onGameComplete;
 
   /// A drop was actually committed to the table (spawned, not aborted by
   /// game-over) — advance the staged/upcoming ingredient queue.
@@ -189,6 +200,7 @@ class MixolocoGame extends Forge2DGame {
 
   bool _busy = false;
   bool _gameOverTriggered = false;
+  bool _gameCompleteTriggered = false;
   bool _initialItemsSpawned = false;
   int _overflowStreak = 0;
 
@@ -558,6 +570,16 @@ class MixolocoGame extends Forge2DGame {
   /// touching items — not just same-tier ones, since the cocktail-touch
   /// graph needs every contact to find connected clusters.
   void handleContactBegin(IngredientBodyComponent a, IngredientBodyComponent b) {
+    // A compound collision shape (several circles — see
+    // Ingredient.collisionProfile, used by prosecco/champagne/gin/
+    // vermouth) means two touching bodies can share more than one
+    // fixture-pair contact at once, each firing its own beginContact
+    // this same step. Bailing out here once either body's already
+    // consumed (its merge already resolved this step, even though Box2D
+    // hasn't finished tearing the body down yet) keeps a duplicate event
+    // from re-adding a stale adjacency entry for a body that's on its
+    // way out.
+    if (a.consumed || b.consumed) return;
     _adjacency.putIfAbsent(a, () => {}).add(b);
     _adjacency.putIfAbsent(b, () => {}).add(a);
     _tryMerge(a, b);
@@ -574,7 +596,15 @@ class MixolocoGame extends Forge2DGame {
     if (a.consumed || b.consumed) return;
     if (a.tier != b.tier) return;
     final nextTier = a.tier + 1;
-    if (nextTier >= _chain.length) return;
+    final chainExhausted = nextTier >= _chain.length;
+    // Every level before the last one treats its own capstone tier as a
+    // deliberate dead end (see kEvolutionChain's own "never appears
+    // inside a recipe" doc) — two of those touching stays a no-op, same
+    // as it's always been. Only the *final* level's capstone turns into
+    // the actual win condition below, since there's no further level
+    // for _checkLevelUp to advance into.
+    if (chainExhausted && _level < kMaxLevel) return;
+    if (chainExhausted && _gameCompleteTriggered) return;
 
     a.consumed = true;
     b.consumed = true;
@@ -585,15 +615,17 @@ class MixolocoGame extends Forge2DGame {
     _removeBody(b);
     unawaited(_playMergeSound());
     _activeAnimations++;
+    if (chainExhausted) _gameCompleteTriggered = true;
     world.add(
       MergeExplosionComponent(
         position: midpoint,
         ingredient: ingredient,
-        onSpawnReady: () => _spawnBody(tier: nextTier, position: midpoint),
+        onSpawnReady: chainExhausted ? () {} : () => _spawnBody(tier: nextTier, position: midpoint),
         onFinished: () => _activeAnimations--,
       ),
     );
     onMerge(mergedTier);
+    if (chainExhausted) onGameComplete();
   }
 
   Future<void> _playMergeSound() async {
@@ -716,6 +748,7 @@ class MixolocoGame extends Forge2DGame {
     _liveBodies.clear();
     _adjacency.clear();
     _gameOverTriggered = false;
+    _gameCompleteTriggered = false;
     _overflowStreak = 0;
     _busy = false;
     // Any merge-explosion/cocktail-reveal component just wiped above was

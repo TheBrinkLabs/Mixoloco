@@ -97,6 +97,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
       onMerge: notifier.registerMerge,
       onCocktailComplete: notifier.registerCocktailComplete,
       onGameOver: notifier.registerGameOver,
+      onGameComplete: notifier.registerGameComplete,
       onThrowCommitted: notifier.advanceQueue,
       onTierSeen: notifier.registerTierSeen,
       initialItems: ref.read(gameStateProvider).placedItems,
@@ -1268,7 +1269,20 @@ class _GameOverOverlay extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 16),
-              Image.asset('assets/images/game_over.png', width: screenWidth * 0.68),
+              // No dedicated "game complete" banner art yet — reuses the
+              // same plank-text treatment as the "NEW BEST SCORE!" line
+              // below rather than the game_over.png image, which reads
+              // specifically as a loss.
+              if (board.gameCompleted)
+                ColorfulPlankText(
+                  text: tr(locale, 'game_complete_title'),
+                  fontSize: rowHeight * 0.6,
+                  variant: PlankTextVariant.sunsetGradient,
+                  font: kPlankTextFont,
+                  shadowStyle: kPlankShadowStyle,
+                )
+              else
+                Image.asset('assets/images/game_over.png', width: screenWidth * 0.68),
               const SizedBox(height: 10),
               if (board.isNewHighScore) ...[
                 ColorfulPlankText(

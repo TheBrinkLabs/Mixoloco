@@ -105,6 +105,15 @@ class BoardState {
   final bool gameOver;
   final List<PlacedItem> placedItems;
 
+  /// Whether this run ended by actually finishing the final level — two
+  /// items at the very top of its chain merged, with nothing higher to
+  /// become (see MixolocoGame._tryMerge) — rather than the table simply
+  /// filling up. [gameOver] is still set true alongside this (it drives
+  /// the same end-of-run overlay/persistence), so this only exists to
+  /// let that overlay show "Game Complete" instead of "Game Over."
+  /// Resets every game.
+  final bool gameCompleted;
+
   /// Credits earned/spent this game and every game before it — persists
   /// to disk, see progression_service.dart.
   final int credits;
@@ -190,6 +199,7 @@ class BoardState {
     required this.cocktailsMade,
     required this.score,
     required this.gameOver,
+    this.gameCompleted = false,
     required this.credits,
     required this.highestTierUnlocked,
     this.highestTierUnlockedLevel2 = -1,
@@ -219,6 +229,7 @@ class BoardState {
     int? cocktailsMade,
     int? score,
     bool? gameOver,
+    bool? gameCompleted,
     int? credits,
     int? highestTierUnlocked,
     int? highestTierUnlockedLevel2,
@@ -242,6 +253,7 @@ class BoardState {
       cocktailsMade: cocktailsMade ?? this.cocktailsMade,
       score: score ?? this.score,
       gameOver: gameOver ?? this.gameOver,
+      gameCompleted: gameCompleted ?? this.gameCompleted,
       credits: credits ?? this.credits,
       highestTierUnlocked: highestTierUnlocked ?? this.highestTierUnlocked,
       highestTierUnlockedLevel2: highestTierUnlockedLevel2 ?? this.highestTierUnlockedLevel2,
@@ -364,6 +376,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     'cocktailsMade': s.cocktailsMade,
     'score': s.score,
     'gameOver': s.gameOver,
+    'gameCompleted': s.gameCompleted,
     'continueOfferUsed': s.continueOfferUsed,
     'scoreCreditThresholdsAwarded': s.scoreCreditThresholdsAwarded,
     'placedItems': s.placedItems.map((p) => {'tier': p.tier, 'x': p.x, 'y': p.y}).toList(),
@@ -403,6 +416,11 @@ class GameStateNotifier extends Notifier<BoardState> {
         cocktailsMade: map['cocktailsMade'] as int,
         score: map['score'] as int,
         gameOver: map['gameOver'] as bool,
+        // Absent in a save written before this field existed — false
+        // (an ordinary table-full ending, not a win) is the correct
+        // read for that case, same spirit as runHighestTier's fallback
+        // below.
+        gameCompleted: map['gameCompleted'] as bool? ?? false,
         credits: credits,
         highestTierUnlocked: highestTierUnlocked,
         highestTierUnlockedLevel2: highestTierUnlockedLevel2,
@@ -750,6 +768,18 @@ class GameStateNotifier extends Notifier<BoardState> {
     if (state.continueOfferUsed) {
       _finalizeScore();
     }
+  }
+
+  /// The final level's own capstone tier just merged with itself — the
+  /// actual win condition (see MixolocoGame._tryMerge), not a table-full
+  /// ending. Marks [continueOfferUsed] immediately rather than offering
+  /// the watch-ad-to-continue overlay first: that offer exists to let a
+  /// player who ran out of table space keep going, which doesn't apply
+  /// to a finished run with plenty of room left.
+  void registerGameComplete() {
+    if (state.gameOver) return;
+    state = state.copyWith(gameOver: true, gameCompleted: true, continueOfferUsed: true);
+    _finalizeScore();
   }
 
   /// Declines the once-per-game ad-continue offer — game stays over, but

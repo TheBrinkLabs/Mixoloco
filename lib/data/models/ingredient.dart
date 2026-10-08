@@ -722,12 +722,19 @@ const kEvolutionChainLevel2 = [
 /// Lime/Vodka/Gin/Tonic/Orange/Prosecco/Pineapple reuse their existing
 /// art directly (same pattern as Level 2 reusing Cherry/Vodka/Lime from
 /// Level 1) rather than commissioning new versions of ingredients that
-/// already exist. Marula Liqueur/Honey/Mango/Ginger Beer are new —
-/// their assetPaths below are reserved for art that hasn't landed yet
-/// (see the class doc's note on assetPath/GlassVisual's drawn
-/// fallback); displayScale/displayScaleX are left at the default 1.0
-/// until that real art exists to measure against, same as every other
-/// ingredient's own first pass before its precise calibration.
+/// already exist. Marula Liqueur/Honey/Mango/Ginger Beer/Pineapple/
+/// Orange/Safari Beer are this chain's own dedicated art — every one
+/// now has its displayScale/displayScaleX precisely measured the same
+/// way as every other ingredient (see the class doc's derivation),
+/// rather than sitting at the placeholder 1.0/1.0 default: that default
+/// was the real cause of the pineapple reading with a large gap around
+/// it, since 1.0 never stretches the art to actually reach its physics
+/// circle's edge the way a measured value does.
+///
+/// Prosecco sits two tiers earlier here (8, not 10) than it first
+/// launched at — per feedback it read too similar to Level 2's own
+/// prosecco (also second-from-top there), so it's pulled forward,
+/// off the capstone-adjacent spot.
 const kEvolutionChainLevel3 = [
   Ingredient(
     id: 'lime',
@@ -747,6 +754,8 @@ const kEvolutionChainLevel3 = [
     shape: GlassShape.jug,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_honey.png',
+    displayScale: 0.969,
+    displayScaleX: 1.300,
   ),
   Ingredient(
     id: 'vodka',
@@ -795,6 +804,7 @@ const kEvolutionChainLevel3 = [
     shape: GlassShape.tumbler,
     debris: DebrisType.peel,
     assetPath: 'assets/images/ingredient_orange_slice.png',
+    displayScale: 1.114,
   ),
   Ingredient(
     id: 'marula_liqueur',
@@ -804,6 +814,8 @@ const kEvolutionChainLevel3 = [
     shape: GlassShape.tumbler,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_marula.png',
+    displayScale: 1.062,
+    displayScaleX: 1.452,
     isAlcoholic: true,
   ),
   Ingredient(
@@ -826,33 +838,13 @@ const kEvolutionChainLevel3 = [
     shape: GlassShape.jug,
     debris: DebrisType.peel,
     assetPath: 'assets/images/ingredient_mango.png',
-  ),
-  Ingredient(
-    id: 'ginger_beer',
-    label: 'Ginger Beer',
-    color: Color(0xFFC77A2B),
-    tier: 8,
-    shape: GlassShape.mug,
-    debris: DebrisType.glass,
-    assetPath: 'assets/images/ingredient_ginger_beer.png',
-  ),
-  Ingredient(
-    // A whole-fruit picture, not the poured-glass art Level 1's own
-    // 'pineapple' uses — same reasoning (and same distinct-id fix) as
-    // this chain's own 'orange_slice' above.
-    id: 'pineapple_fruit',
-    label: 'Pineapple',
-    color: Color(0xFFF7C948),
-    tier: 9,
-    shape: GlassShape.tumbler,
-    debris: DebrisType.peel,
-    assetPath: 'assets/images/ingredient_pineapple_fruit.png',
+    displayScale: 0.986,
   ),
   Ingredient(
     id: 'prosecco',
     label: 'Prosecco',
     color: Color(0xFFE8D9A0),
-    tier: 10,
+    tier: 8,
     shape: GlassShape.martini,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_prosecco.png',
@@ -868,6 +860,31 @@ const kEvolutionChainLevel3 = [
     ],
   ),
   Ingredient(
+    id: 'ginger_beer',
+    label: 'Ginger Beer',
+    color: Color(0xFFC77A2B),
+    tier: 9,
+    shape: GlassShape.mug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_ginger_beer.png',
+    displayScale: 1.035,
+    displayScaleX: 1.700,
+  ),
+  Ingredient(
+    // A whole-fruit picture, not the poured-glass art Level 1's own
+    // 'pineapple' uses — same reasoning (and same distinct-id fix) as
+    // this chain's own 'orange_slice' above.
+    id: 'pineapple_fruit',
+    label: 'Pineapple',
+    color: Color(0xFFF7C948),
+    tier: 10,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_pineapple_fruit.png',
+    displayScale: 1.087,
+    displayScaleX: 1.700,
+  ),
+  Ingredient(
     id: 'safari_beer',
     label: 'Safari Beer',
     color: Color(0xFFC98A2C),
@@ -875,6 +892,7 @@ const kEvolutionChainLevel3 = [
     shape: GlassShape.jug,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_safari_beer.png',
+    displayScale: 0.875,
     isAlcoholic: true,
   ),
 ];
