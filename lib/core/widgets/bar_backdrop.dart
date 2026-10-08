@@ -22,12 +22,13 @@ const kTableNearFraction = 1.0;
 /// screen.
 const kTableScale = 1.26;
 
-/// The scene photo for [level] — beach (1), rooftop (2), safari (3 and,
-/// until further levels get their own art, anything beyond it too).
-/// Shared by GameScreen (the live table) and LevelUpOverlay (the
-/// between-levels "ready" screen), so both always agree on which photo a
-/// given level shows.
+/// The scene photo for [level] — beach (1), rooftop (2), safari (3),
+/// piazza (4 and, until further levels get their own art, anything
+/// beyond it too). Shared by GameScreen (the live table) and
+/// LevelUpOverlay (the between-levels "ready" screen), so both always
+/// agree on which photo a given level shows.
 String backgroundAssetPathForLevel(int level) {
+  if (level >= 4) return 'assets/images/piazza_background.png';
   if (level >= 3) return 'assets/images/safari_background.png';
   if (level >= 2) return 'assets/images/rooftop_background.png';
   return 'assets/images/beach_background.png';

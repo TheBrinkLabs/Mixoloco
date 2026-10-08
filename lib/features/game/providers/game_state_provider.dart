@@ -23,17 +23,17 @@ int scoreForCocktail(CocktailRecipe recipe) => recipe.price * 10;
 /// The highest level with real content right now — once a run reaches
 /// this, there's nothing further to advance to (see _checkLevelUp).
 /// Bump this (and add the matching bucket/branch everywhere
-/// [highestTierBucketForLevel] is used) the day a Level 4 actually has
+/// [highestTierBucketForLevel] is used) the day a Level 5 actually has
 /// its own evolution chain and cocktail list.
-const kMaxLevel = 3;
+const kMaxLevel = 4;
 
-/// Picks the right one of a level's three separately-tracked
-/// highest-tier buckets (see BoardState.highestTierUnlocked/
-/// highestTierUnlockedLevel2/highestTierUnlockedLevel3) — the one spot
+/// Picks the right one of a level's four separately-tracked highest-tier
+/// buckets (see BoardState.highestTierUnlocked/highestTierUnlockedLevel2/
+/// highestTierUnlockedLevel3/highestTierUnlockedLevel4) — the one spot
 /// all of GameStateNotifier's level-aware reads/writes route through, so
-/// a future Level 4 only needs one new bucket plus one new branch here.
-int highestTierBucketForLevel(int level, {required int l1, required int l2, required int l3}) =>
-    level >= 3 ? l3 : (level >= 2 ? l2 : l1);
+/// a future Level 5 only needs one new bucket plus one new branch here.
+int highestTierBucketForLevel(int level, {required int l1, required int l2, required int l3, required int l4}) =>
+    level >= 4 ? l4 : (level >= 3 ? l3 : (level >= 2 ? l2 : l1));
 
 /// Credits awarded for reaching a new highest evolution tier, ever.
 /// Halved from 200 — per feedback, climbing a whole 12-step chain (2400
@@ -133,6 +133,11 @@ class BoardState {
   /// again.
   final int highestTierUnlockedLevel3;
 
+  /// The highest evolution tier ever reached on the piazza bar (Level
+  /// 4) — same shape as [highestTierUnlockedLevel3], separate chain
+  /// again.
+  final int highestTierUnlockedLevel4;
+
   /// The highest bar level ever reached, lifetime (1 or 2) — once this
   /// is 2, every new game starts there directly (see _freshGame) instead
   /// of back on the beach, and the home screen's "Unlocked" display shows
@@ -204,6 +209,7 @@ class BoardState {
     required this.highestTierUnlocked,
     this.highestTierUnlockedLevel2 = -1,
     this.highestTierUnlockedLevel3 = -1,
+    this.highestTierUnlockedLevel4 = -1,
     this.highestLevelReached = 1,
     this.continueOfferUsed = false,
     this.scoreCreditThresholdsAwarded = 0,
@@ -234,6 +240,7 @@ class BoardState {
     int? highestTierUnlocked,
     int? highestTierUnlockedLevel2,
     int? highestTierUnlockedLevel3,
+    int? highestTierUnlockedLevel4,
     int? highestLevelReached,
     bool? continueOfferUsed,
     int? scoreCreditThresholdsAwarded,
@@ -258,6 +265,7 @@ class BoardState {
       highestTierUnlocked: highestTierUnlocked ?? this.highestTierUnlocked,
       highestTierUnlockedLevel2: highestTierUnlockedLevel2 ?? this.highestTierUnlockedLevel2,
       highestTierUnlockedLevel3: highestTierUnlockedLevel3 ?? this.highestTierUnlockedLevel3,
+      highestTierUnlockedLevel4: highestTierUnlockedLevel4 ?? this.highestTierUnlockedLevel4,
       highestLevelReached: highestLevelReached ?? this.highestLevelReached,
       continueOfferUsed: continueOfferUsed ?? this.continueOfferUsed,
       scoreCreditThresholdsAwarded: scoreCreditThresholdsAwarded ?? this.scoreCreditThresholdsAwarded,
@@ -302,7 +310,14 @@ class GameStateNotifier extends Notifier<BoardState> {
   @override
   BoardState build() {
     _loadPersisted();
-    return _freshGame(credits: 0, highestTierUnlocked: 0, highestTierUnlockedLevel2: -1, highestTierUnlockedLevel3: -1, highestLevelReached: 1);
+    return _freshGame(
+      credits: 0,
+      highestTierUnlocked: 0,
+      highestTierUnlockedLevel2: -1,
+      highestTierUnlockedLevel3: -1,
+      highestTierUnlockedLevel4: -1,
+      highestLevelReached: 1,
+    );
   }
 
   /// Credits and the highest-tier records live on disk, not in this
@@ -318,6 +333,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     final highest = await loadHighestTier();
     final highestLevel2 = await loadHighestTierLevel2();
     final highestLevel3 = await loadHighestTierLevel3();
+    final highestLevel4 = await loadHighestTierLevel4();
     final highestLevelReached = await loadHighestLevelReached();
     final savedJson = await loadGameJson();
     final restored = savedJson == null
@@ -328,6 +344,7 @@ class GameStateNotifier extends Notifier<BoardState> {
             highestTierUnlocked: highest,
             highestTierUnlockedLevel2: highestLevel2,
             highestTierUnlockedLevel3: highestLevel3,
+            highestTierUnlockedLevel4: highestLevel4,
             highestLevelReached: highestLevelReached,
           );
     // Falls back to a freshly-built game (not just a copyWith patch onto
@@ -342,6 +359,7 @@ class GameStateNotifier extends Notifier<BoardState> {
           highestTierUnlocked: highest,
           highestTierUnlockedLevel2: highestLevel2,
           highestTierUnlockedLevel3: highestLevel3,
+          highestTierUnlockedLevel4: highestLevel4,
           highestLevelReached: highestLevelReached,
         );
     // A restored run can already satisfy _checkLevelUp's conditions
@@ -402,6 +420,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     required int highestTierUnlocked,
     required int highestTierUnlockedLevel2,
     required int highestTierUnlockedLevel3,
+    required int highestTierUnlockedLevel4,
     required int highestLevelReached,
   }) {
     try {
@@ -425,6 +444,7 @@ class GameStateNotifier extends Notifier<BoardState> {
         highestTierUnlocked: highestTierUnlocked,
         highestTierUnlockedLevel2: highestTierUnlockedLevel2,
         highestTierUnlockedLevel3: highestTierUnlockedLevel3,
+        highestTierUnlockedLevel4: highestTierUnlockedLevel4,
         highestLevelReached: highestLevelReached,
         continueOfferUsed: map['continueOfferUsed'] as bool,
         scoreCreditThresholdsAwarded: map['scoreCreditThresholdsAwarded'] as int,
@@ -451,6 +471,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     required int highestTierUnlocked,
     required int highestTierUnlockedLevel2,
     required int highestTierUnlockedLevel3,
+    required int highestTierUnlockedLevel4,
     required int highestLevelReached,
     int? level,
   }) {
@@ -461,6 +482,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       l1: highestTierUnlocked,
       l2: highestTierUnlockedLevel2,
       l3: highestTierUnlockedLevel3,
+      l4: highestTierUnlockedLevel4,
     );
     return BoardState(
       current: _randomIngredient(resolvedLevel, highestForLevel),
@@ -473,6 +495,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       highestTierUnlocked: highestTierUnlocked,
       highestTierUnlockedLevel2: highestTierUnlockedLevel2,
       highestTierUnlockedLevel3: highestTierUnlockedLevel3,
+      highestTierUnlockedLevel4: highestTierUnlockedLevel4,
       highestLevelReached: highestLevelReached,
       level: resolvedLevel,
       // A fresh game that *starts* on Level 2 (because that's already the
@@ -498,6 +521,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     highestTierUnlocked: state.highestTierUnlocked,
     highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
     highestTierUnlockedLevel3: state.highestTierUnlockedLevel3,
+    highestTierUnlockedLevel4: state.highestTierUnlockedLevel4,
     highestLevelReached: state.highestLevelReached,
     level: level,
   );
@@ -541,6 +565,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       l1: state.highestTierUnlocked,
       l2: state.highestTierUnlockedLevel2,
       l3: state.highestTierUnlockedLevel3,
+      l4: state.highestTierUnlockedLevel4,
     );
     final nextUpcoming = [...state.upcoming.skip(1), _randomIngredient(state.level, highestForLevel)];
     state = state.copyWith(current: nextCurrent, upcoming: nextUpcoming);
@@ -602,10 +627,14 @@ class GameStateNotifier extends Notifier<BoardState> {
       l1: state.highestTierUnlocked,
       l2: state.highestTierUnlockedLevel2,
       l3: state.highestTierUnlockedLevel3,
+      l4: state.highestTierUnlockedLevel4,
     );
     if (tier > currentHighest) {
       final newCredits = state.credits + kTierUnlockReward;
-      if (level >= 3) {
+      if (level >= 4) {
+        state = state.copyWith(highestTierUnlockedLevel4: tier, credits: newCredits);
+        saveHighestTierLevel4(tier);
+      } else if (level >= 3) {
         state = state.copyWith(highestTierUnlockedLevel3: tier, credits: newCredits);
         saveHighestTierLevel3(tier);
       } else if (level >= 2) {
@@ -664,6 +693,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       l1: state.highestTierUnlocked,
       l2: state.highestTierUnlockedLevel2,
       l3: state.highestTierUnlockedLevel3,
+      l4: state.highestTierUnlockedLevel4,
     );
     final newCurrent = _randomIngredient(level, highestForLevel);
     final newUpcoming = List.generate(3, (_) => _randomIngredient(level, highestForLevel));
@@ -826,6 +856,7 @@ class GameStateNotifier extends Notifier<BoardState> {
             highestTierUnlocked: state.highestTierUnlocked,
             highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
             highestTierUnlockedLevel3: state.highestTierUnlockedLevel3,
+            highestTierUnlockedLevel4: state.highestTierUnlockedLevel4,
             highestLevelReached: state.highestLevelReached,
           )
           .catchError((e) {});
@@ -857,6 +888,7 @@ class GameStateNotifier extends Notifier<BoardState> {
                 highestTierUnlocked: state.highestTierUnlocked,
                 highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
                 highestTierUnlockedLevel3: state.highestTierUnlockedLevel3,
+                highestTierUnlockedLevel4: state.highestTierUnlockedLevel4,
                 highestLevelReached: state.highestLevelReached,
                 highScores: highScores,
               ),
@@ -887,6 +919,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     highestTierUnlocked: state.highestTierUnlocked,
     highestTierUnlockedLevel2: state.highestTierUnlockedLevel2,
     highestTierUnlockedLevel3: state.highestTierUnlockedLevel3,
+    highestTierUnlockedLevel4: state.highestTierUnlockedLevel4,
     highestLevelReached: state.highestLevelReached,
   );
 
@@ -906,6 +939,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       highestTierUnlocked: 0,
       highestTierUnlockedLevel2: -1,
       highestTierUnlockedLevel3: -1,
+      highestTierUnlockedLevel4: -1,
       highestLevelReached: 1,
     );
     await persistGameState();
@@ -926,6 +960,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       highestTierUnlocked: await loadHighestTier(),
       highestTierUnlockedLevel2: await loadHighestTierLevel2(),
       highestTierUnlockedLevel3: await loadHighestTierLevel3(),
+      highestTierUnlockedLevel4: await loadHighestTierLevel4(),
       highestLevelReached: await loadHighestLevelReached(),
     );
   }

@@ -39,4 +39,14 @@ const kInfoLevels = [
     recipes: kCocktailRecipesLevel3,
     songs: kMusicTracksLevel3,
   ),
+  InfoLevelData(
+    name: 'Piazza',
+    backgroundAssetPath: 'assets/images/piazza_background.png',
+    chain: kEvolutionChainLevel4,
+    recipes: kCocktailRecipesLevel4,
+    // No dedicated playlist yet — musicTracksForLevel's own level>=3
+    // catch-all plays the safari list in-game until one lands, so this
+    // mirrors that rather than claiming songs that don't actually play.
+    songs: kMusicTracksLevel3,
+  ),
 ];

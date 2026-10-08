@@ -487,7 +487,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                                               // tier's actually been seen — clamped to 0/Cherry
                                               // rather than crashing).
                                               content: GlassVisual(
-                                                ingredient: board.highestLevelReached >= 3
+                                                ingredient: board.highestLevelReached >= 4
+                                                    ? kEvolutionChainLevel4[board.highestTierUnlockedLevel4.clamp(0, kEvolutionChainLevel4.length - 1)]
+                                                    : board.highestLevelReached >= 3
                                                     ? kEvolutionChainLevel3[board.highestTierUnlockedLevel3.clamp(0, kEvolutionChainLevel3.length - 1)]
                                                     : board.highestLevelReached >= 2
                                                     ? kEvolutionChainLevel2[board.highestTierUnlockedLevel2.clamp(0, kEvolutionChainLevel2.length - 1)]
@@ -842,7 +844,8 @@ class _LevelPickerDialog extends StatelessWidget {
   static String _levelName(int level) => switch (level) {
     1 => 'Beach',
     2 => 'Rooftop',
-    _ => 'Safari',
+    3 => 'Safari',
+    _ => 'Piazza',
   };
 
   @override

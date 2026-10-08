@@ -216,13 +216,78 @@ const kCocktailRecipesLevel3 = [
 
 CocktailRecipe get kStarterCocktailLevel3 => kCocktailRecipesLevel3.firstWhere((r) => r.id == kStarterCocktailIdLevel3);
 
+/// The piazza bar's own cocktail list (Level 4) — same shape as
+/// [kCocktailRecipesLevel3], ordered easiest to hardest by highest
+/// evolution tier needed. All seven are real European classics (or close
+/// variants): Kir Royale and the Aperol/Hugo Spritzes reuse the same
+/// fruit/liqueur-plus-Prosecco shape Bellini/Mimosa/Marula Sunset already
+/// established on the earlier two chains. French 75 uses Cognac rather
+/// than gin — the original Harry's New York Bar version did too, and gin
+/// itself isn't on this chain (already reused on Level 2 and Level 3, so
+/// Level 4 leans into its own new spirits instead).
+const kStarterCocktailIdLevel4 = 'vodka_lemon';
+
+const kCocktailRecipesLevel4 = [
+  CocktailRecipe(
+    id: 'vodka_lemon',
+    name: 'Vodka Lemon',
+    ingredientIds: ['vodka', 'lemon'],
+    assetPath: 'assets/images/vodka_lemon.png',
+    price: 200,
+  ),
+  CocktailRecipe(
+    id: 'limoncello_fizz',
+    name: 'Limoncello Fizz',
+    ingredientIds: ['lemon_liqueur', 'tonic'],
+    assetPath: 'assets/images/limoncello_fizz.png',
+    price: 250,
+  ),
+  CocktailRecipe(
+    id: 'emerald_fizz',
+    name: 'Emerald Fizz',
+    ingredientIds: ['irish_cream', 'ginger_ale'],
+    assetPath: 'assets/images/emerald_fizz.png',
+    price: 300,
+  ),
+  CocktailRecipe(
+    id: 'kir_royale',
+    name: 'Kir Royale',
+    ingredientIds: ['blackcurrant', 'prosecco'],
+    assetPath: 'assets/images/kir_royale.png',
+    price: 350,
+  ),
+  CocktailRecipe(
+    id: 'aperol_spritz',
+    name: 'Aperol Spritz',
+    ingredientIds: ['aperol', 'prosecco', 'tonic'],
+    assetPath: 'assets/images/aperol_spritz.png',
+    price: 400,
+  ),
+  CocktailRecipe(
+    id: 'hugo_spritz',
+    name: 'Hugo Spritz',
+    ingredientIds: ['elderflower_liqueur', 'prosecco', 'strawberry'],
+    assetPath: 'assets/images/hugo_spritz.png',
+    price: 450,
+  ),
+  CocktailRecipe(
+    id: 'french_75',
+    name: 'French 75',
+    ingredientIds: ['cognac', 'lemon', 'prosecco'],
+    assetPath: 'assets/images/french_75.png',
+    price: 500,
+  ),
+];
+
+CocktailRecipe get kStarterCocktailLevel4 => kCocktailRecipesLevel4.firstWhere((r) => r.id == kStarterCocktailIdLevel4);
+
 /// The cocktail list for [level] — see evolutionChainForLevel (in
 /// ingredient.dart) for the matching evolution-chain split and why a
-/// future Level 4 needs a parallel branch added here too.
+/// future Level 5 needs a parallel branch added here too.
 List<CocktailRecipe> cocktailRecipesForLevel(int level) =>
-    level >= 3 ? kCocktailRecipesLevel3 : (level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes);
+    level >= 4 ? kCocktailRecipesLevel4 : (level >= 3 ? kCocktailRecipesLevel3 : (level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes));
 
 /// The free starter order for a fresh run at [level] — see
 /// [cocktailRecipesForLevel].
 CocktailRecipe starterCocktailForLevel(int level) =>
-    level >= 3 ? kStarterCocktailLevel3 : (level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail);
+    level >= 4 ? kStarterCocktailLevel4 : (level >= 3 ? kStarterCocktailLevel3 : (level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail));

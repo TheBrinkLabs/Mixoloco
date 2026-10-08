@@ -31,6 +31,7 @@ Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
     final localTier1 = await loadHighestTier();
     final localTier2 = await loadHighestTierLevel2();
     final localTier3 = await loadHighestTierLevel3();
+    final localTier4 = await loadHighestTierLevel4();
     final localLevel = await loadHighestLevelReached();
     final localScores = await loadHighScores();
 
@@ -38,6 +39,7 @@ Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
     final mergedTier1 = server == null ? localTier1 : _max(localTier1, server.highestTierUnlocked);
     final mergedTier2 = server == null ? localTier2 : _max(localTier2, server.highestTierUnlockedLevel2);
     final mergedTier3 = server == null ? localTier3 : _max(localTier3, server.highestTierUnlockedLevel3);
+    final mergedTier4 = server == null ? localTier4 : _max(localTier4, server.highestTierUnlockedLevel4);
     final mergedLevel = server == null ? localLevel : _max(localLevel, server.highestLevelReached);
 
     final mergedScores = <int>{...localScores, ...?server?.highScores}.toList()..sort((a, b) => b.compareTo(a));
@@ -48,6 +50,7 @@ Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
         mergedTier1 != localTier1 ||
         mergedTier2 != localTier2 ||
         mergedTier3 != localTier3 ||
+        mergedTier4 != localTier4 ||
         mergedLevel != localLevel ||
         !_sameList(topScores, localScores);
 
@@ -56,6 +59,7 @@ Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
       await saveHighestTier(mergedTier1);
       await saveHighestTierLevel2(mergedTier2);
       await saveHighestTierLevel3(mergedTier3);
+      await saveHighestTierLevel4(mergedTier4);
       await saveHighestLevelReached(mergedLevel);
       await saveHighScores(topScores);
     }
@@ -67,6 +71,7 @@ Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
         highestTierUnlocked: mergedTier1,
         highestTierUnlockedLevel2: mergedTier2,
         highestTierUnlockedLevel3: mergedTier3,
+        highestTierUnlockedLevel4: mergedTier4,
         highestLevelReached: mergedLevel,
         highScores: topScores,
       ),

@@ -897,14 +897,196 @@ const kEvolutionChainLevel3 = [
   ),
 ];
 
+/// The piazza bar's own evolution chain (Level 4) — same independent-
+/// chain shape as [kEvolutionChainLevel3] (tiers 0-12, local to this
+/// chain), European-themed. Lemon/Vodka/Tonic/Prosecco reuse their
+/// existing art and measurements directly (same pattern every later
+/// chain has followed for ingredients that already exist); Ginger Ale
+/// also reuses Level 3's Ginger Beer art file outright (same picture,
+/// per feedback) under its own id/label, same as the Jug/Prosecco-style
+/// shared-art reuse. Every genuinely new ingredient's displayScale/
+/// displayScaleX is measured precisely up front, the same way Level 3's
+/// retrofit was — no placeholder 1.0/1.0 defaults this time.
+const kEvolutionChainLevel4 = [
+  Ingredient(
+    id: 'lemon',
+    label: 'Lemon Juice',
+    color: Color(0xFFFFF176),
+    tier: 0,
+    shape: GlassShape.jug,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_lemon.png',
+    displayScale: 1.121,
+  ),
+  Ingredient(
+    id: 'lemon_liqueur',
+    label: 'Limoncello',
+    color: Color(0xFFF5E663),
+    tier: 1,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_lemon_liqueur.png',
+    displayScale: 1.096,
+    displayScaleX: 1.700,
+    isAlcoholic: true,
+  ),
+  Ingredient(
+    id: 'vodka',
+    label: 'Vodka',
+    color: Color(0xFFEAF6FA),
+    tier: 2,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_vodka.png',
+    displayScale: 1.044,
+    displayScaleX: 1.652,
+    isAlcoholic: true,
+    isMiniShot: true,
+  ),
+  Ingredient(
+    id: 'aperol',
+    label: 'Aperol',
+    color: Color(0xFFFF7F32),
+    tier: 3,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_aperol.png',
+    displayScale: 1.078,
+    displayScaleX: 1.700,
+    isAlcoholic: true,
+  ),
+  Ingredient(
+    id: 'tonic',
+    label: 'Tonic Water',
+    color: Color(0xFFDCEFF5),
+    tier: 4,
+    shape: GlassShape.mug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_tonic.png',
+    displayScale: 1.065,
+    collisionCapsule: CollisionCapsule(halfLength: 0.418, radius: 0.603, offsetY: 0.194),
+    extraCircles: [CollisionCircle(offsetX: 0.357, offsetY: -1.022, radius: 0.077)],
+  ),
+  Ingredient(
+    id: 'strawberry',
+    label: 'Strawberry',
+    color: Color(0xFFE23B5E),
+    tier: 5,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_strawberry.png',
+    displayScale: 1.078,
+    displayScaleX: 1.398,
+  ),
+  Ingredient(
+    id: 'elderflower_liqueur',
+    label: 'Elderflower Liqueur',
+    color: Color(0xFFEDE4B0),
+    tier: 6,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_elderflower_liqueur.png',
+    displayScale: 1.077,
+    displayScaleX: 1.700,
+    isAlcoholic: true,
+  ),
+  Ingredient(
+    // Same picture as Level 3's Ginger Beer, per feedback — just its own
+    // id/label here, same reuse-the-art-under-a-new-name treatment as
+    // this chain's Ginger Ale needing its own distinct entry rather than
+    // pulling 'ginger_beer' in directly (a different drink in-world,
+    // even though it's the same glass illustration).
+    id: 'ginger_ale',
+    label: 'Ginger Ale',
+    color: Color(0xFFC77A2B),
+    tier: 7,
+    shape: GlassShape.mug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_ginger_beer.png',
+    displayScale: 1.035,
+    displayScaleX: 1.700,
+  ),
+  Ingredient(
+    id: 'blackcurrant',
+    label: 'Blackcurrant',
+    color: Color(0xFF3B1E4A),
+    tier: 8,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_blackcurrant.png',
+    displayScale: 1.119,
+    displayScaleX: 1.299,
+  ),
+  Ingredient(
+    id: 'irish_cream',
+    label: 'Irish Cream',
+    color: Color(0xFF6B4226),
+    tier: 9,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_irish_cream.png',
+    displayScale: 0.924,
+    displayScaleX: 1.232,
+    isAlcoholic: true,
+    isMiniShot: true,
+  ),
+  Ingredient(
+    id: 'prosecco',
+    label: 'Prosecco',
+    color: Color(0xFFE8D9A0),
+    tier: 10,
+    shape: GlassShape.martini,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_prosecco.png',
+    displayScale: 0.993,
+    sizeMultiplier: 1.15,
+    isAlcoholic: true,
+    collisionProfile: [
+      CollisionCircle(offsetY: -0.95, radius: 0.27),
+      CollisionCircle(offsetY: -0.55, radius: 0.34),
+      CollisionCircle(offsetY: -0.15, radius: 0.28),
+      CollisionCircle(offsetY: 0.45, radius: 0.07),
+      CollisionCircle(offsetY: 0.95, radius: 0.37),
+    ],
+  ),
+  Ingredient(
+    id: 'cognac',
+    label: 'Cognac',
+    color: Color(0xFFA6621E),
+    tier: 11,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_cognac.png',
+    displayScale: 1.050,
+    displayScaleX: 1.592,
+    isAlcoholic: true,
+  ),
+  Ingredient(
+    // Capstone — a bottle of grappa, same "never appears inside a
+    // recipe" dead-end role as Jug/Champagne/Safari Beer (see
+    // MixolocoGame._tryMerge's final-level win condition).
+    id: 'grappa',
+    label: 'Grappa',
+    color: Color(0xFFD8CBA0),
+    tier: 12,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_grappa.png',
+    displayScale: 1.058,
+    displayScaleX: 1.700,
+    isAlcoholic: true,
+  ),
+];
+
 /// The evolution chain for [level] — 1 is the beach bar, 2 the rooftop,
-/// 3+ the safari (currently the last one with real content; a future
-/// Level 4 needs its own branch added here, same as everywhere else this
-/// three-way split appears — see cocktailRecipesForLevel, GameScreen's
-/// recipe-list lookups, and GameStateNotifier's highest-tier bucket
-/// selection, which all mirror this same level->content mapping).
+/// 3 the safari, 4+ the piazza (currently the last one with real
+/// content; a future Level 5 needs its own branch added here, same as
+/// everywhere else this split appears — see cocktailRecipesForLevel,
+/// GameScreen's recipe-list lookups, and GameStateNotifier's
+/// highest-tier bucket selection, which all mirror this same
+/// level->content mapping).
 List<Ingredient> evolutionChainForLevel(int level) =>
-    level >= 3 ? kEvolutionChainLevel3 : (level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain);
+    level >= 4 ? kEvolutionChainLevel4 : (level >= 3 ? kEvolutionChainLevel3 : (level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain));
 
 /// The actual throwable pool for a player whose lifetime record within
 /// this level is [highestTierUnlocked] — [kThrowableTierCount] items
@@ -918,15 +1100,17 @@ List<Ingredient> throwableIngredientsFor(int level, int highestTierUnlocked) {
 }
 
 /// Resolves a CocktailRecipe.ingredientIds entry back to its Ingredient —
-/// searches all three chains, since a handful of ids (cherry, vodka,
+/// searches all four chains, since a handful of ids (cherry, vodka,
 /// lime, gin, tonic, prosecco) are shared between them, always with the
 /// same art, so resolving to whichever chain's copy comes first is safe.
-/// Level 3's orange/pineapple deliberately use their own ids
-/// ('orange_slice'/'pineapple_fruit') rather than reusing 'orange'/
-/// 'pineapple', since their art genuinely differs from Level 1's and a
-/// shared id would silently resolve to the wrong picture. Throws if
-/// [id] isn't in any — recipes are only ever built from real ingredient
-/// ids, so that would mean a genuine data bug worth surfacing loudly
-/// rather than swallowing.
+/// Level 3's orange/pineapple and Level 4's ginger ale deliberately use
+/// their own ids ('orange_slice'/'pineapple_fruit'/'ginger_ale') rather
+/// than reusing 'orange'/'pineapple'/'ginger_beer', since they're a
+/// genuinely different in-world drink (ginger ale) or different art
+/// (orange/pineapple) from the earlier chain's own entry, and a shared
+/// id would silently resolve to the wrong one. Throws if [id] isn't in
+/// any — recipes are only ever built from real ingredient ids, so that
+/// would mean a genuine data bug worth surfacing loudly rather than
+/// swallowing.
 Ingredient findIngredientById(String id) =>
-    [...kEvolutionChain, ...kEvolutionChainLevel2, ...kEvolutionChainLevel3].firstWhere((i) => i.id == id);
+    [...kEvolutionChain, ...kEvolutionChainLevel2, ...kEvolutionChainLevel3, ...kEvolutionChainLevel4].firstWhere((i) => i.id == id);

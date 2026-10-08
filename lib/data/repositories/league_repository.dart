@@ -35,6 +35,7 @@ class LeagueLeaderboardEntry {
   final int highestTierUnlocked;
   final int highestTierUnlockedLevel2;
   final int highestTierUnlockedLevel3;
+  final int highestTierUnlockedLevel4;
   final int highestLevelReached;
 
   const LeagueLeaderboardEntry({
@@ -45,6 +46,7 @@ class LeagueLeaderboardEntry {
     this.highestTierUnlocked = 0,
     this.highestTierUnlockedLevel2 = -1,
     this.highestTierUnlockedLevel3 = -1,
+    this.highestTierUnlockedLevel4 = -1,
     this.highestLevelReached = 1,
   });
 
@@ -52,6 +54,9 @@ class LeagueLeaderboardEntry {
   /// higher-level-outranks-lower rule the main menu's own Unlocked tab
   /// uses (see menu_screen.dart).
   Ingredient get evolutionIngredient {
+    if (highestLevelReached >= 4) {
+      return kEvolutionChainLevel4[highestTierUnlockedLevel4.clamp(0, kEvolutionChainLevel4.length - 1)];
+    }
     if (highestLevelReached >= 3) {
       return kEvolutionChainLevel3[highestTierUnlockedLevel3.clamp(0, kEvolutionChainLevel3.length - 1)];
     }
@@ -73,6 +78,7 @@ class PlayerProgress {
   final int highestTierUnlocked;
   final int highestTierUnlockedLevel2;
   final int highestTierUnlockedLevel3;
+  final int highestTierUnlockedLevel4;
   final int highestLevelReached;
   final List<int> highScores;
 
@@ -81,6 +87,7 @@ class PlayerProgress {
     required this.highestTierUnlocked,
     required this.highestTierUnlockedLevel2,
     required this.highestTierUnlockedLevel3,
+    required this.highestTierUnlockedLevel4,
     required this.highestLevelReached,
     required this.highScores,
   });
@@ -186,6 +193,7 @@ class LeagueRepository {
     int highestTierUnlocked = 0,
     int highestTierUnlockedLevel2 = -1,
     int highestTierUnlockedLevel3 = -1,
+    int highestTierUnlockedLevel4 = -1,
     int highestLevelReached = 1,
   }) async {
     final playedAtUtc = (playedAt ?? DateTime.now()).toUtc();
@@ -203,6 +211,7 @@ class LeagueRepository {
         'highestTierUnlocked': highestTierUnlocked,
         'highestTierUnlockedLevel2': highestTierUnlockedLevel2,
         'highestTierUnlockedLevel3': highestTierUnlockedLevel3,
+        'highestTierUnlockedLevel4': highestTierUnlockedLevel4,
         'highestLevelReached': highestLevelReached,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -261,6 +270,7 @@ class LeagueRepository {
         highestTierUnlocked: (scoreData?['highestTierUnlocked'] as int?) ?? 0,
         highestTierUnlockedLevel2: (scoreData?['highestTierUnlockedLevel2'] as int?) ?? -1,
         highestTierUnlockedLevel3: (scoreData?['highestTierUnlockedLevel3'] as int?) ?? -1,
+        highestTierUnlockedLevel4: (scoreData?['highestTierUnlockedLevel4'] as int?) ?? -1,
         highestLevelReached: (scoreData?['highestLevelReached'] as int?) ?? 1,
       );
     }));
@@ -281,6 +291,7 @@ class LeagueRepository {
       'highestTierUnlocked': progress.highestTierUnlocked,
       'highestTierUnlockedLevel2': progress.highestTierUnlockedLevel2,
       'highestTierUnlockedLevel3': progress.highestTierUnlockedLevel3,
+      'highestTierUnlockedLevel4': progress.highestTierUnlockedLevel4,
       'highestLevelReached': progress.highestLevelReached,
       'highScores': progress.highScores,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -299,6 +310,7 @@ class LeagueRepository {
       highestTierUnlocked: (data['highestTierUnlocked'] as int?) ?? 0,
       highestTierUnlockedLevel2: (data['highestTierUnlockedLevel2'] as int?) ?? -1,
       highestTierUnlockedLevel3: (data['highestTierUnlockedLevel3'] as int?) ?? -1,
+      highestTierUnlockedLevel4: (data['highestTierUnlockedLevel4'] as int?) ?? -1,
       highestLevelReached: (data['highestLevelReached'] as int?) ?? 1,
       highScores: ((data['highScores'] as List?) ?? const []).cast<int>(),
     );

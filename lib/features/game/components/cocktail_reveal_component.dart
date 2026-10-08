@@ -28,7 +28,7 @@ class CocktailRevealComponent extends PositionComponent {
 
   static const _flyDuration = 0.5;
   static const _explodeDuration = 0.25;
-  static const _revealDuration = 1.8; // twice as long, per user request
+  static const _revealDuration = 2.8; // an extra second on top, per user request (was 1.8)
   static const _totalDuration = _flyDuration + _explodeDuration + _revealDuration;
 
   double _elapsed = 0;
