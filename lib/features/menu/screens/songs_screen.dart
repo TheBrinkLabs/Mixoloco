@@ -6,7 +6,9 @@ import '../../../core/services/audio_settings_provider.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart';
+import '../../../core/widgets/locked_overlay.dart';
 import '../../../core/widgets/wood_plank.dart';
+import '../../game/providers/game_state_provider.dart';
 import '../info_level_data.dart';
 
 /// A song's display name — its filename, minus the extension, with
@@ -84,6 +86,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
   @override
   Widget build(BuildContext context) {
     final locale = ref.watch(localeProvider);
+    final highestLevelReached = ref.watch(gameStateProvider).highestLevelReached;
     final screenSize = MediaQuery.sizeOf(context);
     const sideMargin = 28.0;
     final plankWidth = screenSize.width - sideMargin * 2;
@@ -98,6 +101,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
               for (final level in kInfoLevels)
                 _SongsLevelPage(
                   level: level,
+                  locked: level.level > highestLevelReached,
                   plankWidth: plankWidth,
                   plankHeight: plankHeight,
                   locale: locale,
@@ -116,6 +120,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
 
 class _SongsLevelPage extends StatelessWidget {
   final InfoLevelData level;
+  final bool locked;
   final double plankWidth;
   final double plankHeight;
   final AppLocale locale;
@@ -123,6 +128,7 @@ class _SongsLevelPage extends StatelessWidget {
   final ValueChanged<String> onToggle;
   const _SongsLevelPage({
     required this.level,
+    required this.locked,
     required this.plankWidth,
     required this.plankHeight,
     required this.locale,
@@ -156,7 +162,14 @@ class _SongsLevelPage extends StatelessWidget {
                 fontScale: 0.72,
               ),
               for (final file in level.songs)
-                _SongRow(file: file, playing: playingFile == file, onTap: () => onToggle(file), width: plankWidth, height: plankHeight),
+                _SongRow(
+                  file: file,
+                  locked: locked,
+                  playing: playingFile == file,
+                  onTap: () => onToggle(file),
+                  width: plankWidth,
+                  height: plankHeight,
+                ),
             ],
           ),
         ),
@@ -167,16 +180,24 @@ class _SongsLevelPage extends StatelessWidget {
 
 class _SongRow extends StatelessWidget {
   final String file;
+  final bool locked;
   final bool playing;
   final VoidCallback onTap;
   final double width;
   final double height;
-  const _SongRow({required this.file, required this.playing, required this.onTap, required this.width, required this.height});
+  const _SongRow({
+    required this.file,
+    required this.locked,
+    required this.playing,
+    required this.onTap,
+    required this.width,
+    required this.height,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: locked ? null : onTap,
       behavior: HitTestBehavior.opaque,
       child: WoodPlank(
         width: width,
@@ -184,16 +205,19 @@ class _SongRow extends StatelessWidget {
         assetPath: 'assets/images/menu_board_3.png',
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-          child: Row(
-            children: [
-              Expanded(
-                child: ColorfulPlankText(text: songDisplayName(file), fontSize: height * 0.2, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-              ),
-              SizedBox(width: width * 0.03),
-              playing
-                  ? Icon(Icons.pause_circle_filled_rounded, size: height * 0.52, color: kPlankIconColor, shadows: kPlankIconShadows)
-                  : Image.asset('assets/images/play_button.png', width: height * 0.52, height: height * 0.52, fit: BoxFit.contain),
-            ],
+          child: LockedContent(
+            locked: locked,
+            child: Row(
+              children: [
+                Expanded(
+                  child: ColorfulPlankText(text: songDisplayName(file), fontSize: height * 0.2, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+                ),
+                SizedBox(width: width * 0.03),
+                playing
+                    ? Icon(Icons.pause_circle_filled_rounded, size: height * 0.52, color: kPlankIconColor, shadows: kPlankIconShadows)
+                    : Image.asset('assets/images/play_button.png', width: height * 0.52, height: height * 0.52, fit: BoxFit.contain),
+              ],
+            ),
           ),
         ),
       ),

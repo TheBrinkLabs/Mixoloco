@@ -920,7 +920,7 @@ const kEvolutionChainLevel4 = [
   ),
   Ingredient(
     id: 'lemon_liqueur',
-    label: 'Limoncello',
+    label: 'Lemon Liqueur',
     color: Color(0xFFF5E663),
     tier: 1,
     shape: GlassShape.tumbler,

@@ -236,10 +236,10 @@ const kCocktailRecipesLevel4 = [
     price: 200,
   ),
   CocktailRecipe(
-    id: 'limoncello_fizz',
-    name: 'Limoncello Fizz',
+    id: 'lemon_fizz',
+    name: 'Lemon Fizz',
     ingredientIds: ['lemon_liqueur', 'tonic'],
-    assetPath: 'assets/images/limoncello_fizz.png',
+    assetPath: 'assets/images/lemon_fizz.png',
     price: 250,
   ),
   CocktailRecipe(

@@ -9,16 +9,25 @@ import '../../data/models/ingredient.dart';
 /// Beach bar" vs "the Rooftop bar" rather than a plain list with a
 /// label.
 class InfoLevelData {
+  final int level;
   final String name;
   final String backgroundAssetPath;
   final List<Ingredient> chain;
   final List<CocktailRecipe> recipes;
   final List<String> songs;
-  const InfoLevelData({required this.name, required this.backgroundAssetPath, required this.chain, required this.recipes, required this.songs});
+  const InfoLevelData({
+    required this.level,
+    required this.name,
+    required this.backgroundAssetPath,
+    required this.chain,
+    required this.recipes,
+    required this.songs,
+  });
 }
 
 const kInfoLevels = [
   InfoLevelData(
+    level: 1,
     name: 'Beach',
     backgroundAssetPath: 'assets/images/beach_background.png',
     chain: kEvolutionChain,
@@ -26,6 +35,7 @@ const kInfoLevels = [
     songs: kMusicTracks,
   ),
   InfoLevelData(
+    level: 2,
     name: 'Rooftop',
     backgroundAssetPath: 'assets/images/rooftop_background.png',
     chain: kEvolutionChainLevel2,
@@ -33,6 +43,7 @@ const kInfoLevels = [
     songs: kMusicTracksLevel2,
   ),
   InfoLevelData(
+    level: 3,
     name: 'Safari',
     backgroundAssetPath: 'assets/images/safari_background.png',
     chain: kEvolutionChainLevel3,
@@ -40,6 +51,7 @@ const kInfoLevels = [
     songs: kMusicTracksLevel3,
   ),
   InfoLevelData(
+    level: 4,
     name: 'Piazza',
     backgroundAssetPath: 'assets/images/piazza_background.png',
     chain: kEvolutionChainLevel4,

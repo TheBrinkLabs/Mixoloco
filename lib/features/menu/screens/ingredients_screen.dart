@@ -5,8 +5,10 @@ import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/glass_visual.dart';
+import '../../../core/widgets/locked_overlay.dart';
 import '../../../core/widgets/wood_plank.dart';
 import '../../../data/models/ingredient.dart';
+import '../../game/providers/game_state_provider.dart';
 import '../info_level_data.dart';
 
 /// Every ingredient in the evolution chain, one page per level (see
@@ -32,6 +34,7 @@ class _IngredientsScreenState extends ConsumerState<IngredientsScreen> {
   @override
   Widget build(BuildContext context) {
     final locale = ref.watch(localeProvider);
+    final highestLevelReached = ref.watch(gameStateProvider).highestLevelReached;
     final screenSize = MediaQuery.sizeOf(context);
     const sideMargin = 28.0;
     final plankWidth = screenSize.width - sideMargin * 2;
@@ -44,7 +47,13 @@ class _IngredientsScreenState extends ConsumerState<IngredientsScreen> {
             controller: _pageController,
             children: [
               for (final level in kInfoLevels)
-                _IngredientsLevelPage(level: level, plankWidth: plankWidth, plankHeight: plankHeight, locale: locale),
+                _IngredientsLevelPage(
+                  level: level,
+                  locked: level.level > highestLevelReached,
+                  plankWidth: plankWidth,
+                  plankHeight: plankHeight,
+                  locale: locale,
+                ),
             ],
           ),
           Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
@@ -56,10 +65,11 @@ class _IngredientsScreenState extends ConsumerState<IngredientsScreen> {
 
 class _IngredientsLevelPage extends StatelessWidget {
   final InfoLevelData level;
+  final bool locked;
   final double plankWidth;
   final double plankHeight;
   final AppLocale locale;
-  const _IngredientsLevelPage({required this.level, required this.plankWidth, required this.plankHeight, required this.locale});
+  const _IngredientsLevelPage({required this.level, required this.locked, required this.plankWidth, required this.plankHeight, required this.locale});
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +92,7 @@ class _IngredientsLevelPage extends StatelessWidget {
                 assetPath: 'assets/images/menu_board_3.png',
                 fontScale: 0.72,
               ),
-              for (final ingredient in level.chain) _IngredientRow(ingredient: ingredient, width: plankWidth, height: plankHeight),
+              for (final ingredient in level.chain) _IngredientRow(ingredient: ingredient, locked: locked, width: plankWidth, height: plankHeight),
             ],
           ),
         ),
@@ -93,9 +103,10 @@ class _IngredientsLevelPage extends StatelessWidget {
 
 class _IngredientRow extends StatelessWidget {
   final Ingredient ingredient;
+  final bool locked;
   final double width;
   final double height;
-  const _IngredientRow({required this.ingredient, required this.width, required this.height});
+  const _IngredientRow({required this.ingredient, required this.locked, required this.width, required this.height});
 
   @override
   Widget build(BuildContext context) {
@@ -105,14 +116,17 @@ class _IngredientRow extends StatelessWidget {
       assetPath: 'assets/images/menu_board_3.png',
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-        child: Row(
-          children: [
-            GlassVisual(ingredient: ingredient, size: height * 0.72, applyDisplayScale: false),
-            SizedBox(width: width * 0.04),
-            Expanded(
-              child: ColorfulPlankText(text: ingredient.label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-            ),
-          ],
+        child: LockedContent(
+          locked: locked,
+          child: Row(
+            children: [
+              GlassVisual(ingredient: ingredient, size: height * 0.72, applyDisplayScale: false),
+              SizedBox(width: width * 0.04),
+              Expanded(
+                child: ColorfulPlankText(text: ingredient.label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+              ),
+            ],
+          ),
         ),
       ),
     );
