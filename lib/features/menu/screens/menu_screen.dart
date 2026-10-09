@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/utils/progress_sync.dart';
 import '../../../core/widgets/bar_backdrop.dart';
+import '../../../core/widgets/cartoon_board.dart';
 import '../../../core/widgets/notification_tablet.dart';
 import '../../../core/widgets/game_logo.dart';
 import '../../../core/widgets/glass_visual.dart';
@@ -46,7 +47,12 @@ const kBeachSignPlankBottomFraction = 0.521;
 /// is the foot's position as an (x, y) fraction of (signWidth,
 /// signHeight); [legWidthFraction] sets the streak's thickness relative
 /// to signWidth, matching the real leg's own width.
-Widget _legShadow({required Offset footFraction, required double legWidthFraction, required double signWidth, required double signHeight}) {
+Widget _legShadow({
+  required Offset footFraction,
+  required double legWidthFraction,
+  required double signWidth,
+  required double signHeight,
+}) {
   final thickness = signWidth * legWidthFraction;
   final length = thickness * 5.5;
   return Positioned(
@@ -60,7 +66,14 @@ Widget _legShadow({required Offset footFraction, required double legWidthFractio
         height: thickness,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(thickness / 2),
-          gradient: LinearGradient(begin: Alignment.centerLeft, end: Alignment.centerRight, colors: [Colors.black.withValues(alpha: 0.45), Colors.black.withValues(alpha: 0.0)]),
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.black.withValues(alpha: 0.45),
+              Colors.black.withValues(alpha: 0.0),
+            ],
+          ),
         ),
       ),
     ),
@@ -83,7 +96,8 @@ class MenuScreen extends ConsumerStatefulWidget {
   ConsumerState<MenuScreen> createState() => _MenuScreenState();
 }
 
-class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObserver {
+class _MenuScreenState extends ConsumerState<MenuScreen>
+    with WidgetsBindingObserver {
   // Created once and kept for the screen's whole lifetime rather than
   // inline in build() — build() reruns on every credits/score change
   // (this screen watches gameStateProvider), and a fresh
@@ -117,7 +131,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
     if (uid == null) return;
     final changed = await syncProgress(ref.read(leagueRepositoryProvider), uid);
     if (changed && mounted) {
-      await ref.read(gameStateProvider.notifier).refreshLifetimeFieldsFromDisk();
+      await ref
+          .read(gameStateProvider.notifier)
+          .refreshLifetimeFieldsFromDisk();
     }
   }
 
@@ -161,7 +177,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
   }
 
   void _openSettings() {
-    _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+    _pushAndPauseFalling(
+      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+    );
   }
 
   /// League profile setup is one-time and lazy — only ever prompted the
@@ -169,11 +187,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
   /// of any app-launch flow (Mixoloco has no first-launch onboarding
   /// carousel to hook it into the way Capitle's own profile setup does).
   Future<void> _openLeaderboard() async {
-    final hasNickname = await ref.read(leagueControllerProvider.notifier).hasLocalNickname();
+    final hasNickname = await ref
+        .read(leagueControllerProvider.notifier)
+        .hasLocalNickname();
     if (!mounted) return;
-    _pushAndPauseFalling(MaterialPageRoute(
-      builder: (_) => hasNickname ? const LeagueScreen() : const NicknameSetupScreen(),
-    ));
+    _pushAndPauseFalling(
+      MaterialPageRoute(
+        builder: (_) =>
+            hasNickname ? const LeagueScreen() : const NicknameSetupScreen(),
+      ),
+    );
   }
 
   /// A game left via Home mid-run should be resumable as-is (that's the
@@ -186,22 +209,31 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
   /// highest the player's ever reached — see startNewGameAtLevel.
   Future<void> _playGame() async {
     final board = ref.read(gameStateProvider);
-    final inProgress = !board.gameOver && (board.score > 0 || board.placedItems.isNotEmpty);
+    final inProgress =
+        !board.gameOver && (board.score > 0 || board.placedItems.isNotEmpty);
     if (!inProgress) {
       await _startNewGame();
       return;
     }
     final locale = ref.read(localeProvider);
-    final choice = await showDialog<_PlayChoice>(context: context, builder: (_) => _PlayChoiceDialog(locale: locale));
+    final choice = await showDialog<_PlayChoice>(
+      context: context,
+      builder: (_) => _PlayChoiceDialog(locale: locale),
+    );
     if (!mounted || choice == null) return;
     if (choice == _PlayChoice.continueGame) {
-      _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const GameScreen()));
+      _pushAndPauseFalling(
+        MaterialPageRoute(builder: (_) => const GameScreen()),
+      );
     } else {
       // A real run was actually in progress (that's how we got here —
       // see the inProgress check above), so New Game means throwing it
       // away — confirm before doing that, same as Settings' own Reset
       // Progress confirm.
-      final confirmed = await showDialog<bool>(context: context, builder: (_) => _LoseProgressDialog(locale: locale));
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => _LoseProgressDialog(locale: locale),
+      );
       if (!mounted || confirmed != true) return;
       await _startNewGame();
     }
@@ -214,7 +246,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
       final locale = ref.read(localeProvider);
       final chosen = await showDialog<int>(
         context: context,
-        builder: (_) => _LevelPickerDialog(locale: locale, maxLevel: board.highestLevelReached, initialLevel: board.highestLevelReached),
+        builder: (_) => _LevelPickerDialog(
+          locale: locale,
+          maxLevel: board.highestLevelReached,
+          initialLevel: board.highestLevelReached,
+        ),
       );
       if (!mounted || chosen == null) return; // cancelled — stay on the menu
       level = chosen;
@@ -232,32 +268,17 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
 
     const sideMargin = 28.0;
     final maxPlankWidth = screenSize.width - sideMargin * 2;
-    // menu_board_white.png's own aspect (975/328) is noticeably more
-    // letterboxed than kMenuBoard3Aspect's (1045/281) — deriving height
-    // from the full screen width the same way as before made each board
-    // (and so the whole 5-board stack) run taller than the screen,
-    // pushing Settings behind the HUD row. Deriving width FROM the same
-    // height budget the stack has always used instead keeps its total
-    // height exactly what it's always been; these boards just end up
-    // narrower (centered) rather than stretched to some new height.
-    // Squeezed 10% smaller than the budget below would otherwise give —
-    // per feedback that adding a sixth option tile (Info) alongside the
-    // existing five left the stack running too tall/crowded otherwise.
-    final plankHeight = maxPlankWidth / kMenuBoard3Aspect * 0.9;
-    // A deliberate stretch past the board's own true aspect (not just
-    // scaled up — height stays exactly what the budget above gives it):
-    // 5% per feedback that labels were wrapping more than they should,
-    // then a further 15% on top of that per later feedback asking for
-    // more room still — gives every tile's text more room before
-    // ColorfulPlankText's own Wrap has to drop to a second line. Still
-    // comfortably under maxPlankWidth (~91% of it), so this doesn't
-    // overflow the screen's own side margins.
-    final plankWidth = plankHeight * kMenuBoardWhiteAspect * 1.05 * 1.15;
-    // Seven boards now — the six menu options (five original plus Info)
-    // plus one more underneath Settings that just hosts the Credits/
-    // Level/Unlocked row (see hudTabWidth/Height below) instead of
-    // floating separately on the sand below the whole pile.
-    final boardsColumnHeight = plankHeight * 7 + kBoardGap * 6;
+    // The code-drawn CartoonBoard (see cartoon_board.dart) replaced the
+    // old menu_board_white.png photo — full available width (genuinely
+    // "wider" than the old stretched-but-still-centered board) and a
+    // flatter aspect than that board's own 975/328 (a bit "thinner"),
+    // now that nothing needs correcting for a fixed source image's own
+    // proportions. Seven of these (the six menu options plus the HUD
+    // board) still comfortably fit the same vertical budget the old
+    // math targeted.
+    const kCartoonBoardAspect = 4.2;
+    final plankWidth = maxPlankWidth;
+    final plankHeight = plankWidth / kCartoonBoardAspect;
 
     // Sized to fit ON that sixth board (with its own bit of padding)
     // rather than the old floating row's screen-width-derived size —
@@ -266,9 +287,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
     // alone.
     final hudBoardPadding = plankWidth * 0.045;
     const hudTabGap = 8.0;
-    final hudTabWidthRaw = (plankWidth - hudBoardPadding * 2 - hudTabGap * 2) / 3;
+    final hudTabWidthRaw =
+        (plankWidth - hudBoardPadding * 2 - hudTabGap * 2) / 3;
     final hudTabHeightCap = plankHeight * 0.82;
-    final hudTabHeight = hudTabWidthRaw > hudTabHeightCap ? hudTabHeightCap : hudTabWidthRaw;
+    final hudTabHeight = hudTabWidthRaw > hudTabHeightCap
+        ? hudTabHeightCap
+        : hudTabWidthRaw;
     final hudTabWidth = hudTabHeight;
 
     // The beach_sign replacement for the header board — a two-post sign
@@ -282,7 +306,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
     final plankTop = signHeight * kBeachSignPlankTopFraction;
     final plankBottom = signHeight * kBeachSignPlankBottomFraction;
     final plankBandHeight = plankBottom - plankTop;
-    final logoHeight = plankBandHeight * 0.8 > 138 ? 138.0 : plankBandHeight * 0.8;
+    final logoHeight = plankBandHeight * 0.8 > 138
+        ? 138.0
+        : plankBandHeight * 0.8;
 
     return Scaffold(
       body: BarBackdrop(
@@ -317,9 +343,24 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                         // the lower right, pivoting at the real leg's own
                         // foot so it reads as that leg's cast shadow
                         // rather than a floating shape.
-                        _legShadow(footFraction: const Offset(0.2246, 0.945), legWidthFraction: 0.068, signWidth: signWidth, signHeight: signHeight),
-                        _legShadow(footFraction: const Offset(0.7772, 0.945), legWidthFraction: 0.068, signWidth: signWidth, signHeight: signHeight),
-                        Image.asset('assets/images/beach_sign.png', width: signWidth, height: signHeight, fit: BoxFit.contain),
+                        _legShadow(
+                          footFraction: const Offset(0.2246, 0.945),
+                          legWidthFraction: 0.068,
+                          signWidth: signWidth,
+                          signHeight: signHeight,
+                        ),
+                        _legShadow(
+                          footFraction: const Offset(0.7772, 0.945),
+                          legWidthFraction: 0.068,
+                          signWidth: signWidth,
+                          signHeight: signHeight,
+                        ),
+                        Image.asset(
+                          'assets/images/beach_sign.png',
+                          width: signWidth,
+                          height: signHeight,
+                          fit: BoxFit.contain,
+                        ),
                         Positioned(
                           top: plankTop + (plankBandHeight - logoHeight) / 2,
                           left: 0,
@@ -342,162 +383,199 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                 child: Transform.translate(
                   offset: Offset(0, -screenSize.height * 0.05),
                   child: Center(
-                    // A slight counter-clockwise lean on the whole board
-                    // pile + post together, pivoting from the bottom —
-                    // rooted at the "ground" like a real post that's
-                    // leaned over a little, rather than the boards tilting
-                    // independently of what they're mounted on.
-                    child: Transform.rotate(
-                      angle: -3 * math.pi / 180,
-                      alignment: Alignment.bottomCenter,
-                      child: SizedBox(
-                        width: plankWidth,
-                        child: Stack(
-                          alignment: Alignment.topCenter,
-                          clipBehavior: Clip.none,
-                          children: [
-                            // A signpost running behind the whole stack of
-                            // boards, stretched tall enough that only its
-                            // own top/bottom peek out past the topmost and
-                            // bottommost board — the boards themselves
-                            // (close together but with a slim gap, not
-                            // fully flush) cover the rest of it, so it
-                            // reads as one board pile mounted on a single
-                            // post.
-                            Positioned(
-                              // Symmetric top/bottom overhang — pokes out
-                              // above Play Game and below the new sixth
-                              // (HUD) board the same amount each way. The
-                              // HUD row used to float separately below
-                              // the whole pile, which needed the post
-                              // tuned to reach up behind it specifically;
-                              // now it's just another board in the same
-                              // Column, so the post threading behind
-                              // every board including this one and
-                              // poking out past its bottom edge is the
-                              // natural default again.
-                              top: -plankHeight * 0.6,
-                              child: Image.asset('assets/images/post.png', width: plankWidth * 0.09, height: boardsColumnHeight + plankHeight * 1.2, fit: BoxFit.fill),
+                    // Each board is now a flat, code-drawn CartoonBoard
+                    // (see cartoon_board.dart) rather than a photo plank
+                    // mounted on a post.png signpost — no more lean or
+                    // post to paint behind them, so this is just the
+                    // straight column of boards directly.
+                    child: SizedBox(
+                      width: plankWidth,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _MenuPlankTile(
+                            label: tr(locale, 'play_game'),
+                            icon: Icons.play_arrow_rounded,
+                            iconAsset: 'assets/images/play_button.png',
+                            width: plankWidth,
+                            height: plankHeight,
+                            onTap: _playGame,
+                            variant: kPlankTextVariant,
+                            font: kPlankTextFont,
+                            shadowStyle: kPlankShadowStyle,
+                          ),
+                          SizedBox(height: kBoardGap),
+                          _MenuPlankTile(
+                            label: tr(locale, 'best_scores'),
+                            icon: Icons.emoji_events_rounded,
+                            iconAsset: 'assets/images/best_scores.png',
+                            width: plankWidth,
+                            height: plankHeight,
+                            onTap: () => _pushAndPauseFalling(
+                              MaterialPageRoute(
+                                builder: (_) => const HighScoresScreen(),
+                              ),
                             ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
+                            variant: kPlankTextVariant,
+                            font: kPlankTextFont,
+                            shadowStyle: kPlankShadowStyle,
+                          ),
+                          SizedBox(height: kBoardGap),
+                          _MenuPlankTile(
+                            label: tr(locale, 'leaderboard'),
+                            icon: Icons.leaderboard_rounded,
+                            iconAsset: 'assets/images/leaderboard.png',
+                            width: plankWidth,
+                            height: plankHeight,
+                            onTap: _openLeaderboard,
+                            variant: kPlankTextVariant,
+                            font: kPlankTextFont,
+                            shadowStyle: kPlankShadowStyle,
+                          ),
+                          SizedBox(height: kBoardGap),
+                          _MenuPlankTile(
+                            label: tr(locale, 'shop'),
+                            icon: Icons.storefront_rounded,
+                            iconAsset: 'assets/images/shop.png',
+                            width: plankWidth,
+                            height: plankHeight,
+                            onTap: () => _pushAndPauseFalling(
+                              MaterialPageRoute(
+                                builder: (_) => const ShopScreen(),
+                              ),
+                            ),
+                            variant: kPlankTextVariant,
+                            font: kPlankTextFont,
+                            shadowStyle: kPlankShadowStyle,
+                          ),
+                          SizedBox(height: kBoardGap),
+                          _MenuPlankTile(
+                            label: tr(locale, 'info'),
+                            icon: Icons.menu_book_rounded,
+                            iconAsset: 'assets/images/info.png',
+                            // 10% bigger again per feedback (was 1.2),
+                            // nudged left a touch so it doesn't read
+                            // as crowding the title text now that
+                            // it's bigger still.
+                            iconScale: 1.32,
+                            iconShiftLeft: 0.1,
+                            width: plankWidth,
+                            height: plankHeight,
+                            onTap: () => _pushAndPauseFalling(
+                              MaterialPageRoute(
+                                builder: (_) => const InfoScreen(),
+                              ),
+                            ),
+                            variant: kPlankTextVariant,
+                            font: kPlankTextFont,
+                            shadowStyle: kPlankShadowStyle,
+                          ),
+                          SizedBox(height: kBoardGap),
+                          _MenuPlankTile(
+                            label: tr(locale, 'settings'),
+                            icon: Icons.settings_rounded,
+                            iconAsset: 'assets/images/settings.png',
+                            width: plankWidth,
+                            height: plankHeight,
+                            onTap: _openSettings,
+                            variant: kPlankTextVariant,
+                            font: kPlankTextFont,
+                            shadowStyle: kPlankShadowStyle,
+                          ),
+                          SizedBox(height: kBoardGap),
+                          SizedBox(
+                            width: plankWidth,
+                            height: plankHeight,
+                            child: Stack(
+                              fit: StackFit.expand,
                               children: [
-                                _MenuPlankTile(label: tr(locale, 'play_game'), icon: Icons.play_arrow_rounded, iconAsset: 'assets/images/play_button.png', width: plankWidth, height: plankHeight, onTap: _playGame, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-                                SizedBox(height: kBoardGap),
-                                _MenuPlankTile(
-                                  label: tr(locale, 'best_scores'),
-                                  icon: Icons.emoji_events_rounded,
-                                  iconAsset: 'assets/images/best_scores.png',
+                                CartoonBoard(
                                   width: plankWidth,
                                   height: plankHeight,
-                                  onTap: () => _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const HighScoresScreen())),
-                                  variant: kPlankTextVariant,
-                                  font: kPlankTextFont,
-                                  shadowStyle: kPlankShadowStyle,
                                 ),
-                                SizedBox(height: kBoardGap),
-                                _MenuPlankTile(label: tr(locale, 'leaderboard'), icon: Icons.leaderboard_rounded, iconAsset: 'assets/images/leaderboard.png', width: plankWidth, height: plankHeight, onTap: _openLeaderboard, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-                                SizedBox(height: kBoardGap),
-                                _MenuPlankTile(
-                                  label: tr(locale, 'shop'),
-                                  icon: Icons.storefront_rounded,
-                                  iconAsset: 'assets/images/shop.png',
-                                  width: plankWidth,
-                                  height: plankHeight,
-                                  onTap: () => _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const ShopScreen())),
-                                  variant: kPlankTextVariant,
-                                  font: kPlankTextFont,
-                                  shadowStyle: kPlankShadowStyle,
-                                ),
-                                SizedBox(height: kBoardGap),
-                                _MenuPlankTile(
-                                  label: tr(locale, 'info'),
-                                  icon: Icons.menu_book_rounded,
-                                  iconAsset: 'assets/images/info.png',
-                                  // 10% bigger again per feedback (was 1.2),
-                                  // nudged left a touch so it doesn't read
-                                  // as crowding the title text now that
-                                  // it's bigger still.
-                                  iconScale: 1.32,
-                                  iconShiftLeft: 0.1,
-                                  width: plankWidth,
-                                  height: plankHeight,
-                                  onTap: () => _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const InfoScreen())),
-                                  variant: kPlankTextVariant,
-                                  font: kPlankTextFont,
-                                  shadowStyle: kPlankShadowStyle,
-                                ),
-                                SizedBox(height: kBoardGap),
-                                _MenuPlankTile(label: tr(locale, 'settings'), icon: Icons.settings_rounded, iconAsset: 'assets/images/settings.png', width: plankWidth, height: plankHeight, onTap: _openSettings, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-                                SizedBox(height: kBoardGap),
-                                SizedBox(
-                                  width: plankWidth,
-                                  height: plankHeight,
-                                  child: Stack(
-                                    fit: StackFit.expand,
+                                Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Image.asset('assets/images/menu_board_white.png', fit: BoxFit.fill),
-                                      Center(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            _HudTab(
-                                              label: tr(locale, 'credits'),
-                                              width: hudTabWidth,
-                                              height: hudTabHeight,
-                                              // 2x bigger and switched to
-                                              // the same gold/orange
-                                              // gradient wood-font as the
-                                              // label above it, per
-                                              // feedback that plain blue
-                                              // text read too small and
-                                              // out of place here.
-                                              content: ColorfulPlankText(
-                                                text: '${board.credits}',
-                                                fontSize: hudTabHeight * 0.125 * 2,
-                                                variant: PlankTextVariant.sunsetGradient,
-                                                font: kPlankTextFont,
-                                                shadowStyle: kPlankShadowStyle,
-                                              ),
-                                            ),
-                                            SizedBox(width: hudTabGap),
-                                            _HudTab(
-                                              label: tr(locale, 'level'),
-                                              width: hudTabWidth,
-                                              height: hudTabHeight,
-                                              content: ColorfulPlankText(
-                                                text: '${board.level}',
-                                                fontSize: hudTabHeight * 0.125 * 2,
-                                                variant: PlankTextVariant.sunsetGradient,
-                                                font: kPlankTextFont,
-                                                shadowStyle: kPlankShadowStyle,
-                                              ),
-                                            ),
-                                            SizedBox(width: hudTabGap),
-                                            _HudTab(
-                                              label: tr(locale, 'unlocked'),
-                                              width: hudTabWidth,
-                                              height: hudTabHeight,
-                                              // Once a higher bar's ever been reached, its lowest
-                                              // tier still outranks every lower-bar tier, so the
-                                              // display switches over regardless of how far into
-                                              // that chain the matching highestTierUnlockedLevelN
-                                              // itself is (it can briefly be -1, right at the
-                                              // moment of leveling up before that chain's first
-                                              // tier's actually been seen — clamped to 0/Cherry
-                                              // rather than crashing).
-                                              content: GlassVisual(
-                                                ingredient: board.highestLevelReached >= 4
-                                                    ? kEvolutionChainLevel4[board.highestTierUnlockedLevel4.clamp(0, kEvolutionChainLevel4.length - 1)]
-                                                    : board.highestLevelReached >= 3
-                                                    ? kEvolutionChainLevel3[board.highestTierUnlockedLevel3.clamp(0, kEvolutionChainLevel3.length - 1)]
-                                                    : board.highestLevelReached >= 2
-                                                    ? kEvolutionChainLevel2[board.highestTierUnlockedLevel2.clamp(0, kEvolutionChainLevel2.length - 1)]
-                                                    : kEvolutionChain[board.highestTierUnlocked],
-                                                size: hudTabHeight * 0.4,
-                                              ),
-                                            ),
-                                          ],
+                                      _HudTab(
+                                        label: tr(locale, 'credits'),
+                                        width: hudTabWidth,
+                                        height: hudTabHeight,
+                                        // 2x bigger and switched to
+                                        // the same gold/orange
+                                        // gradient wood-font as the
+                                        // label above it, per
+                                        // feedback that plain blue
+                                        // text read too small and
+                                        // out of place here.
+                                        content: ColorfulPlankText(
+                                          text: '${board.credits}',
+                                          fontSize: hudTabHeight * 0.125 * 2,
+                                          variant:
+                                              PlankTextVariant.sunsetGradient,
+                                          font: kPlankTextFont,
+                                          shadowStyle: kPlankShadowStyle,
+                                        ),
+                                      ),
+                                      SizedBox(width: hudTabGap),
+                                      _HudTab(
+                                        label: tr(locale, 'level'),
+                                        width: hudTabWidth,
+                                        height: hudTabHeight,
+                                        content: ColorfulPlankText(
+                                          text: '${board.level}',
+                                          fontSize: hudTabHeight * 0.125 * 2,
+                                          variant:
+                                              PlankTextVariant.sunsetGradient,
+                                          font: kPlankTextFont,
+                                          shadowStyle: kPlankShadowStyle,
+                                        ),
+                                      ),
+                                      SizedBox(width: hudTabGap),
+                                      _HudTab(
+                                        label: tr(locale, 'unlocked'),
+                                        width: hudTabWidth,
+                                        height: hudTabHeight,
+                                        // Once a higher bar's ever been reached, its lowest
+                                        // tier still outranks every lower-bar tier, so the
+                                        // display switches over regardless of how far into
+                                        // that chain the matching highestTierUnlockedLevelN
+                                        // itself is (it can briefly be -1, right at the
+                                        // moment of leveling up before that chain's first
+                                        // tier's actually been seen — clamped to 0/Cherry
+                                        // rather than crashing).
+                                        content: GlassVisual(
+                                          ingredient:
+                                              board.highestLevelReached >= 4
+                                              ? kEvolutionChainLevel4[board
+                                                    .highestTierUnlockedLevel4
+                                                    .clamp(
+                                                      0,
+                                                      kEvolutionChainLevel4
+                                                              .length -
+                                                          1,
+                                                    )]
+                                              : board.highestLevelReached >= 3
+                                              ? kEvolutionChainLevel3[board
+                                                    .highestTierUnlockedLevel3
+                                                    .clamp(
+                                                      0,
+                                                      kEvolutionChainLevel3
+                                                              .length -
+                                                          1,
+                                                    )]
+                                              : board.highestLevelReached >= 2
+                                              ? kEvolutionChainLevel2[board
+                                                    .highestTierUnlockedLevel2
+                                                    .clamp(
+                                                      0,
+                                                      kEvolutionChainLevel2
+                                                              .length -
+                                                          1,
+                                                    )]
+                                              : kEvolutionChain[board
+                                                    .highestTierUnlocked],
+                                          size: hudTabHeight * 0.4,
                                         ),
                                       ),
                                     ],
@@ -505,8 +583,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
                                 ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -520,7 +598,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with WidgetsBindingObse
   }
 }
 
-
 /// One of the three bottom HUD tabs (Credits/Level/Unlocked) — an
 /// empty_tab_white.png tile (a paler alternative used only for this
 /// row, to match the whitewashed board it sits on) with a small label
@@ -530,7 +607,12 @@ class _HudTab extends StatelessWidget {
   final Widget content;
   final double width;
   final double height;
-  const _HudTab({required this.label, required this.content, required this.width, required this.height});
+  const _HudTab({
+    required this.label,
+    required this.content,
+    required this.width,
+    required this.height,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -549,7 +631,10 @@ class _HudTab extends StatelessWidget {
           // keeps the wood and the text sharing the same footprint.
           Padding(
             padding: EdgeInsets.all(width * 0.07),
-            child: Image.asset('assets/images/empty_tab_white.png', fit: BoxFit.fill),
+            child: Image.asset(
+              'assets/images/empty_tab_white.png',
+              fit: BoxFit.fill,
+            ),
           ),
           Center(
             child: Column(
@@ -668,7 +753,7 @@ class _MenuPlankTileState extends State<_MenuPlankTile> {
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
-          Image.asset('assets/images/menu_board_white.png', width: widget.width, height: widget.height, fit: BoxFit.fill),
+          CartoonBoard(width: widget.width, height: widget.height),
           Padding(
             padding: EdgeInsets.only(left: widget.width * 0.09),
             child: Row(
@@ -700,7 +785,13 @@ class _MenuPlankTileState extends State<_MenuPlankTile> {
                     icon,
                     size: widget.height * 0.391,
                     color: plankAccentColor(widget.variant),
-                    shadows: const [Shadow(color: Colors.black38, blurRadius: 3, offset: Offset(1, 1.5))],
+                    shadows: const [
+                      Shadow(
+                        color: Colors.black38,
+                        blurRadius: 3,
+                        offset: Offset(1, 1.5),
+                      ),
+                    ],
                   ),
                 SizedBox(width: widget.width * 0.025),
                 // Flexible — gives ColorfulPlankText's own Wrap a real
@@ -710,7 +801,13 @@ class _MenuPlankTileState extends State<_MenuPlankTile> {
                 // second line instead of overflowing past the board's
                 // edge.
                 Flexible(
-                  child: ColorfulPlankText(text: widget.label, fontSize: widget.height * 0.3, variant: widget.variant, font: widget.font, shadowStyle: widget.shadowStyle),
+                  child: ColorfulPlankText(
+                    text: widget.label,
+                    fontSize: widget.height * 0.3,
+                    variant: widget.variant,
+                    font: widget.font,
+                    shadowStyle: widget.shadowStyle,
+                  ),
                 ),
               ],
             ),
@@ -719,15 +816,25 @@ class _MenuPlankTileState extends State<_MenuPlankTile> {
             Positioned(
               right: widget.width * 0.06,
               child: Container(
-                padding: EdgeInsets.symmetric(horizontal: widget.width * 0.02, vertical: widget.height * 0.06),
+                padding: EdgeInsets.symmetric(
+                  horizontal: widget.width * 0.02,
+                  vertical: widget.height * 0.06,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.bg.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.15),
+                  ),
                 ),
                 child: Text(
                   widget.soonLabel,
-                  style: TextStyle(fontSize: widget.height * 0.16, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: AppColors.textMuted),
+                  style: TextStyle(
+                    fontSize: widget.height * 0.16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ),
             ),
@@ -742,7 +849,12 @@ class _MenuPlankTileState extends State<_MenuPlankTile> {
       onTapCancel: () => _setPressed(false),
       onTapUp: (_) => _setPressed(false),
       onTap: widget.onTap,
-      child: AnimatedScale(scale: _pressed ? 0.96 : 1.0, duration: const Duration(milliseconds: 90), curve: Curves.easeOut, child: tile),
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+        child: tile,
+      ),
     );
   }
 }
@@ -766,17 +878,35 @@ class _PlayChoiceDialog extends StatelessWidget {
             Text(
               tr(locale, 'play_choice_title'),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textOnStone,
+              ),
             ),
             const SizedBox(height: 20),
             StoneButton(
               onTap: () => Navigator.of(context).pop(_PlayChoice.continueGame),
-              child: Text(tr(locale, 'continue_label'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
+              child: Text(
+                tr(locale, 'continue_label'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
+              ),
             ),
             const SizedBox(height: 10),
             StoneButton(
               onTap: () => Navigator.of(context).pop(_PlayChoice.newGame),
-              child: Text(tr(locale, 'new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
+              child: Text(
+                tr(locale, 'new_game'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
+              ),
             ),
           ],
         ),
@@ -805,24 +935,45 @@ class _LoseProgressDialog extends StatelessWidget {
             Text(
               tr(locale, 'lose_progress_title'),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textOnStone,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               tr(locale, 'lose_progress_body'),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: AppColors.textOnStoneMuted),
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textOnStoneMuted,
+              ),
             ),
             const SizedBox(height: 20),
             StoneButton(
               onTap: () => Navigator.of(context).pop(true),
-              child: Text(tr(locale, 'yes_new_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
+              child: Text(
+                tr(locale, 'yes_new_game'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
+              ),
             ),
             const SizedBox(height: 10),
             StoneButton(
               onTap: () => Navigator.of(context).pop(false),
               height: 40,
-              child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
+              child: Text(
+                tr(locale, 'cancel'),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textOnStoneMuted,
+                ),
+              ),
             ),
           ],
         ),
@@ -839,7 +990,11 @@ class _LevelPickerDialog extends StatelessWidget {
   final AppLocale locale;
   final int maxLevel;
   final int initialLevel;
-  const _LevelPickerDialog({required this.locale, required this.maxLevel, required this.initialLevel});
+  const _LevelPickerDialog({
+    required this.locale,
+    required this.maxLevel,
+    required this.initialLevel,
+  });
 
   static String _levelName(int level) => switch (level) {
     1 => 'Beach',
@@ -856,7 +1011,15 @@ class _LevelPickerDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(tr(locale, 'choose_level'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone)),
+            Text(
+              tr(locale, 'choose_level'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textOnStone,
+              ),
+            ),
             const SizedBox(height: 18),
             for (var level = maxLevel; level >= 1; level--) ...[
               if (level != maxLevel) const SizedBox(height: 10),
@@ -866,7 +1029,11 @@ class _LevelPickerDialog extends StatelessWidget {
                 height: 48,
                 child: Text(
                   '${tr(locale, 'level')} $level — ${_levelName(level)}',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black,
+                  ),
                 ),
               ),
             ],
