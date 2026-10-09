@@ -678,12 +678,15 @@ class _ResetProgressPlankRow extends StatelessWidget {
               Icon(Icons.restart_alt_rounded, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
               SizedBox(width: width * 0.03),
               Expanded(
-                child: ColorfulPlankText(
-                  text: tr(locale, 'reset_progress'),
-                  fontSize: height * 0.2,
-                  variant: kPlankTextVariant,
-                  font: kPlankTextFont,
-                  shadowStyle: kPlankShadowStyle,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ColorfulPlankText(
+                    text: tr(locale, 'reset_progress'),
+                    fontSize: height * 0.2,
+                    variant: kPlankTextVariant,
+                    font: kPlankTextFont,
+                    shadowStyle: kPlankShadowStyle,
+                  ),
                 ),
               ),
             ],

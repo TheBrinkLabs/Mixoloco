@@ -453,12 +453,15 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
                             label: tr(locale, 'info'),
                             icon: Icons.menu_book_rounded,
                             iconAsset: 'assets/images/info.png',
-                            // 10% bigger again per feedback (was 1.2),
-                            // nudged left a touch so it doesn't read
-                            // as crowding the title text now that
-                            // it's bigger still.
+                            // 10% bigger again per feedback (was 1.2).
+                            // The left nudge that went with that bump
+                            // was too much per later feedback — it read
+                            // as out of line with every other tile's
+                            // icon — pulled back closer to centered,
+                            // just enough to keep the bigger icon off
+                            // the title text.
                             iconScale: 1.32,
-                            iconShiftLeft: 0.1,
+                            iconShiftLeft: 0.04,
                             width: plankWidth,
                             height: plankHeight,
                             onTap: () => _pushAndPauseFalling(
