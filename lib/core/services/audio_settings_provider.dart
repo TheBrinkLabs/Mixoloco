@@ -20,15 +20,20 @@ const kMusicTracks = ['Saltwater_Morning.mp3', 'Saltwater_Sunsets.mp3', 'Warm_Af
 const kMusicTracksLevel2 = ['Amber_Terrace.mp3', 'Velvet_Boulevard.mp3', 'Velvet_Strings_at_Dusk.mp3', 'Golden_Hour_Motion.mp3'];
 
 /// The safari bar's own playlist (Level 3) — see [kMusicTracksLevel2]'s
-/// doc for how [musicTracksForLevel] picks between the three.
+/// doc for how [musicTracksForLevel] picks between the four.
 const kMusicTracksLevel3 = ['Furaha_Iko_Hapa.mp3', 'Furaha_Iko_Mixoloco.mp3', 'Haya_Heya_Ho.mp3', 'Karibu_Mixo_loco.mp3'];
 
+/// The piazza bar's own playlist (Level 4) — see [kMusicTracksLevel2]'s
+/// doc for how [musicTracksForLevel] picks between the four.
+const kMusicTracksLevel4 = ['Afternoon_in_the_Piazza.mp3', 'Midday_in_the_Piazza.mp3', 'Plaza_Aperitivo.mp3', 'Two_Glasses_on_the_Marble.mp3'];
+
 /// Which playlist plays for [level] — shared by [AudioSettingsNotifier
-/// .playGameMusic] so the beach/rooftop/safari choice can't drift out of
-/// sync between call sites. Menu music stays on [kMusicTracks] regardless
-/// of lifetime level reached — the home screen's own visuals (sign,
-/// sand, boards) never change, only the in-game table does.
+/// .playGameMusic] so the beach/rooftop/safari/piazza choice can't drift
+/// out of sync between call sites. Menu music stays on [kMusicTracks]
+/// regardless of lifetime level reached — the home screen's own visuals
+/// (sign, sand, boards) never change, only the in-game table does.
 List<String> musicTracksForLevel(int level) {
+  if (level >= 4) return kMusicTracksLevel4;
   if (level >= 3) return kMusicTracksLevel3;
   if (level >= 2) return kMusicTracksLevel2;
   return kMusicTracks;
