@@ -222,9 +222,10 @@ CocktailRecipe get kStarterCocktailLevel3 => kCocktailRecipesLevel3.firstWhere((
 /// fruit/liqueur-plus-Prosecco shape Bellini/Mimosa/Marula Sunset already
 /// established on the earlier two chains; Hugo Spritz specifically needs
 /// Mint (and Prosecco/Elderflower Liqueur) to actually read as a Hugo
-/// Spritz rather than just another fruit spritz — real recipes also
-/// include a splash of soda and a lime wedge, both dropped here to keep
-/// it to the chain's own established 2-3-ingredient shape. French 75
+/// Spritz rather than just another fruit spritz — real recipes use a
+/// lime wedge, but Lime isn't on this chain (already reused on Levels
+/// 1-3), so Lemon stands in for it; the real recipe's splash of soda is
+/// dropped to keep it to a reasonable ingredient count. French 75
 /// uses Cognac rather than gin — the original Harry's New York Bar
 /// version did too, and gin itself isn't on this chain (already reused
 /// on Level 2 and Level 3, so Level 4 leans into its own new spirits
@@ -274,7 +275,10 @@ const kCocktailRecipesLevel4 = [
   CocktailRecipe(
     id: 'hugo_spritz',
     name: 'Hugo Spritz',
-    ingredientIds: ['mint', 'elderflower_liqueur', 'prosecco'],
+    // Lemon stands in for the real recipe's lime wedge — this chain
+    // doesn't carry Lime (already on Levels 1-3), so Lemon's the
+    // closest citrus actually available here.
+    ingredientIds: ['mint', 'lemon', 'elderflower_liqueur', 'prosecco'],
     assetPath: 'assets/images/hugo_spritz.png',
     price: 450,
   ),
