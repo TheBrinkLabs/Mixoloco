@@ -1,10 +1,29 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/services/progression_service.dart';
 
-/// The app's supported languages — English (default) plus Spanish as the
-/// first translated pilot. Adding a language means adding a case here
-/// and a matching entry in every map in core/i18n/strings.dart.
-enum AppLocale { en, es }
+/// The app's supported languages — English (default), plus Spanish,
+/// German, Italian, Japanese, and Korean. Adding a language means adding
+/// a case here, a code in [_codeFor]/[_localeForCode], and a matching
+/// entry in every map in core/i18n/strings.dart.
+enum AppLocale { en, es, de, it, ja, ko }
+
+String _codeFor(AppLocale locale) => switch (locale) {
+  AppLocale.en => 'en',
+  AppLocale.es => 'es',
+  AppLocale.de => 'de',
+  AppLocale.it => 'it',
+  AppLocale.ja => 'ja',
+  AppLocale.ko => 'ko',
+};
+
+AppLocale _localeForCode(String code) => switch (code) {
+  'es' => AppLocale.es,
+  'de' => AppLocale.de,
+  'it' => AppLocale.it,
+  'ja' => AppLocale.ja,
+  'ko' => AppLocale.ko,
+  _ => AppLocale.en,
+};
 
 class LocaleNotifier extends Notifier<AppLocale> {
   @override
@@ -15,12 +34,12 @@ class LocaleNotifier extends Notifier<AppLocale> {
 
   Future<void> _loadPersisted() async {
     final code = await loadLocaleCode();
-    state = code == 'es' ? AppLocale.es : AppLocale.en;
+    state = _localeForCode(code);
   }
 
   Future<void> setLocale(AppLocale locale) async {
     state = locale;
-    await saveLocaleCode(locale == AppLocale.es ? 'es' : 'en');
+    await saveLocaleCode(_codeFor(locale));
   }
 }
 

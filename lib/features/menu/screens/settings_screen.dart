@@ -234,7 +234,18 @@ class _LanguageDropdown extends StatelessWidget {
   final double height;
   const _LanguageDropdown({required this.value, required this.onChanged, required this.height});
 
-  static String _name(AppLocale locale) => locale == AppLocale.en ? 'English' : 'Español';
+  // Each language's own name, in its own script — same convention a
+  // real language picker uses (an English speaker still recognizes
+  // "Español"/"Deutsch" even without reading them), so this doesn't
+  // need its own tr() entries.
+  static String _name(AppLocale locale) => switch (locale) {
+    AppLocale.en => 'English',
+    AppLocale.es => 'Español',
+    AppLocale.de => 'Deutsch',
+    AppLocale.it => 'Italiano',
+    AppLocale.ja => '日本語',
+    AppLocale.ko => '한국어',
+  };
 
   @override
   Widget build(BuildContext context) {
