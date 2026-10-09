@@ -899,7 +899,7 @@ const kEvolutionChainLevel3 = [
 
 /// The piazza bar's own evolution chain (Level 4) — same independent-
 /// chain shape as [kEvolutionChainLevel3] (tiers 0-12, local to this
-/// chain), European-themed. Lemon/Vodka/Tonic/Prosecco reuse their
+/// chain), European-themed. Lemon/Vodka/Mint/Tonic/Prosecco reuse their
 /// existing art and measurements directly (same pattern every later
 /// chain has followed for ingredients that already exist); Ginger Ale
 /// also reuses Level 3's Ginger Beer art file outright (same picture,
@@ -944,16 +944,20 @@ const kEvolutionChainLevel4 = [
     isMiniShot: true,
   ),
   Ingredient(
-    id: 'aperol',
-    label: 'Aperol',
-    color: Color(0xFFFF7F32),
+    // Aperol itself is a brand name, not a generic spirit category the
+    // way "gin" or "vermouth" are — swapped for Peppermint instead
+    // (same id/art/measurements as Level 1's own entry), which Hugo
+    // Spritz actually needs to read as a real Hugo Spritz in the first
+    // place.
+    id: 'mint',
+    label: 'Peppermint',
+    color: Color(0xFF1B7B4B),
     tier: 3,
-    shape: GlassShape.tumbler,
-    debris: DebrisType.glass,
-    assetPath: 'assets/images/ingredient_aperol.png',
-    displayScale: 1.078,
-    displayScaleX: 1.700,
-    isAlcoholic: true,
+    shape: GlassShape.martini,
+    debris: DebrisType.leaf,
+    assetPath: 'assets/images/ingredient_mint.png',
+    displayScale: 1.045,
+    displayScaleX: 1.434,
   ),
   Ingredient(
     id: 'tonic',

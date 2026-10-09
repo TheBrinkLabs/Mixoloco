@@ -218,13 +218,21 @@ CocktailRecipe get kStarterCocktailLevel3 => kCocktailRecipesLevel3.firstWhere((
 
 /// The piazza bar's own cocktail list (Level 4) — same shape as
 /// [kCocktailRecipesLevel3], ordered easiest to hardest by highest
-/// evolution tier needed. All seven are real European classics (or close
-/// variants): Kir Royale and the Aperol/Hugo Spritzes reuse the same
+/// evolution tier needed. Kir Royale and Hugo Spritz reuse the same
 /// fruit/liqueur-plus-Prosecco shape Bellini/Mimosa/Marula Sunset already
-/// established on the earlier two chains. French 75 uses Cognac rather
-/// than gin — the original Harry's New York Bar version did too, and gin
-/// itself isn't on this chain (already reused on Level 2 and Level 3, so
-/// Level 4 leans into its own new spirits instead).
+/// established on the earlier two chains; Hugo Spritz specifically needs
+/// Mint (and Prosecco/Elderflower Liqueur) to actually read as a Hugo
+/// Spritz rather than just another fruit spritz — real recipes also
+/// include a splash of soda and a lime wedge, both dropped here to keep
+/// it to the chain's own established 2-3-ingredient shape. French 75
+/// uses Cognac rather than gin — the original Harry's New York Bar
+/// version did too, and gin itself isn't on this chain (already reused
+/// on Level 2 and Level 3, so Level 4 leans into its own new spirits
+/// instead). Strawberry Mule continues the "spirit + ginger ale/beer +
+/// fruit" mule shape Level 3's Citrus Mule/Savanna Gold Mule already
+/// established, taking the slot an Aperol Spritz would have — Aperol
+/// itself is a brand name, not a generic spirit, so neither it nor a
+/// recipe built around it belongs here.
 const kStarterCocktailIdLevel4 = 'vodka_lemon';
 
 const kCocktailRecipesLevel4 = [
@@ -243,30 +251,30 @@ const kCocktailRecipesLevel4 = [
     price: 250,
   ),
   CocktailRecipe(
+    id: 'strawberry_mule',
+    name: 'Strawberry Mule',
+    ingredientIds: ['vodka', 'ginger_ale', 'strawberry'],
+    assetPath: 'assets/images/strawberry_mule.png',
+    price: 300,
+  ),
+  CocktailRecipe(
     id: 'emerald_fizz',
     name: 'Emerald Fizz',
     ingredientIds: ['irish_cream', 'ginger_ale'],
     assetPath: 'assets/images/emerald_fizz.png',
-    price: 300,
+    price: 350,
   ),
   CocktailRecipe(
     id: 'kir_royale',
     name: 'Kir Royale',
     ingredientIds: ['blackcurrant', 'prosecco'],
     assetPath: 'assets/images/kir_royale.png',
-    price: 350,
-  ),
-  CocktailRecipe(
-    id: 'aperol_spritz',
-    name: 'Aperol Spritz',
-    ingredientIds: ['aperol', 'prosecco', 'tonic'],
-    assetPath: 'assets/images/aperol_spritz.png',
     price: 400,
   ),
   CocktailRecipe(
     id: 'hugo_spritz',
     name: 'Hugo Spritz',
-    ingredientIds: ['elderflower_liqueur', 'prosecco', 'strawberry'],
+    ingredientIds: ['mint', 'elderflower_liqueur', 'prosecco'],
     assetPath: 'assets/images/hugo_spritz.png',
     price: 450,
   ),
