@@ -1247,6 +1247,20 @@ class _MenuListRow extends StatelessWidget {
 /// There's no more Play Again here — restarting in place read as
 /// skipping past what just happened; the plaque's whole point is to let
 /// that sink in before the player decides what's next from the menu.
+/// The "GAME OVER" banner art has its own text baked in, so it needs a
+/// per-language version rather than reading through [tr] — a plain photo
+/// with lettering painted on, same reasoning header_board.png's own art
+/// needed localizing for (if it ever gets text added). Falls back to the
+/// English original for any locale without its own variant yet.
+String _gameOverAssetPathFor(AppLocale locale) => switch (locale) {
+  AppLocale.es => 'assets/images/game_over_esp.png',
+  AppLocale.de => 'assets/images/game_over_ger.png',
+  AppLocale.it => 'assets/images/game_over_ita.png',
+  AppLocale.ja => 'assets/images/game_over_jap.png',
+  AppLocale.ko => 'assets/images/game_over_kor.png',
+  AppLocale.en => 'assets/images/game_over.png',
+};
+
 class _GameOverOverlay extends StatelessWidget {
   final BoardState board;
   final VoidCallback onHome;
@@ -1282,7 +1296,7 @@ class _GameOverOverlay extends StatelessWidget {
                   shadowStyle: kPlankShadowStyle,
                 )
               else
-                Image.asset('assets/images/game_over.png', width: screenWidth * 0.68),
+                Image.asset(_gameOverAssetPathFor(locale), width: screenWidth * 0.68),
               const SizedBox(height: 10),
               if (board.isNewHighScore) ...[
                 ColorfulPlankText(
