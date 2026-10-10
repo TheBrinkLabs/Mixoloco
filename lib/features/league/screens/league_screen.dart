@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/i18n/strings.dart';
+import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart';
@@ -47,6 +49,7 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(leagueControllerProvider);
+    final locale = ref.watch(localeProvider);
     final screenSize = MediaQuery.sizeOf(context);
     final rowWidth = screenSize.width - 32;
 
@@ -60,7 +63,7 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
               child: state.loading
                   ? const Center(child: CircularProgressIndicator(color: AppColors.sunsetOrange))
                   : state.error == 'not_signed_in'
-                  ? _buildConnecting()
+                  ? _buildConnecting(locale)
                   : RefreshIndicator(
                       color: AppColors.sunsetOrange,
                       onRefresh: () => ref.read(leagueControllerProvider.notifier).refresh(),
@@ -73,15 +76,19 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         children: [
                           if (!_resultBannerDismissed && state.lastWeekResultIsNew && state.lastWeekResult != null)
-                            _WeekResultBanner(result: state.lastWeekResult!, onDismiss: () => setState(() => _resultBannerDismissed = true)),
-                          _buildHeader(state, rowWidth),
+                            _WeekResultBanner(
+                              result: state.lastWeekResult!,
+                              locale: locale,
+                              onDismiss: () => setState(() => _resultBannerDismissed = true),
+                            ),
+                          _buildHeader(state, rowWidth, locale),
                           const SizedBox(height: 6),
                           if (state.pendingJoin)
-                            _buildPendingJoin()
+                            _buildPendingJoin(locale)
                           else if (state.leaderboard.isEmpty)
-                            _buildEmpty()
+                            _buildEmpty(locale)
                           else ...[
-                            _LeaderboardHeaderRow(width: rowWidth),
+                            _LeaderboardHeaderRow(width: rowWidth, locale: locale),
                             ...state.leaderboard.asMap().entries.map((e) => _LeaderboardRow(
                               rank: e.key + 1,
                               entry: e.value,
@@ -101,48 +108,48 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
     );
   }
 
-  Widget _buildConnecting() {
-    return const Center(
+  Widget _buildConnecting(AppLocale locale) {
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Text(
-          "Couldn't connect to the league yet — check your connection and reopen this screen.",
+          tr(locale, 'league_connecting_error'),
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
         ),
       ),
     );
   }
 
-  Widget _buildHeader(LeagueState state, double width) {
+  Widget _buildHeader(LeagueState state, double width, AppLocale locale) {
     // Just the tier plate, full width — nickname/score are already
     // visible in this player's own row further down, so repeating them
     // here was redundant.
-    return LeagueTierBadge(tier: state.tier, width: width);
+    return LeagueTierBadge(tier: state.tier, locale: locale, width: width);
   }
 
-  Widget _buildPendingJoin() {
+  Widget _buildPendingJoin(AppLocale locale) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(16)),
-      child: const Column(
+      child: Column(
         children: [
-          Text('⏳', style: TextStyle(fontSize: 32)),
-          SizedBox(height: 12),
+          const Text('⏳', style: TextStyle(fontSize: 32)),
+          const SizedBox(height: 12),
           Text(
-            "You're queued for Bronze — check back within a day to see your room.",
+            tr(locale, 'league_pending_join'),
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEmpty() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 32),
-      child: Center(child: Text('No one in your room yet.', style: TextStyle(color: AppColors.textMuted))),
+  Widget _buildEmpty(AppLocale locale) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Center(child: Text(tr(locale, 'league_empty_room'), style: const TextStyle(color: AppColors.textMuted))),
     );
   }
 }
@@ -151,7 +158,8 @@ class _LeagueScreenState extends ConsumerState<LeagueScreen> {
 /// styled, since it's a thin one-off header rather than a real board.
 class _LeaderboardHeaderRow extends StatelessWidget {
   final double width;
-  const _LeaderboardHeaderRow({required this.width});
+  final AppLocale locale;
+  const _LeaderboardHeaderRow({required this.width, required this.locale});
 
   static const _labelStyle = TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: AppColors.textMuted);
 
@@ -161,13 +169,13 @@ class _LeaderboardHeaderRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
       child: SizedBox(
         width: width - 28,
-        child: const Row(
+        child: Row(
           children: [
-            SizedBox(width: 22, child: Text('#', style: _labelStyle)),
-            Expanded(child: Text('NAME', style: _labelStyle)),
-            SizedBox(width: 30, child: Text('EVO', style: _labelStyle, textAlign: TextAlign.center)),
-            SizedBox(width: 26, child: Text('LVL', style: _labelStyle, textAlign: TextAlign.center)),
-            SizedBox(width: 56, child: Text('SCORE', style: _labelStyle, textAlign: TextAlign.right)),
+            const SizedBox(width: 22, child: Text('#', style: _labelStyle)),
+            Expanded(child: Text(tr(locale, 'league_col_name'), style: _labelStyle)),
+            SizedBox(width: 30, child: Text(tr(locale, 'league_col_evo'), style: _labelStyle, textAlign: TextAlign.center)),
+            SizedBox(width: 26, child: Text(tr(locale, 'league_col_level'), style: _labelStyle, textAlign: TextAlign.center)),
+            SizedBox(width: 56, child: Text(tr(locale, 'score_label').toUpperCase(), style: _labelStyle, textAlign: TextAlign.right)),
           ],
         ),
       ),
@@ -248,8 +256,9 @@ class _LeaderboardRow extends StatelessWidget {
 
 class _WeekResultBanner extends StatelessWidget {
   final Map<String, dynamic> result;
+  final AppLocale locale;
   final VoidCallback onDismiss;
-  const _WeekResultBanner({required this.result, required this.onDismiss});
+  const _WeekResultBanner({required this.result, required this.locale, required this.onDismiss});
 
   @override
   Widget build(BuildContext context) {
@@ -259,14 +268,16 @@ class _WeekResultBanner extends StatelessWidget {
     final isWinner = (result['isWinner'] as bool?) ?? false;
 
     final String headline = isWinner
-        ? "You won your room!"
+        ? tr(locale, 'league_result_won')
         : outcome == 'promoted'
-        ? "Promoted!"
+        ? tr(locale, 'league_result_promoted')
         : outcome == 'relegated'
-        ? "Relegated"
-        : "Week complete";
+        ? tr(locale, 'league_result_relegated')
+        : tr(locale, 'league_result_week_complete');
 
     final String emoji = isWinner ? '🏆' : outcome == 'promoted' ? '⬆️' : outcome == 'relegated' ? '⬇️' : '📊';
+    final tierLabel = labelForTier(tier, locale);
+    final subtitle = credits > 0 ? '$tierLabel · ${tr(locale, 'league_credits_earned').replaceFirst('{n}', '$credits')}' : tierLabel;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -282,10 +293,7 @@ class _WeekResultBanner extends StatelessWidget {
               children: [
                 Text(headline, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
                 const SizedBox(height: 2),
-                Text(
-                  credits > 0 ? '${labelForTier(tier)} · +$credits credits' : labelForTier(tier),
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black87),
-                ),
+                Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black87)),
               ],
             ),
           ),

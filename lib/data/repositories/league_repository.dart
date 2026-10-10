@@ -82,6 +82,14 @@ class PlayerProgress {
   final int highestLevelReached;
   final List<int> highScores;
 
+  /// When this snapshot was last written (see [LeagueRepository.
+  /// pushProgress]'s own `FieldValue.serverTimestamp()`) — null only for
+  /// a snapshot written before this field existed. [progress_sync.dart]
+  /// uses this to tell "another device pushed more recently than we last
+  /// synced" apart from "we're the freshest," since credits (unlike the
+  /// lifetime tier/level fields) isn't safe to merge with a plain max().
+  final DateTime? updatedAt;
+
   const PlayerProgress({
     required this.credits,
     required this.highestTierUnlocked,
@@ -90,6 +98,7 @@ class PlayerProgress {
     required this.highestTierUnlockedLevel4,
     required this.highestLevelReached,
     required this.highScores,
+    this.updatedAt,
   });
 }
 
@@ -313,6 +322,7 @@ class LeagueRepository {
       highestTierUnlockedLevel4: (data['highestTierUnlockedLevel4'] as int?) ?? -1,
       highestLevelReached: (data['highestLevelReached'] as int?) ?? 1,
       highScores: ((data['highScores'] as List?) ?? const []).cast<int>(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }
 }

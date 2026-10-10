@@ -18,6 +18,7 @@ const _kLocaleKey = 'app_locale';
 const _kAdFreeForeverKey = 'ad_free_forever';
 const _kAdFreeOneDayExpiryKey = 'ad_free_one_day_expiry_ms';
 const _kAdFreeSubscriptionCachedKey = 'ad_free_subscription_cached';
+const _kLastProgressSyncAtKey = 'last_progress_sync_at_ms';
 
 /// The player's current credit balance — persists across games and app
 /// restarts (unlike score, which resets every run).
@@ -97,6 +98,25 @@ Future<int> loadHighestLevelReached() async {
 Future<void> saveHighestLevelReached(int level) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt(_kHighestLevelReachedKey, level);
+}
+
+/// When this device's local progress was last confirmed in sync with its
+/// Google-account backup — set after every successful push (see
+/// GameStateNotifier._pushProgressToServer) and read by progress_sync.dart
+/// to tell "another device has pushed more recently than we last synced"
+/// apart from "we're the freshest copy," which is what lets credits (the
+/// one progress field that isn't safely mergeable via a plain max(), since
+/// spending legitimately lowers it) pick the right side instead of always
+/// trending upward. Null until the very first successful push.
+Future<DateTime?> loadLastProgressSyncAt() async {
+  final prefs = await SharedPreferences.getInstance();
+  final ms = prefs.getInt(_kLastProgressSyncAtKey);
+  return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+}
+
+Future<void> saveLastProgressSyncAt(DateTime time) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(_kLastProgressSyncAtKey, time.millisecondsSinceEpoch);
 }
 
 /// Settings' "Reset Progress" — puts the evolution/level record back to

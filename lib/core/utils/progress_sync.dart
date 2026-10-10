@@ -7,12 +7,30 @@ import '../../data/services/progression_service.dart';
 /// tiers, highest level reached, local high scores — all plain
 /// SharedPreferences values, nothing server-backed on its own) against
 /// their Google-account backup (see LeagueRepository.pushProgress/
-/// fetchProgress). Field-by-field max-merge rather than wholesale
-/// either-or: whichever side is ahead on a given field wins for that
-/// field, so a player who played a bunch anonymously before signing in
-/// keeps that progress, AND a player restoring onto a fresh install gets
-/// their old progress back — never a net loss in either direction, and no
-/// need to reason about which side is more recent.
+/// fetchProgress).
+///
+/// The tier/level fields and high scores are genuine lifetime bests —
+/// they only ever go up, so a field-by-field max-merge is always safe:
+/// whichever side is ahead wins, so a player who played a bunch
+/// anonymously before signing in keeps that progress, AND a player
+/// restoring onto a fresh install gets their old progress back.
+///
+/// Credits is different — it's a *current balance*, not a best-ever
+/// record, and spending it is a legitimate decrease. Treating it like
+/// the tier fields broke on two devices sharing one Google account: spend
+/// on the phone (pushed to the server immediately), then open a tablet
+/// that's been sitting on a stale, higher local balance — a max-merge
+/// would resurrect the pre-spend number on both. Instead this compares
+/// [PlayerProgress.updatedAt] against [loadLastProgressSyncAt] (this
+/// device's own "last time I was confirmed in sync" marker, set at the
+/// end of this function): if the server was pushed to more recently than
+/// this device last synced, another device has moved things forward
+/// since, so the server's credits win; otherwise this device is the
+/// freshest copy and its own local credits win (and get pushed up). A
+/// device that's never synced before (no marker yet, or the server
+/// snapshot predates this field) falls back to the same safe max-merge
+/// every other field uses, so first-time linking still can't lose
+/// anonymous-earned credits.
 ///
 /// Always pushes the merged result back to the server too, even when
 /// nothing local changed — so a device that was behind catches the
@@ -26,6 +44,7 @@ import '../../data/services/progression_service.dart';
 Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
   try {
     final server = await leagueRepo.fetchProgress(uid);
+    final lastSyncAt = await loadLastProgressSyncAt();
 
     final localCredits = await loadCredits();
     final localTier1 = await loadHighestTier();
@@ -35,7 +54,17 @@ Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
     final localLevel = await loadHighestLevelReached();
     final localScores = await loadHighScores();
 
-    final mergedCredits = server == null ? localCredits : _max(localCredits, server.credits);
+    int mergedCredits;
+    if (server == null) {
+      mergedCredits = localCredits;
+    } else if (lastSyncAt != null && server.updatedAt != null) {
+      mergedCredits = server.updatedAt!.isAfter(lastSyncAt) ? server.credits : localCredits;
+    } else {
+      // No local sync marker yet (first-ever sync on this device) or a
+      // pre-updatedAt server snapshot — same safe max-merge as the other
+      // fields rather than guessing which side is "right."
+      mergedCredits = _max(localCredits, server.credits);
+    }
     final mergedTier1 = server == null ? localTier1 : _max(localTier1, server.highestTierUnlocked);
     final mergedTier2 = server == null ? localTier2 : _max(localTier2, server.highestTierUnlockedLevel2);
     final mergedTier3 = server == null ? localTier3 : _max(localTier3, server.highestTierUnlockedLevel3);
@@ -76,6 +105,10 @@ Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
         highScores: topScores,
       ),
     );
+    // This device's credits (merged or not) are now known to match what
+    // was just pushed — marks the point future syncs compare the
+    // server's own updatedAt against.
+    await saveLastProgressSyncAt(DateTime.now());
 
     return changed;
   } catch (e, st) {

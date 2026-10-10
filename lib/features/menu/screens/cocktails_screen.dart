@@ -94,16 +94,25 @@ class _CocktailsLevelPage extends StatelessWidget {
                 assetPath: 'assets/images/menu_board_3.png',
                 fontScale: 0.72,
               ),
-              for (final recipe in level.recipes)
-                _CocktailRow(
-                  recipe: recipe,
-                  locked: locked,
-                  width: plankWidth,
-                  height: plankHeight,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => CocktailDetailScreen(recipe: recipe, backgroundAssetPath: level.backgroundAssetPath)),
-                  ),
+              // One blur over the whole locked column rather than one
+              // per row — see ingredients_screen.dart's matching comment.
+              LockedContent(
+                locked: locked,
+                child: Column(
+                  children: [
+                    for (final recipe in level.recipes)
+                      _CocktailRow(
+                        recipe: recipe,
+                        locked: locked,
+                        width: plankWidth,
+                        height: plankHeight,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => CocktailDetailScreen(recipe: recipe, backgroundAssetPath: level.backgroundAssetPath)),
+                        ),
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
@@ -131,30 +140,27 @@ class _CocktailRow extends StatelessWidget {
         assetPath: 'assets/images/menu_board_3.png',
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-          child: LockedContent(
-            locked: locked,
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.asset(
-                    recipe.assetPath,
-                    width: height * 0.72,
-                    height: height * 0.72,
-                    fit: BoxFit.contain,
-                    // A few Level 3 recipes reference art that hasn't been
-                    // supplied yet — a plain glyph beats Flutter's broken-
-                    // image icon until it lands.
-                    errorBuilder: (context, error, stackTrace) => Icon(Icons.local_bar_rounded, size: height * 0.5, color: kPlankIconColor),
-                  ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.asset(
+                  recipe.assetPath,
+                  width: height * 0.72,
+                  height: height * 0.72,
+                  fit: BoxFit.contain,
+                  // A few Level 3 recipes reference art that hasn't been
+                  // supplied yet — a plain glyph beats Flutter's broken-
+                  // image icon until it lands.
+                  errorBuilder: (context, error, stackTrace) => Icon(Icons.local_bar_rounded, size: height * 0.5, color: kPlankIconColor),
                 ),
-                SizedBox(width: width * 0.04),
-                Expanded(
-                  child: ColorfulPlankText(text: recipe.name, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-                ),
-                Icon(Icons.chevron_right_rounded, size: height * 0.3, color: kPlankIconColor),
-              ],
-            ),
+              ),
+              SizedBox(width: width * 0.04),
+              Expanded(
+                child: ColorfulPlankText(text: recipe.name, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+              ),
+              Icon(Icons.chevron_right_rounded, size: height * 0.3, color: kPlankIconColor),
+            ],
           ),
         ),
       ),

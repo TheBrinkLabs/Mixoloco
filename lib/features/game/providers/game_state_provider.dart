@@ -329,6 +329,16 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// replaces the fresh one this Notifier started with instead of just
   /// patching the lifetime fields onto it.
   Future<void> _loadPersisted() async {
+    // Snapshot of exactly what build() returned, captured before any
+    // `await` below yields control back to the event loop — if `state`
+    // is still this same instance once every disk read below finally
+    // resolves, nothing else touched it in the meantime and the full
+    // replace further down is safe. On a slow enough cold start, though,
+    // a tap can land (and call registerMerge/spendCredits/etc, mutating
+    // `state`) before these plugin-channel reads finish; blindly
+    // overwriting `state` at that point would silently discard whatever
+    // that tap just did. See the `identical` check below for the fix.
+    final preLoadState = state;
     final credits = await loadCredits();
     final highest = await loadHighestTier();
     final highestLevel2 = await loadHighestTierLevel2();
@@ -347,21 +357,48 @@ class GameStateNotifier extends Notifier<BoardState> {
             highestTierUnlockedLevel4: highestLevel4,
             highestLevelReached: highestLevelReached,
           );
-    // Falls back to a freshly-built game (not just a copyWith patch onto
-    // the level-1 default build() started with) when there's no save to
-    // restore — a copyWith patch would leave level/order/current/upcoming
-    // at their level-1 defaults even when highestLevelReached says this
-    // player should be starting straight on the rooftop bar.
-    state =
-        restored ??
-        _freshGame(
-          credits: credits,
-          highestTierUnlocked: highest,
-          highestTierUnlockedLevel2: highestLevel2,
-          highestTierUnlockedLevel3: highestLevel3,
-          highestTierUnlockedLevel4: highestLevel4,
-          highestLevelReached: highestLevelReached,
-        );
+    final raced = !identical(state, preLoadState);
+    if (raced && restored == null) {
+      // Something already happened on the default fresh board (a tap
+      // landed before these disk reads resolved) — patch the now-loaded
+      // lifetime fields onto whatever `state` has become instead of
+      // discarding that interim gameplay outright. Doesn't also jump
+      // level/current/upcoming to match a higher highestLevelReached (the
+      // way _freshGame would) since the player may already be mid-throw
+      // on the level-1 board build() started them on; that's a one-launch
+      // cosmetic gap (they'd start on their usual level next time), far
+      // better than losing a real merge/spend/score silently.
+      state = state.copyWith(
+        credits: credits,
+        highestTierUnlocked: highest,
+        highestTierUnlockedLevel2: highestLevel2,
+        highestTierUnlockedLevel3: highestLevel3,
+        highestTierUnlockedLevel4: highestLevel4,
+        highestLevelReached: highestLevelReached,
+      );
+    } else {
+      // Either nothing touched `state` while these reads were in flight
+      // (the common case), or it did but there's a genuine saved run to
+      // resume — resuming it is the stronger intent there, same
+      // tiny-window tradeoff this replace always had, just now scoped to
+      // the rarer case where a prior session actually exists to come
+      // back to rather than every cold start. Falls back to a
+      // freshly-built game (not just a copyWith patch onto the level-1
+      // default build() started with) when there's no save to restore —
+      // a copyWith patch would leave level/order/current/upcoming at
+      // their level-1 defaults even when highestLevelReached says this
+      // player should be starting straight on the rooftop bar.
+      state =
+          restored ??
+          _freshGame(
+            credits: credits,
+            highestTierUnlocked: highest,
+            highestTierUnlockedLevel2: highestLevel2,
+            highestTierUnlockedLevel3: highestLevel3,
+            highestTierUnlockedLevel4: highestLevel4,
+            highestLevelReached: highestLevelReached,
+          );
+    }
     // A restored run can already satisfy _checkLevelUp's conditions
     // (jugReached + every cocktail) without anything here ever having
     // re-evaluated them — that only ever ran reactively, from
@@ -844,7 +881,18 @@ class GameStateNotifier extends Notifier<BoardState> {
     final previousBest = await loadHighScores();
     final isNewHighScore = state.score > 0 && (previousBest.isEmpty || state.score > previousBest.first);
     state = state.copyWith(isNewHighScore: isNewHighScore);
-    recordScore(state.score);
+    try {
+      await recordScore(state.score);
+    } catch (e, st) {
+      // Unlike every neighboring call here (submitWeeklyScore's
+      // catchError, _pushProgressToServer's own try/catch), this one had
+      // no error handling at all — a corrupt high_scores JSON meant a
+      // genuine new best quietly failed to save, with no log trail to
+      // diagnose it from. Soft failure, same spirit as the rest of this
+      // method: a local-save hiccup shouldn't block the league submission
+      // or progress push below it.
+      debugPrint('High score save failed (non-fatal): $e\n$st');
+    }
     final uid = authService.uid;
     if (uid != null && state.score > 0) {
       ref
@@ -893,6 +941,14 @@ class GameStateNotifier extends Notifier<BoardState> {
                 highScores: highScores,
               ),
             );
+        // Keeps progress_sync.dart's own "last confirmed in sync" marker
+        // accurate for every push, not just the ones it makes itself —
+        // otherwise a stale marker here would just make a later sync
+        // trust the server over local one time too many, which is still
+        // safe (the server already reflects this exact local state) but
+        // there's no reason to leave it stale when it's this cheap to keep
+        // current.
+        await saveLastProgressSyncAt(DateTime.now());
       } catch (e, st) {
         debugPrint('Progress push failed (non-fatal): $e\n$st');
       }

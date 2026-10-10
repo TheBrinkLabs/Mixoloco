@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/i18n/strings.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/device_id_service.dart';
 import '../../../core/utils/nickname_generator.dart';
@@ -28,6 +30,10 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
   bool _saving = false;
   String? _error;
 
+  /// Set right before handing off to LeagueScreen on success — see
+  /// [dispose]'s own comment for why this matters.
+  bool _handedOffToLeague = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,16 +48,26 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
 
   @override
   void dispose() {
-    ref.read(bannerPositionProvider.notifier).state = BannerPosition.bottom;
+    // Only restore the banner here when this screen is going away WITHOUT
+    // handing off to LeagueScreen (e.g. the player backed out) — pushing
+    // LeagueScreen already hides it itself (its own initState), but
+    // Navigator.pushReplacement mounts the new route and runs its
+    // initState *before* disposing this one, not after, so an
+    // unconditional reset here would run second and stomp LeagueScreen's
+    // own correct "hidden" state right back to visible.
+    if (!_handedOffToLeague) {
+      ref.read(bannerPositionProvider.notifier).state = BannerPosition.bottom;
+    }
     _controller.dispose();
     super.dispose();
   }
 
   Future<void> _continue() async {
     if (_saving) return;
+    final locale = ref.read(localeProvider);
     final nickname = _controller.text.trim();
     if (nickname.isEmpty) {
-      setState(() => _error = "Enter a nickname to continue");
+      setState(() => _error = tr(locale, 'edit_nickname_empty_error'));
       return;
     }
     setState(() {
@@ -63,9 +79,10 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
       await authService.ensureSignedIn();
       final uid = authService.uid;
       if (uid == null) {
+        if (!mounted) return;
         setState(() {
           _saving = false;
-          _error = "Couldn't connect — check your connection and try again";
+          _error = tr(locale, 'nickname_setup_connect_error');
         });
         return;
       }
@@ -76,18 +93,20 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
       await saveNickname(nickname);
 
       if (!mounted) return;
+      _handedOffToLeague = true;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LeagueScreen()));
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = "Something went wrong — try again in a bit";
+        _error = tr(locale, 'nickname_setup_generic_error');
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider);
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -98,24 +117,27 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
             children: [
               const Text('🏆', style: TextStyle(fontSize: 44)),
               const SizedBox(height: 16),
-              const Text(
-                'Set up your league profile',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textLight, letterSpacing: -0.5),
+              Text(
+                tr(locale, 'nickname_setup_title'),
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textLight, letterSpacing: -0.5),
               ),
               const SizedBox(height: 6),
-              const Text(
-                "This is what other players see on the leaderboard.",
-                style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+              Text(
+                tr(locale, 'nickname_setup_subtitle'),
+                style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
               ),
               const SizedBox(height: 24),
-              const Text('NICKNAME', style: TextStyle(fontSize: 10, letterSpacing: 2.5, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+              Text(
+                tr(locale, 'nickname_label').toUpperCase(),
+                style: const TextStyle(fontSize: 10, letterSpacing: 2.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: _controller,
                 maxLength: 20,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textLight),
                 decoration: InputDecoration(
-                  hintText: 'Enter a nickname…',
+                  hintText: tr(locale, 'edit_nickname_hint'),
                   hintStyle: const TextStyle(color: AppColors.textMuted),
                   filled: true,
                   fillColor: AppColors.surface,
@@ -137,7 +159,7 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
                   child: Center(
                     child: _saving
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                        : const Text('Continue', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black)),
+                        : Text(tr(locale, 'continue_label'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black)),
                   ),
                 ),
               ),

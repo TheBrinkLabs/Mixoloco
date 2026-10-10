@@ -86,6 +86,17 @@ class PurchaseService {
       // cached rather than let a transient billing-service hiccup strip
       // ad-free access the player genuinely still has.
     }
+    // restorePurchases() only awaits the platform *request* — the actual
+    // PurchaseDetails for each restored entitlement arrive afterward,
+    // asynchronously, through purchaseStream (_onPurchaseUpdate), a
+    // known quirk of this plugin. Without this pause, an active
+    // subscriber's _subscriptionSeenThisRefresh could still read false
+    // here (events just haven't landed yet), writing a wrong "not
+    // subscribed" cache that PersistentBannerAd reads and briefly shows
+    // ads on — self-corrects the moment the stream event does arrive
+    // and _recomputeAdFree runs again, but there's no reason to risk
+    // that flash when a short, bounded wait avoids it.
+    await Future.delayed(const Duration(milliseconds: 600));
     await saveAdFreeSubscriptionCached(_subscriptionSeenThisRefresh);
     await _recomputeAdFree();
   }
@@ -123,7 +134,25 @@ class PurchaseService {
     await _recomputeAdFree();
   }
 
-  Future<void> _applyPurchase(PurchaseDetails purchase) async {
+  /// Serializes [_applyPurchase]'s own read-modify-write of the 1-Day
+  /// expiry across overlapping calls — `purchaseStream` can deliver more
+  /// than one event in quick succession (a double-tap buy, or Play
+  /// replaying a purchase on reconnect), and since `_onPurchaseUpdate`
+  /// isn't awaited between stream events, two such calls could otherwise
+  /// both read the same stale `existing` expiry before either writes
+  /// back, and the second write would silently clobber the first instead
+  /// of stacking — one of two paid days lost. Chaining every call onto
+  /// this one Future forces them to run one at a time, in arrival order,
+  /// the same effect a mutex would give without needing one.
+  Future<void> _applyQueue = Future.value();
+
+  Future<void> _applyPurchase(PurchaseDetails purchase) {
+    final result = _applyQueue.then((_) => _applyPurchaseLocked(purchase));
+    _applyQueue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<void> _applyPurchaseLocked(PurchaseDetails purchase) async {
     if (purchase.productID == kAdFreeProductIds[AdFreeTier.oneDay]) {
       // Consumable, so every event here is a fresh buy (Play won't
       // replay an already-consumed purchase on restore) — stacks onto

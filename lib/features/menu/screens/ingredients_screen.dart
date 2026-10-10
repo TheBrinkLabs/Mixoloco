@@ -92,7 +92,18 @@ class _IngredientsLevelPage extends StatelessWidget {
                 assetPath: 'assets/images/menu_board_3.png',
                 fontScale: 0.72,
               ),
-              for (final ingredient in level.chain) _IngredientRow(ingredient: ingredient, locked: locked, width: plankWidth, height: plankHeight),
+              // One blur over the whole locked column rather than one
+              // per row — a locked level can have a dozen-plus rows, and
+              // ImageFiltered's blur is an offscreen render pass each;
+              // a dozen of them repainting every frame of the swipe
+              // transition into this page was real, avoidable GPU work
+              // for the same visual result a single wrapping blur gives.
+              LockedContent(
+                locked: locked,
+                child: Column(
+                  children: [for (final ingredient in level.chain) _IngredientRow(ingredient: ingredient, width: plankWidth, height: plankHeight)],
+                ),
+              ),
             ],
           ),
         ),
@@ -103,10 +114,9 @@ class _IngredientsLevelPage extends StatelessWidget {
 
 class _IngredientRow extends StatelessWidget {
   final Ingredient ingredient;
-  final bool locked;
   final double width;
   final double height;
-  const _IngredientRow({required this.ingredient, required this.locked, required this.width, required this.height});
+  const _IngredientRow({required this.ingredient, required this.width, required this.height});
 
   @override
   Widget build(BuildContext context) {
@@ -116,17 +126,14 @@ class _IngredientRow extends StatelessWidget {
       assetPath: 'assets/images/menu_board_3.png',
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-        child: LockedContent(
-          locked: locked,
-          child: Row(
-            children: [
-              GlassVisual(ingredient: ingredient, size: height * 0.72, applyDisplayScale: false),
-              SizedBox(width: width * 0.04),
-              Expanded(
-                child: ColorfulPlankText(text: ingredient.label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-              ),
-            ],
-          ),
+        child: Row(
+          children: [
+            GlassVisual(ingredient: ingredient, size: height * 0.72, applyDisplayScale: false),
+            SizedBox(width: width * 0.04),
+            Expanded(
+              child: ColorfulPlankText(text: ingredient.label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+            ),
+          ],
         ),
       ),
     );

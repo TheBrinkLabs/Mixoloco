@@ -331,6 +331,10 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     final showContinueOffer = board.gameOver && !board.continueOfferUsed && !_showingAdPlaceholder;
     final showGameOver = board.gameOver && board.continueOfferUsed && !_showingAdPlaceholder;
     final blockInput = board.gameOver || _showCocktailMenu || _showingAdPlaceholder || _showingAdBreak || _showingLevelUp;
+    // IgnorePointer below only stops a *new* gesture from starting — see
+    // MixolocoGame.inputBlocked's own doc for why a drag already in
+    // flight needs this second, explicit check too.
+    _game.inputBlocked = blockInput;
 
     final boardRect = headerBoardRect(screenSize);
     final upNudge1pc = screenSize.height * 0.01;

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../i18n/strings.dart';
+import '../services/locale_provider.dart';
 
 const _bronze = Color(0xFFCD7F32);
 const _silver = Color(0xFFC0C0C8);
@@ -15,14 +17,14 @@ Color colorForTier(String tier) {
   }
 }
 
-String labelForTier(String tier) {
+String labelForTier(String tier, AppLocale locale) {
   switch (tier) {
     case 'silver':
-      return 'SILVER';
+      return tr(locale, 'tier_silver');
     case 'gold':
-      return 'GOLD';
+      return tr(locale, 'tier_gold');
     default:
-      return 'BRONZE';
+      return tr(locale, 'tier_bronze');
   }
 }
 
@@ -55,13 +57,14 @@ String? leagueAssetForTier(String tier) {
 /// small badge elsewhere (pass [fontSize] instead).
 class LeagueTierBadge extends StatelessWidget {
   final String tier;
+  final AppLocale locale;
   final double fontSize;
 
   /// When set, renders as a full-width banner at this width (height
   /// follows [kLeaguePlateAspect]) instead of the small auto-sized
   /// badge — the league screen's own header row.
   final double? width;
-  const LeagueTierBadge({super.key, required this.tier, this.fontSize = 11, this.width});
+  const LeagueTierBadge({super.key, required this.tier, required this.locale, this.fontSize = 11, this.width});
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +86,7 @@ class LeagueTierBadge extends StatelessWidget {
           border: Border.all(color: color, width: 1.4),
         ),
         child: Text(
-          '${labelForTier(tier)} LEAGUE',
+          '${labelForTier(tier, locale)} ${tr(locale, 'leaderboard')}',
           style: TextStyle(fontSize: h * 0.3, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: color),
         ),
       );
@@ -100,7 +103,7 @@ class LeagueTierBadge extends StatelessWidget {
         border: Border.all(color: color, width: 1.2),
       ),
       child: Text(
-        labelForTier(tier),
+        labelForTier(tier, locale),
         style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: color),
       ),
     );

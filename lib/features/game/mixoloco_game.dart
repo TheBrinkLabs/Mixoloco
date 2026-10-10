@@ -204,6 +204,17 @@ class MixolocoGame extends Forge2DGame {
   bool _initialItemsSpawned = false;
   int _overflowStreak = 0;
 
+  /// Mirrors GameScreen's own `blockInput` (set every build — see its
+  /// IgnorePointer) so [_handleDrop] can bail out even for a drag that's
+  /// already past Flutter's hit-test. IgnorePointer only stops a *new*
+  /// gesture from starting; once StagingComponent's drag recognizer has
+  /// already won the gesture arena, Flutter keeps delivering that same
+  /// drag's move/up events to it regardless of a later `ignoring` change
+  /// (hit-testing isn't re-checked mid-gesture) — so a drag that began
+  /// just before an ad-break/level-up/game-over flips blockInput true
+  /// could otherwise still commit a throw after pauseEngine() runs.
+  bool inputBlocked = false;
+
   /// How many merge-explosion/cocktail-reveal animations are currently
   /// mid-flight — GameScreen's ad-break trigger waits for this to hit zero
   /// before pausing the engine, so a score-threshold crossing mid-burst
@@ -290,12 +301,24 @@ class MixolocoGame extends Forge2DGame {
   /// instead of a clean crash. Purging it here lets the game recover on
   /// its own rather than staying stuck.
   void _purgeCorruptedBodies() {
-    for (final b in List.of(_liveBodies)) {
+    // A read-only pass over the live set directly (no List.of() copy) —
+    // this runs every single update() (60/sec), and a NaN body is rare
+    // enough that the common case should cost nothing beyond the scan
+    // itself. Only allocates a (tiny, almost-never-needed) removal list
+    // on the rare frame one's actually found, and removes in a second
+    // pass since _removeBody mutates _liveBodies and can't safely run
+    // while iterating it directly.
+    List<IngredientBodyComponent>? corrupted;
+    for (final b in _liveBodies) {
       if (!b.isMounted) continue;
       final pos = b.body.position;
       if (pos.x.isNaN || pos.y.isNaN) {
-        _removeBody(b);
+        (corrupted ??= []).add(b);
       }
+    }
+    if (corrupted == null) return;
+    for (final b in corrupted) {
+      _removeBody(b);
     }
   }
 
@@ -437,7 +460,7 @@ class MixolocoGame extends Forge2DGame {
   }
 
   void _handleDrop(double aimX) {
-    if (_busy || _gameOverTriggered) return;
+    if (_busy || _gameOverTriggered || inputBlocked) return;
     final ingredient = staging.ingredient;
     if (ingredient == null) return;
 

@@ -23,6 +23,9 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
   }) : _spawnPosition = spawnPosition,
        _initialVelocity = initialVelocity ?? Vector2.zero(),
        _throwTargetFarX = throwTargetFarX,
+       // Only a player-thrown drop needs bullet mode to start with — see
+       // _bulletTimeRemaining's own doc.
+       _bulletTimeRemaining = throwTargetFarX != null ? _bulletDuration : 0,
        super(renderBody: false);
 
   final int tier;
@@ -62,7 +65,14 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
   /// come to rest (or was never moving fast to begin with, like a merge
   /// result spawning right where its two parents were).
   static const _bulletDuration = 1.5;
-  double _bulletTimeRemaining = _bulletDuration;
+  // Zero (not _bulletDuration) for anything that isn't a player-thrown
+  // drop — see the constructor's own initializer. A merge/cocktail
+  // result spawns essentially at rest right where its parents were, so
+  // it was never at risk of tunneling through a wall in the first place;
+  // the doc above already called this out as pure waste, this just
+  // actually acts on it instead of paying the pricier time-of-impact
+  // solver pass for the full 1.5s on every single merge result regardless.
+  double _bulletTimeRemaining;
 
   /// Free-running clock driving the danger-glow pulse below — not tied
   /// to whether this particular body is currently past the line, so the
@@ -127,7 +137,10 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
       // constant gravity before it hits anything — without continuous
       // collision detection a fast small circle can tunnel straight
       // through the thin floor/wall segments in a single physics step.
-      isBullet: true,
+      // Only a thrown drop (_throwTargetFarX set) actually falls like
+      // that; a merge/cocktail result spawns at rest and never needs
+      // this — see _bulletTimeRemaining's own doc.
+      isBullet: _throwTargetFarX != null,
     );
     _shapeDef = ShapeDef(
       material: SurfaceMaterial(restitution: 0.05, friction: 0.6),

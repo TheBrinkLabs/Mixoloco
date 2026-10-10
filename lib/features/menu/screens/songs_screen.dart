@@ -161,15 +161,24 @@ class _SongsLevelPage extends StatelessWidget {
                 assetPath: 'assets/images/menu_board_3.png',
                 fontScale: 0.72,
               ),
-              for (final file in level.songs)
-                _SongRow(
-                  file: file,
-                  locked: locked,
-                  playing: playingFile == file,
-                  onTap: () => onToggle(file),
-                  width: plankWidth,
-                  height: plankHeight,
+              // One blur over the whole locked column rather than one
+              // per row — see ingredients_screen.dart's matching comment.
+              LockedContent(
+                locked: locked,
+                child: Column(
+                  children: [
+                    for (final file in level.songs)
+                      _SongRow(
+                        file: file,
+                        locked: locked,
+                        playing: playingFile == file,
+                        onTap: () => onToggle(file),
+                        width: plankWidth,
+                        height: plankHeight,
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
@@ -205,19 +214,16 @@ class _SongRow extends StatelessWidget {
         assetPath: 'assets/images/menu_board_3.png',
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-          child: LockedContent(
-            locked: locked,
-            child: Row(
-              children: [
-                Expanded(
-                  child: ColorfulPlankText(text: songDisplayName(file), fontSize: height * 0.2, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-                ),
-                SizedBox(width: width * 0.03),
-                playing
-                    ? Icon(Icons.pause_circle_filled_rounded, size: height * 0.52, color: kPlankIconColor, shadows: kPlankIconShadows)
-                    : Image.asset('assets/images/play_button.png', width: height * 0.52, height: height * 0.52, fit: BoxFit.contain),
-              ],
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: ColorfulPlankText(text: songDisplayName(file), fontSize: height * 0.2, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
+              ),
+              SizedBox(width: width * 0.03),
+              playing
+                  ? Icon(Icons.pause_circle_filled_rounded, size: height * 0.52, color: kPlankIconColor, shadows: kPlankIconShadows)
+                  : Image.asset('assets/images/play_button.png', width: height * 0.52, height: height * 0.52, fit: BoxFit.contain),
+            ],
           ),
         ),
       ),
