@@ -245,6 +245,9 @@ class _LanguageDropdown extends StatelessWidget {
     AppLocale.it => 'Italiano',
     AppLocale.ja => '日本語',
     AppLocale.ko => '한국어',
+    AppLocale.nl => 'Nederlands',
+    AppLocale.fr => 'Français',
+    AppLocale.pt => 'Português',
   };
 
   @override

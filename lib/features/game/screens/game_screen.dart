@@ -1250,14 +1250,18 @@ class _MenuListRow extends StatelessWidget {
 /// The "GAME OVER" banner art has its own text baked in, so it needs a
 /// per-language version rather than reading through [tr] — a plain photo
 /// with lettering painted on, same reasoning header_board.png's own art
-/// needed localizing for (if it ever gets text added). Falls back to the
-/// English original for any locale without its own variant yet.
+/// needed localizing for (if it ever gets text added). Every supported
+/// locale has its own variant now; a future new language would fall
+/// back to the English original here until one lands for it too.
 String _gameOverAssetPathFor(AppLocale locale) => switch (locale) {
   AppLocale.es => 'assets/images/game_over_esp.png',
   AppLocale.de => 'assets/images/game_over_ger.png',
   AppLocale.it => 'assets/images/game_over_ita.png',
   AppLocale.ja => 'assets/images/game_over_jap.png',
   AppLocale.ko => 'assets/images/game_over_kor.png',
+  AppLocale.fr => 'assets/images/game_over_fre.png',
+  AppLocale.nl => 'assets/images/game_over_dut.png',
+  AppLocale.pt => 'assets/images/game_over_por.png',
   AppLocale.en => 'assets/images/game_over.png',
 };
 
