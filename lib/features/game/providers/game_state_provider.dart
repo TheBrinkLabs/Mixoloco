@@ -175,11 +175,21 @@ class BoardState {
   /// driving an ad break instead of a credit reward. Resets every game.
   final int adBreakThresholdsShown;
 
-  /// Whether the level-up celebration (see level_up_screen.dart) has
-  /// already been shown for this run's transition to level 2 — guards
-  /// against re-showing it if the game rebuilds while it's still level 2.
-  /// Resets every game (there's nothing to guard once level resets too).
-  final bool levelUpCelebrationShown;
+  /// The highest level whose level-up celebration (see
+  /// level_up_screen.dart) has already been shown/handled this run —
+  /// guards against re-showing it (or re-running [enterLevel]/
+  /// [MixolocoGame.switchToLevel]) if the game rebuilds while still on
+  /// that level. Was a one-shot bool until a bug surfaced: it latched
+  /// true after the first (1->2) transition and then never reset, so
+  /// GameScreen's `board.level > 1 && !levelUpCelebrationShown` guard
+  /// silently skipped every *later* transition's celebration *and* its
+  /// enterLevel/switchToLevel reset — [BoardState.level] kept climbing
+  /// (2->3->4) while the physics table and ingredient queue stayed
+  /// frozen on whichever level the guard last actually fired for. An
+  /// int watermark compared against [level] (`level > celebratedLevel`)
+  /// fires correctly on every transition, not just the first. Resets
+  /// every game (there's nothing to guard once level resets too).
+  final int celebratedLevel;
 
   /// The highest evolution tier reached on *this run's current level*
   /// (by drop or merge, either counts — same trigger as
@@ -218,7 +228,7 @@ class BoardState {
     this.jugReached = false,
     this.level = 1,
     this.adBreakThresholdsShown = 0,
-    this.levelUpCelebrationShown = false,
+    this.celebratedLevel = 1,
     this.runHighestTier = 0,
     this.isNewHighScore = false,
   });
@@ -249,7 +259,7 @@ class BoardState {
     bool? jugReached,
     int? level,
     int? adBreakThresholdsShown,
-    bool? levelUpCelebrationShown,
+    int? celebratedLevel,
     int? runHighestTier,
     bool? isNewHighScore,
   }) {
@@ -274,7 +284,7 @@ class BoardState {
       jugReached: jugReached ?? this.jugReached,
       level: level ?? this.level,
       adBreakThresholdsShown: adBreakThresholdsShown ?? this.adBreakThresholdsShown,
-      levelUpCelebrationShown: levelUpCelebrationShown ?? this.levelUpCelebrationShown,
+      celebratedLevel: celebratedLevel ?? this.celebratedLevel,
       runHighestTier: runHighestTier ?? this.runHighestTier,
       isNewHighScore: isNewHighScore ?? this.isNewHighScore,
     );
@@ -439,7 +449,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     'jugReached': s.jugReached,
     'level': s.level,
     'adBreakThresholdsShown': s.adBreakThresholdsShown,
-    'levelUpCelebrationShown': s.levelUpCelebrationShown,
+    'celebratedLevel': s.celebratedLevel,
     'runHighestTier': s.runHighestTier,
   };
 
@@ -492,7 +502,17 @@ class GameStateNotifier extends Notifier<BoardState> {
         jugReached: map['jugReached'] as bool,
         level: level,
         adBreakThresholdsShown: map['adBreakThresholdsShown'] as int,
-        levelUpCelebrationShown: map['levelUpCelebrationShown'] as bool,
+        // A save from before celebratedLevel existed only ever had the
+        // old one-shot bool, which (correctly, back then) only ever
+        // meant "level 2's celebration has been shown" — never a
+        // higher level, since the bug this field replaces meant no
+        // later transition's enterLevel/switchToLevel ever actually
+        // ran. Reading it as 2 (not the save's possibly-bugged [level])
+        // means the very next build correctly replays enterLevel/
+        // switchToLevel for any level the old bug had silently skipped,
+        // self-healing an already-corrupted in-progress save instead of
+        // perpetuating the mismatch.
+        celebratedLevel: map['celebratedLevel'] as int? ?? ((map['levelUpCelebrationShown'] as bool?) == true ? 2 : 1),
         // Absent in a save written before this field existed — 0 (never
         // reached anything this run) is the correct read for that case,
         // same spirit as every other new-field fallback in this method.
@@ -535,17 +555,17 @@ class GameStateNotifier extends Notifier<BoardState> {
       highestTierUnlockedLevel4: highestTierUnlockedLevel4,
       highestLevelReached: highestLevelReached,
       level: resolvedLevel,
-      // A fresh game that *starts* on Level 2 (because that's already the
+      // A fresh game that *starts* on Level N (because that's already the
       // lifetime record, or the player deliberately chose it — see
       // startNewGameAtLevel) isn't the moment of leveling up — that
       // already happened, in whatever earlier run first reached it.
-      // Marking the celebration pre-shown here is what stops GameScreen's
-      // `board.level == 2 && !levelUpCelebrationShown` check from replaying
-      // the "Level Complete!" popup on every single new game once a
-      // player's actually reached the rooftop bar; without this, only a
-      // genuine mid-run 1->2 transition (see enterLevel) should ever show
-      // it, but every fresh Level 2 start did too.
-      levelUpCelebrationShown: resolvedLevel >= 2,
+      // Marking every level up to N pre-celebrated here is what stops
+      // GameScreen's `board.level > board.celebratedLevel` check from
+      // replaying the "Level Complete!" popup on every single new game
+      // once a player's actually reached that bar; without this, only a
+      // genuine mid-run transition (see enterLevel) should ever show it,
+      // but every fresh start at that level would too.
+      celebratedLevel: resolvedLevel,
     );
   }
 
@@ -757,10 +777,12 @@ class GameStateNotifier extends Notifier<BoardState> {
     state = state.copyWith(adBreakThresholdsShown: state.score ~/ kAdBreakScoreThreshold);
   }
 
-  /// Marks the level-up celebration as shown — called once its full
-  /// sequence (celebration → interstitial) has played out.
+  /// Marks the level-up celebration as shown for the level just entered
+  /// — called once its full sequence (celebration → interstitial) has
+  /// played out, by which point [enterLevel] has already bumped
+  /// [BoardState.level] to the new level.
   void acknowledgeLevelUpCelebration() {
-    state = state.copyWith(levelUpCelebrationShown: true);
+    state = state.copyWith(celebratedLevel: state.level);
   }
 
   /// Adds credits earned from a watched rewarded ad (Shop's "watch an ad

@@ -319,7 +319,10 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     // Level-up takes priority — if both somehow trip on the same frame,
     // the ad break just waits for the next score check once level-up's
     // interstitial has already covered the ad slot for this moment.
-    if (board.level > 1 && !board.levelUpCelebrationShown && !_showingLevelUp) {
+    // `>` (not a single bool latch) so every transition re-fires this,
+    // not just the first — see BoardState.celebratedLevel's doc for the
+    // bug a one-shot flag caused here.
+    if (board.level > board.celebratedLevel && !_showingLevelUp) {
       _showingLevelUp = true;
       final targetLevel = board.level;
       WidgetsBinding.instance.addPostFrameCallback((_) => _runLevelUp(locale, targetLevel));
