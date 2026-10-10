@@ -679,10 +679,22 @@ const kEvolutionChainLevel2 = [
       CollisionCircle(offsetY: -0.55, radius: 0.34),
       CollisionCircle(offsetY: -0.15, radius: 0.28),
       CollisionCircle(offsetY: 0.45, radius: 0.07),
-      // Foot circle pushed down and widened a touch (was offsetY 0.95,
-      // radius 0.37) — per feedback there was a visible gap between the
-      // glass's drawn foot and where neighbours actually stopped.
-      CollisionCircle(offsetY: 1.0, radius: 0.42),
+      // Foot circle — re-measured via scratchpad/art_tool's width-band
+      // scan (same methodology as the rest of this profile). The art's
+      // own content bottoms out at offsetY ~0.99 (confirmed against
+      // displayScale, which is calibrated so the farthest real pixel
+      // lands at exactly 1.0); a circle's resting contact point is its
+      // *lowest* reach (offsetY + radius), so the earlier widen-to-fix-
+      // the-neighbour-gap pass (offsetY 1.0, radius 0.42 — reach 1.42,
+      // and before that offsetY 0.95/radius 0.37 — reach 1.32) both
+      // overshot past the art's own bottom edge, leaving the body
+      // resting on a phantom point well below where the glass is
+      // actually drawn — a visible gap under the base, worse the more
+      // it was widened. Pulled the center up and trimmed the radius so
+      // reach lands just inside the true edge (0.70 + 0.28 = 0.98),
+      // same "don't poke past where the art ends" discipline as gin/
+      // vermouth's rim/foot circles above.
+      CollisionCircle(offsetY: 0.70, radius: 0.28),
     ],
   ),
   Ingredient(
@@ -856,7 +868,9 @@ const kEvolutionChainLevel3 = [
       CollisionCircle(offsetY: -0.55, radius: 0.34),
       CollisionCircle(offsetY: -0.15, radius: 0.28),
       CollisionCircle(offsetY: 0.45, radius: 0.07),
-      CollisionCircle(offsetY: 0.95, radius: 0.37),
+      // See the Level 2 prosecco entry's matching comment — same
+      // overshoot-past-the-art's-edge bug, same fix.
+      CollisionCircle(offsetY: 0.70, radius: 0.28),
     ],
   ),
   Ingredient(
@@ -1050,7 +1064,9 @@ const kEvolutionChainLevel4 = [
       CollisionCircle(offsetY: -0.55, radius: 0.34),
       CollisionCircle(offsetY: -0.15, radius: 0.28),
       CollisionCircle(offsetY: 0.45, radius: 0.07),
-      CollisionCircle(offsetY: 0.95, radius: 0.37),
+      // See the Level 2 prosecco entry's matching comment — same
+      // overshoot-past-the-art's-edge bug, same fix.
+      CollisionCircle(offsetY: 0.70, radius: 0.28),
     ],
   ),
   Ingredient(

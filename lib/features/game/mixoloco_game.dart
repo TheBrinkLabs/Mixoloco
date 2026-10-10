@@ -787,6 +787,8 @@ class MixolocoGame extends Forge2DGame {
     _shakeTimeRemaining = 0;
     _shakeSquishApplied = false;
     _shakeSettleElapsed = 0;
+    _shakeRestoreStep = 0;
+    _shakeRestoreStepTimer = 0;
     world.gravity = Vector2(0, -kGravityMagnitude);
   }
 
@@ -855,6 +857,28 @@ class MixolocoGame extends Forge2DGame {
   bool _shakeSquishApplied = false;
   double _shakeSettleElapsed = 0;
 
+  /// The cosmetic squish (shakeSquishScaleFor) eases smoothly back to
+  /// full size over _shakeSettleDuration, frame by frame — but the real
+  /// physics radius used to jump from shrunk straight to full size in
+  /// one single instant step, for every live body at once, the moment
+  /// that window ended. A table full of items that had settled into
+  /// positions valid at their *shrunk* size all suddenly becoming ~38%
+  /// bigger in the same physics step left Box2D with a pile of genuinely
+  /// overlapping bodies to resolve — which it deliberately does
+  /// gradually, not instantly (a hard "pop apart in one step" would be
+  /// its own visible glitch), so the overlap stayed visible for a real,
+  /// noticeable stretch after a Mega-Shake. Restoring across a handful
+  /// of discrete steps instead of one spreads that same total growth
+  /// into several smaller jumps, each with a moment for the solver to
+  /// resolve before the next — still just a few shape recreations total
+  /// (not one every frame, which the single-resize design above
+  /// deliberately avoids for cost/stability reasons), but enough to stop
+  /// the overlap from being this visible.
+  static const _shakeRestoreSteps = 4;
+  static const _shakeRestoreStepInterval = 0.08;
+  int _shakeRestoreStep = 0;
+  double _shakeRestoreStepTimer = 0;
+
   /// Scales every impulse pulse in [_updateShake] — 1.0 for the plain
   /// Shake, higher for Mega-Shake (see [megaShakeTable]) so items fly
   /// around more during the pricier purchase without touching the
@@ -865,6 +889,12 @@ class MixolocoGame extends Forge2DGame {
     _shakeTimeRemaining = _shakeDuration;
     _shakePulseTimer = 0;
     _shakeSettleElapsed = 0;
+    // A second Mega-Shake fired while the first's restore steps were
+    // still mid-way through would otherwise resume from a stale non-zero
+    // step/timer afterward, skipping straight to a later (bigger) jump
+    // instead of starting the staggered restore clean.
+    _shakeRestoreStep = 0;
+    _shakeRestoreStepTimer = 0;
     _shakeImpulseMultiplier = impulseMultiplier;
     world.gravity = Vector2(0, -kGravityMagnitude * _shakeGravityMultiplier);
   }
@@ -928,16 +958,29 @@ class MixolocoGame extends Forge2DGame {
     }
     // The shake's own timer (and its impulse pulses) has ended, but
     // items are still shrunk — ease them back to full size over
-    // _shakeSettleDuration, then restore the real physics radius once
-    // that finishes (see shakeSquishScaleFor for the matching visual
-    // curve during this window).
+    // _shakeSettleDuration (see shakeSquishScaleFor for the matching
+    // visual curve during this window), then step the real physics
+    // radius back up over a few more discrete jumps (see
+    // _shakeRestoreSteps' own doc for why not one single jump).
     if (!_shakeSquishApplied) return;
-    _shakeSettleElapsed += dt;
-    if (_shakeSettleElapsed >= _shakeSettleDuration) {
+    if (_shakeSettleElapsed < _shakeSettleDuration) {
+      _shakeSettleElapsed += dt;
+      return;
+    }
+    _shakeRestoreStepTimer -= dt;
+    if (_shakeRestoreStepTimer > 0) return;
+    _shakeRestoreStepTimer = _shakeRestoreStepInterval;
+    _shakeRestoreStep++;
+    final multiplier = _shakeRestoreStep >= _shakeRestoreSteps
+        ? 1.0
+        : _shakeSquishBase + (1.0 - _shakeSquishBase) * (_shakeRestoreStep / _shakeRestoreSteps);
+    for (final b in _liveBodies) {
+      if (b.isMounted) b.setPhysicsRadiusMultiplier(multiplier);
+    }
+    if (_shakeRestoreStep >= _shakeRestoreSteps) {
       _shakeSquishApplied = false;
-      for (final b in _liveBodies) {
-        if (b.isMounted) b.setPhysicsRadiusMultiplier(1.0);
-      }
+      _shakeRestoreStep = 0;
+      _shakeRestoreStepTimer = 0;
     }
   }
 
