@@ -338,7 +338,39 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// last time the app closed (see persistGameState), that whole board
   /// replaces the fresh one this Notifier started with instead of just
   /// patching the lifetime fields onto it.
+  /// [build] starts every session on a hard-coded zeroed [BoardState] (see
+  /// its own doc — "a brief 0-credits flash") and relies entirely on this
+  /// running to completion to patch in the real saved values. If any
+  /// plugin-channel read below ever throws — a transient hiccup, more
+  /// likely right after an app update (first-run odex/verification work
+  /// slowing the engine's early frames) or waking from a long overnight
+  /// idle (process cold-started under load) — an unguarded version of this
+  /// function would abort silently and leave the whole session stuck on
+  /// that zeroed default. Any gameplay from that point on
+  /// (registerMerge/spendCredits/etc, all of which persist immediately)
+  /// would then write the zeroed values straight over the real save on
+  /// disk — permanent progress loss triggered by nothing more than one
+  /// slow cold start, matching reports of progress resetting right after
+  /// installing an update and again after leaving the app overnight.
+  /// Retrying a few times with a short backoff costs nothing and makes a
+  /// merely transient failure self-heal well within the time it'd take a
+  /// player to even see the menu, let alone play far enough to persist
+  /// anything.
   Future<void> _loadPersisted() async {
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await _loadPersistedOnce();
+        return;
+      } catch (e, st) {
+        debugPrint('_loadPersisted attempt $attempt/$maxAttempts failed: $e\n$st');
+        if (attempt == maxAttempts) return;
+        await Future.delayed(Duration(milliseconds: 200 * attempt));
+      }
+    }
+  }
+
+  Future<void> _loadPersistedOnce() async {
     // Snapshot of exactly what build() returned, captured before any
     // `await` below yields control back to the event loop — if `state`
     // is still this same instance once every disk read below finally
@@ -544,7 +576,10 @@ class GameStateNotifier extends Notifier<BoardState> {
     return BoardState(
       current: _randomIngredient(resolvedLevel, highestForLevel),
       upcoming: List.generate(3, (_) => _randomIngredient(resolvedLevel, highestForLevel)),
-      order: starterCocktailForLevel(resolvedLevel),
+      // Cocktail Mode off: no order auto-pursues in the background (see
+      // enterLevel's matching comment on why) — the player can still buy
+      // one from the Cocktail Menu whenever they want.
+      order: ref.read(cocktailModeProvider) ? starterCocktailForLevel(resolvedLevel) : null,
       cocktailsMade: 0,
       score: 0,
       gameOver: false,
@@ -736,10 +771,11 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// Actually moves the current run onto [level]'s own chain — clears the
   /// throwable shuffle-bag (so the next draw rebuilds from the new
   /// level's pool, not a stale one), regenerates the staged/upcoming
-  /// ingredients and the active order from that level's starter cocktail,
-  /// resets [jugReached]/[completedCocktailIds] (a fresh capstone/recipe
-  /// set to chase on the new chain), and bumps the lifetime
-  /// [highestLevelReached] record if this is further than it's ever been.
+  /// ingredients and (with Cocktail Mode on) the active order from that
+  /// level's starter cocktail, resets [jugReached]/[completedCocktailIds]
+  /// (a fresh capstone/recipe set to chase on the new chain), and bumps
+  /// the lifetime [highestLevelReached] record if this is further than
+  /// it's ever been.
   /// Called by GameScreen once the level-up celebration begins (see
   /// GameScreen._runLevelUp), alongside MixolocoGame.switchToLevel which
   /// does the equivalent reset on the physics side.
@@ -759,7 +795,13 @@ class GameStateNotifier extends Notifier<BoardState> {
       level: level,
       current: newCurrent,
       upcoming: newUpcoming,
-      order: starterCocktailForLevel(level),
+      // Cocktail Mode off: don't auto-assign a starter order the player
+      // never chose — per feedback, that read as a surprise ("it made me
+      // a screwdriver!?") since nothing about turning the mode off looked
+      // like it should still be quietly pursuing/completing one in the
+      // background. Buying one from the Cocktail Menu still works either
+      // way (see GameScreen's `enabled: board.order == null` gate).
+      order: ref.read(cocktailModeProvider) ? starterCocktailForLevel(level) : null,
       jugReached: false,
       completedCocktailIds: {},
       highestLevelReached: newHighestLevelReached,
