@@ -36,8 +36,11 @@ const TIERS = ['bronze', 'silver', 'gold'];
 // carried into a new room next week — cleans up reinstall "ghost"
 // identities (an orphaned anonymous UID superseded by a fresh one stops
 // submitting scores forever the moment that happens) as well as
-// genuinely inactive players. Two weekly cycles' worth of grace.
-const INACTIVITY_DAYS = 14;
+// genuinely inactive players. A bit over one weekly cycle's worth of
+// grace — long enough that someone on a short break isn't punished,
+// short enough that ghosts don't linger a second full week in someone
+// else's leaderboard (matches Capitle's own rollover.js; was 14 days).
+const INACTIVITY_DAYS = 10;
 
 function isInactive(playerData, now) {
   const reference = playerData.lastActiveAt || playerData.createdAt;
@@ -67,20 +70,27 @@ function zoneSize(roomSize) {
 
 // Same boosted-promotion-rate idea as Capitle: promote a bigger slice
 // while the destination tier is still thin, tapering to the standard 20%
-// once it's healthy (TARGET_SIZE members). This only controls the RATE —
-// see tierGateOpen below for the hard floor on whether promotion happens
-// into a tier AT ALL this week.
+// once it's healthy. This only controls the RATE — see tierGateOpen below
+// for the hard floor on whether promotion happens into a tier AT ALL this
+// week. "Healthy" is tier-specific — Bronze->Silver measures against
+// TARGET_SIZE (Silver's own target), but Silver->Gold must measure
+// against GOLD_ROOM_BOUNDS.target, NOT TARGET_SIZE (a fixed, shared
+// threshold was a real bug found in Capitle's copy of this same logic:
+// Gold's own target is bigger than TARGET_SIZE, so a shared threshold
+// treats Gold as "already full" — tapering its promotion boost down to
+// the bare 20% base rate well before Gold actually reaches its own
+// intended size, which in Capitle's case meant Gold stopped growing
+// entirely once relegation and promotion landed on the same 20% rate).
 const PROMOTION_BOOST_FRACTION = 0.4;
 const PROMOTION_BASE_FRACTION = 0.2; // matches zoneSize's rate
-const PROMOTION_FULL_THRESHOLD = TARGET_SIZE;
 
-function boostedPromotionFraction(currentDestTierCount) {
-  const t = Math.min(1, currentDestTierCount / PROMOTION_FULL_THRESHOLD);
+function boostedPromotionFraction(currentDestTierCount, fullThreshold) {
+  const t = Math.min(1, currentDestTierCount / fullThreshold);
   return PROMOTION_BOOST_FRACTION - (PROMOTION_BOOST_FRACTION - PROMOTION_BASE_FRACTION) * t;
 }
 
-function boostedPromotionCount(roomSize, currentDestTierCount) {
-  return Math.floor(roomSize * boostedPromotionFraction(currentDestTierCount));
+function boostedPromotionCount(roomSize, currentDestTierCount, fullThreshold) {
+  return Math.floor(roomSize * boostedPromotionFraction(currentDestTierCount, fullThreshold));
 }
 
 // Gold is the top tier — no competition-integrity cost to a promotion
@@ -194,8 +204,8 @@ async function main() {
 
       const destTier = tierAbove(tier);
       const rawPromoteCount = !destTier ? 0
-        : tier === 'bronze' ? boostedPromotionCount(scored.length, currentSilverCount)
-        : boostedPromotionCount(scored.length, currentGoldCount);
+        : tier === 'bronze' ? boostedPromotionCount(scored.length, currentSilverCount, TARGET_SIZE)
+        : boostedPromotionCount(scored.length, currentGoldCount, GOLD_ROOM_BOUNDS.target);
       const scoredCount = scored.filter((e) => e.score > 0).length;
       const cappedRawPromoteCount = Math.min(rawPromoteCount, scoredCount);
 
