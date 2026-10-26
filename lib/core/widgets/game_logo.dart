@@ -10,6 +10,12 @@ class GameLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image.asset('assets/images/mixoloco_logo.png', height: height, fit: BoxFit.contain);
+    return Image.asset(
+      'assets/images/mixoloco_logo.png',
+      height: height,
+      fit: BoxFit.contain,
+      // See GlassVisual's matching comment.
+      cacheHeight: (height * MediaQuery.devicePixelRatioOf(context)).round(),
+    );
   }
 }

@@ -29,11 +29,25 @@ class GlassVisual extends StatelessWidget {
   Widget build(BuildContext context) {
     final assetPath = ingredient.assetPath;
     if (assetPath != null) {
+      // Source photos run 600-1700px on their long edge but most call
+      // sites render this at a fraction of that (14-64 logical pixels) —
+      // decoding the full source just to immediately downscale it wastes
+      // real time/memory on every distinct size used. cacheWidth alone
+      // (not cacheHeight too) lets Flutter scale the omitted dimension to
+      // preserve the source's own aspect ratio rather than distorting it.
+      // The *2.2 headroom covers both device pixel density and the
+      // biggest post-decode stretch applyDisplayScale's Transform below
+      // ever applies (displayScale * displayScaleX tops out well under
+      // 2x across every ingredient) — generous enough that this never
+      // becomes the visible-quality bottleneck, while still cutting
+      // typical decode resolution by an order of magnitude.
+      final cacheWidth = (size * 2.2 * MediaQuery.devicePixelRatioOf(context)).round();
       final image = Image.asset(
         assetPath,
         width: size,
         height: size,
         fit: BoxFit.contain,
+        cacheWidth: cacheWidth,
         // A real asset failing to load at runtime (a flaky fetch, not a
         // missing file) shouldn't leave a blank gap — fall back to the
         // drawn glass the same way an ingredient with no art at all does.

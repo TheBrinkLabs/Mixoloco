@@ -134,4 +134,42 @@ const kCocktailInstructions = <String, List<String>>{
     'Top slowly with prosecco.',
     'Stir gently and serve.',
   ],
+  'vodka_lemon': [
+    'Fill a glass with ice.',
+    'Pour in the vodka.',
+    'Top with lemonade and stir.',
+  ],
+  'lemon_fizz': [
+    'Fill a glass with ice.',
+    'Pour in the lemon liqueur.',
+    'Top with tonic water and stir gently.',
+  ],
+  'strawberry_mule': [
+    'Fill a glass with ice.',
+    'Pour in the vodka.',
+    'Top with ginger ale.',
+    'Add the strawberry.',
+  ],
+  'emerald_fizz': [
+    'Fill a glass with ice.',
+    'Pour in the Irish cream.',
+    'Top with ginger ale and stir gently.',
+  ],
+  'kir_royale': [
+    'Pour the blackcurrant liqueur into a chilled glass.',
+    'Top slowly with prosecco.',
+    'Stir gently and serve.',
+  ],
+  'hugo_spritz': [
+    'Fill a glass with ice.',
+    'Muddle the mint and lemon.',
+    'Pour in the elderflower liqueur.',
+    'Top with prosecco and stir gently.',
+  ],
+  'french_75': [
+    'Fill a shaker with ice.',
+    'Add the cognac and lemon juice.',
+    'Shake well.',
+    'Strain into a chilled glass and top with prosecco.',
+  ],
 };

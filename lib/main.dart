@@ -96,7 +96,7 @@ class _MixolocoAppState extends State<MixolocoApp> {
         return Stack(children: [child!, const PersistentBannerAd()]);
       },
       home: switch (_hasSeenAdConsent) {
-        null => const Scaffold(body: BarBackdrop(showTable: false, showHeaderBoard: false, child: SizedBox.shrink())),
+        null => const Scaffold(body: BarBackdrop(showTable: false, child: SizedBox.shrink())),
         false => AdConsentScreen(onAnswered: _onAdConsentAnswered),
         true => const MenuScreen(),
       },

@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'package:flame/game.dart' show GameWidget;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/strings.dart';
@@ -7,88 +6,28 @@ import '../../../core/services/audio_settings_provider.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colorful_plank_text.dart';
+import '../../../core/theme/outlined_label.dart';
 import '../../../core/utils/progress_sync.dart';
 import '../../../core/widgets/bar_backdrop.dart';
-import '../../../core/widgets/cartoon_board.dart';
-import '../../../core/widgets/notification_tablet.dart';
-import '../../../core/widgets/game_logo.dart';
 import '../../../core/widgets/glass_visual.dart';
-import '../../../core/widgets/wood_plank.dart';
+import '../../../core/widgets/hud_kit.dart';
+import '../../../core/widgets/notification_tablet.dart';
 import '../../../data/models/ingredient.dart';
 import '../../../data/repositories/league_repository.dart';
 import '../../game/providers/game_state_provider.dart';
 import '../../game/screens/game_screen.dart';
 import '../../league/providers/league_provider.dart';
-import '../../league/screens/league_screen.dart';
-import '../../onboarding/screens/nickname_setup_screen.dart';
+import '../../league/screens/rankings_screen.dart';
 import '../../shop/screens/shop_screen.dart';
-import '../components/falling_ingredients_game.dart';
-import 'high_scores_screen.dart';
+import '../../shop/widgets/get_credits_dialog.dart';
 import 'info_screen.dart';
 import 'settings_screen.dart';
 
-/// beach_sign.png, cropped tight to its own opaque content — a two-post
-/// sign (crossbar plank + legs planted in the sand), replacing the flat
-/// header_board.png just on this screen. Unlike that plank, the logo
-/// can't just center in the whole image: the crossbar itself only
-/// occupies the upper band of the picture (legs hang below it), so
-/// [kBeachSignPlankTopFraction]/[kBeachSignPlankBottomFraction] (found
-/// by scanning the art for where its opaque width jumps from "two
-/// separate posts" to "one solid beam" and back) mark where that band
-/// actually is.
-const kBeachSignAspect = 1169 / 739;
-const kBeachSignPlankTopFraction = 0.135;
-const kBeachSignPlankBottomFraction = 0.521;
-
-/// One leg's long cast shadow — a soft, fading streak pivoting at the
-/// leg's own foot (see call sites in [MenuScreen.build] for the measured
-/// fractions), leaning down-and-right away from the sun. [footFraction]
-/// is the foot's position as an (x, y) fraction of (signWidth,
-/// signHeight); [legWidthFraction] sets the streak's thickness relative
-/// to signWidth, matching the real leg's own width.
-Widget _legShadow({
-  required Offset footFraction,
-  required double legWidthFraction,
-  required double signWidth,
-  required double signHeight,
-}) {
-  final thickness = signWidth * legWidthFraction;
-  final length = thickness * 5.5;
-  return Positioned(
-    left: signWidth * footFraction.dx,
-    top: signHeight * footFraction.dy - thickness / 2,
-    child: Transform.rotate(
-      angle: 24 * math.pi / 180,
-      alignment: Alignment.centerLeft,
-      child: Container(
-        width: length,
-        height: thickness,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(thickness / 2),
-          gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              Colors.black.withValues(alpha: 0.45),
-              Colors.black.withValues(alpha: 0.0),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-/// Gap between each stacked menu-option board — 0 so they sit flush,
-/// touching edge to edge, reading as one continuous pile mounted on the
-/// post behind them.
-const kBoardGap = 0.0;
-
-/// Start screen — bar/level select eventually lives here (dodgy bar ->
-/// fancier bars as tiers unlock). For now it's the logo up top and five
-/// stacked wooden-plank menu options below (no bare table — that's
-/// reserved for actual gameplay).
+/// Start screen — the redesigned main menu: a top HUD row (level, credits,
+/// unlocked drink), a floating logo, a 2x2 icon grid of menu options, a
+/// glossy Play button and an About link, over the beach backdrop. See
+/// design_handoff_main_menu/README.md for the full spec this was built
+/// from.
 class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key});
 
@@ -98,14 +37,6 @@ class MenuScreen extends ConsumerStatefulWidget {
 
 class _MenuScreenState extends ConsumerState<MenuScreen>
     with WidgetsBindingObserver {
-  // Created once and kept for the screen's whole lifetime rather than
-  // inline in build() — build() reruns on every credits/score change
-  // (this screen watches gameStateProvider), and a fresh
-  // FallingIngredientsGame instance there would restart the whole
-  // physics simulation — and the pile it's built up — from scratch on
-  // every single one of those.
-  final _fallingGame = FallingIngredientsGame();
-
   @override
   void initState() {
     super.initState();
@@ -129,12 +60,18 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
     if (!authService.isLinkedToGoogle) return;
     final uid = authService.uid;
     if (uid == null) return;
-    final changed = await syncProgress(ref.read(leagueRepositoryProvider), uid);
-    if (changed && mounted) {
+    final outcome = await syncProgress(ref.read(leagueRepositoryProvider), uid);
+    if (outcome == ProgressSyncOutcome.changed && mounted) {
       await ref
           .read(gameStateProvider.notifier)
           .refreshLifetimeFieldsFromDisk();
     }
+    // A failure here is silent by design (no snackbar — this fires on
+    // every launch, unprompted, so there's no good moment to interrupt
+    // with an error) but no longer a dead end: the Settings "Google
+    // Backup" row's own tap handler retries this same sync and *does*
+    // surface a failure, so a player who notices something's missing
+    // always has a visible way to try again.
   }
 
   @override
@@ -149,54 +86,25 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
   /// only re-assert menu music if Menu itself is actually the visible
   /// route right now, otherwise this would stomp on whatever music
   /// context (game music, say, possibly with game music specifically
-  /// turned off) the actually-visible screen already re-asserted. The
-  /// falling-ingredients background is paused/resumed the same way, for
-  /// the same reason — backgrounding the whole app (home button, lock
-  /// screen, another app) shouldn't leave it quietly falling/spawning
-  /// somewhere nobody's watching, but it also shouldn't resume here on
-  /// an app-resume that's actually landing on a pushed screen instead.
+  /// turned off) the actually-visible screen already re-asserted.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final isCurrent = ModalRoute.of(context)?.isCurrent ?? false;
     if (state == AppLifecycleState.resumed && isCurrent) {
       ref.read(audioSettingsProvider.notifier).playMenuMusic();
-      _fallingGame.resumeFalling();
-    } else if (state == AppLifecycleState.paused) {
-      _fallingGame.pauseFalling();
     }
   }
 
-  /// Pauses the falling-ingredients background before pushing [route],
-  /// resuming it once that route's popped and this screen is genuinely
-  /// visible again — shared by every push this screen makes (Settings,
-  /// Best Scores, the game itself).
-  Future<void> _pushAndPauseFalling(Route<void> route) async {
-    _fallingGame.pauseFalling();
+  Future<void> _push(Route<void> route) async {
     await Navigator.of(context).push(route);
-    if (mounted) _fallingGame.resumeFalling();
   }
 
   void _openSettings() {
-    _pushAndPauseFalling(
-      MaterialPageRoute(builder: (_) => const SettingsScreen()),
-    );
+    _push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
   }
 
-  /// League profile setup is one-time and lazy — only ever prompted the
-  /// first time a player actually taps Leaderboard, rather than as part
-  /// of any app-launch flow (Mixoloco has no first-launch onboarding
-  /// carousel to hook it into the way Capitle's own profile setup does).
-  Future<void> _openLeaderboard() async {
-    final hasNickname = await ref
-        .read(leagueControllerProvider.notifier)
-        .hasLocalNickname();
-    if (!mounted) return;
-    _pushAndPauseFalling(
-      MaterialPageRoute(
-        builder: (_) =>
-            hasNickname ? const LeagueScreen() : const NicknameSetupScreen(),
-      ),
-    );
+  void _openRankings() {
+    _push(MaterialPageRoute(builder: (_) => const RankingsScreen()));
   }
 
   /// A game left via Home mid-run should be resumable as-is (that's the
@@ -222,9 +130,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
     );
     if (!mounted || choice == null) return;
     if (choice == _PlayChoice.continueGame) {
-      _pushAndPauseFalling(
-        MaterialPageRoute(builder: (_) => const GameScreen()),
-      );
+      _push(MaterialPageRoute(builder: (_) => const GameScreen()));
     } else {
       // A real run was actually in progress (that's how we got here —
       // see the inProgress check above), so New Game means throwing it
@@ -257,339 +163,199 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
     }
     ref.read(gameStateProvider.notifier).startNewGameAtLevel(level);
     if (!mounted) return;
-    _pushAndPauseFalling(MaterialPageRoute(builder: (_) => const GameScreen()));
+    _push(MaterialPageRoute(builder: (_) => const GameScreen()));
+  }
+
+  /// The ingredient art for whichever drink is currently the player's
+  /// highest-unlocked, across every evolution chain — same lookup the old
+  /// HUD board used. Kept data-driven (rather than the handoff mock's
+  /// static level-1 pineapple) so the badge is right at every level, not
+  /// just the first.
+  Ingredient _unlockedIngredient(BoardState board) {
+    if (board.highestLevelReached >= 5) {
+      return kEvolutionChainLevel5[board.highestTierUnlockedLevel5.clamp(
+        0,
+        kEvolutionChainLevel5.length - 1,
+      )];
+    }
+    if (board.highestLevelReached >= 4) {
+      return kEvolutionChainLevel4[board.highestTierUnlockedLevel4.clamp(
+        0,
+        kEvolutionChainLevel4.length - 1,
+      )];
+    }
+    if (board.highestLevelReached >= 3) {
+      return kEvolutionChainLevel3[board.highestTierUnlockedLevel3.clamp(
+        0,
+        kEvolutionChainLevel3.length - 1,
+      )];
+    }
+    if (board.highestLevelReached >= 2) {
+      return kEvolutionChainLevel2[board.highestTierUnlockedLevel2.clamp(
+        0,
+        kEvolutionChainLevel2.length - 1,
+      )];
+    }
+    return kEvolutionChain[board.highestTierUnlocked];
   }
 
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final board = ref.watch(gameStateProvider);
     final locale = ref.watch(localeProvider);
 
-    const sideMargin = 28.0;
-    final maxPlankWidth = screenSize.width - sideMargin * 2;
-    // The code-drawn CartoonBoard (see cartoon_board.dart) replaced the
-    // old menu_board_white.png photo — full available width (genuinely
-    // "wider" than the old stretched-but-still-centered board) and a
-    // flatter aspect than that board's own 975/328 (a bit "thinner"),
-    // now that nothing needs correcting for a fixed source image's own
-    // proportions. Seven of these (the six menu options plus the HUD
-    // board) still comfortably fit the same vertical budget the old
-    // math targeted.
-    const kCartoonBoardAspect = 4.2;
-    final plankWidth = maxPlankWidth;
-    final plankHeight = plankWidth / kCartoonBoardAspect;
-
-    // Sized to fit ON that sixth board (with its own bit of padding)
-    // rather than the old floating row's screen-width-derived size —
-    // shrunk down a good deal from that, per direct feedback, now that
-    // they're riding along on a board of their own instead of standing
-    // alone.
-    final hudBoardPadding = plankWidth * 0.045;
-    const hudTabGap = 8.0;
-    final hudTabWidthRaw =
-        (plankWidth - hudBoardPadding * 2 - hudTabGap * 2) / 3;
-    final hudTabHeightCap = plankHeight * 0.82;
-    final hudTabHeight = hudTabWidthRaw > hudTabHeightCap
-        ? hudTabHeightCap
-        : hudTabWidthRaw;
-    final hudTabWidth = hudTabHeight;
-
-    // The beach_sign replacement for the header board — a two-post sign
-    // with the crossbar plank only in its own upper band (see
-    // kBeachSignPlankTopFraction/BottomFraction), legs hanging below.
-    // Both the sign and the logo sitting on it are sized 15% larger than
-    // their original fit (0.86 -> ~0.99 of screen width, 120 -> 138 logo
-    // cap) per direct feedback that they read too small/cramped.
-    final signWidth = screenSize.width * 0.86 * 1.15;
-    final signHeight = signWidth / kBeachSignAspect;
-    final plankTop = signHeight * kBeachSignPlankTopFraction;
-    final plankBottom = signHeight * kBeachSignPlankBottomFraction;
-    final plankBandHeight = plankBottom - plankTop;
-    final logoHeight = plankBandHeight * 0.8 > 138
-        ? 138.0
-        : plankBandHeight * 0.8;
+    // The handoff is drawn on a 390x844 portrait frame; scaling every
+    // measurement by the same factor keeps the whole design's
+    // proportions intact instead of stretching it unevenly. Scaling by
+    // width alone overflows on phones whose safe-area height is short
+    // relative to their width (observed on a real device: the grid and
+    // Play button overlapped) — taking whichever of width/height scale
+    // is smaller, then centering the scaled 390-wide column, keeps the
+    // whole layout on-screen either way; see the README's own
+    // "Coordinate system" note ("scale ... or centre a 390-wide column").
+    final safeAreaPadding = MediaQuery.paddingOf(context);
+    final availableHeight =
+        screenSize.height - safeAreaPadding.top - safeAreaPadding.bottom;
+    final s = math.min(screenSize.width / 390.0, availableHeight / 844.0);
 
     return Scaffold(
       body: BarBackdrop(
         showTable: false,
-        showHeaderBoard: false,
         child: Stack(
           children: [
-            // Decorative only — sits first in the Stack (so everything
-            // else, the sign and every board, paints over it) and never
-            // intercepts taps (GameWidget itself doesn't request touch
-            // input the way the real game's GameWidget's own gesture
-            // detectors do — nothing here ever needs to be tapped).
-            Positioned.fill(child: GameWidget(game: _fallingGame)),
-            Align(
-              alignment: Alignment.topCenter,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: SizedBox(
-                    width: signWidth,
-                    height: signHeight,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Long shadows for just the two legs (not the
-                        // crossbar above them) — measured directly from
-                        // beach_sign.png's own opaque bounds (leg centers
-                        // at ~22%/78% of the width, feet at ~94% of the
-                        // height). Each leans away from the sun (which
-                        // sits upper-left in beach_background.png) toward
-                        // the lower right, pivoting at the real leg's own
-                        // foot so it reads as that leg's cast shadow
-                        // rather than a floating shape.
-                        _legShadow(
-                          footFraction: const Offset(0.2246, 0.945),
-                          legWidthFraction: 0.068,
-                          signWidth: signWidth,
-                          signHeight: signHeight,
-                        ),
-                        _legShadow(
-                          footFraction: const Offset(0.7772, 0.945),
-                          legWidthFraction: 0.068,
-                          signWidth: signWidth,
-                          signHeight: signHeight,
-                        ),
-                        Image.asset(
-                          'assets/images/beach_sign.png',
-                          width: signWidth,
-                          height: signHeight,
-                          fit: BoxFit.contain,
-                        ),
-                        Positioned(
-                          top: plankTop + (plankBandHeight - logoHeight) / 2,
-                          left: 0,
-                          right: 0,
-                          child: Center(child: GameLogo(height: logoHeight)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              top: signHeight + 12,
-              bottom: 0,
-              child: SafeArea(
-                top: false,
-                child: Transform.translate(
-                  offset: Offset(0, -screenSize.height * 0.05),
-                  child: Center(
-                    // Each board is now a flat, code-drawn CartoonBoard
-                    // (see cartoon_board.dart) rather than a photo plank
-                    // mounted on a post.png signpost — no more lean or
-                    // post to paint behind them, so this is just the
-                    // straight column of boards directly.
-                    child: SizedBox(
-                      width: plankWidth,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _MenuPlankTile(
-                            label: tr(locale, 'play_game'),
-                            icon: Icons.play_arrow_rounded,
-                            iconAsset: 'assets/images/play_button.png',
-                            width: plankWidth,
-                            height: plankHeight,
-                            onTap: _playGame,
-                            variant: kPlankTextVariant,
-                            font: kPlankTextFont,
-                            shadowStyle: kPlankShadowStyle,
-                          ),
-                          SizedBox(height: kBoardGap),
-                          _MenuPlankTile(
-                            label: tr(locale, 'best_scores'),
-                            icon: Icons.emoji_events_rounded,
-                            iconAsset: 'assets/images/best_scores.png',
-                            width: plankWidth,
-                            height: plankHeight,
-                            onTap: () => _pushAndPauseFalling(
-                              MaterialPageRoute(
-                                builder: (_) => const HighScoresScreen(),
+            const Positioned.fill(child: _ToneGradient()),
+            const Positioned.fill(child: _Vignette()),
+            SafeArea(
+              child: Center(
+                child: SizedBox(
+                  width: 390 * s,
+                  height: availableHeight,
+                  child: Stack(
+                    // The logo now sits slightly above this box's own top
+                    // (see its negative `top` below) to tuck it closer to
+                    // the HUD row — Clip.none so that isn't hard-clipped.
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        // Its own row now, above the Settings button sitting
+                        // in the row above this one (see that Positioned
+                        // below) — back to the full width Settings used to
+                        // share with this row, so it no longer needs
+                        // squeezing in. The FittedBox/ConstrainedBox pair
+                        // stays on as a safety net (e.g. for a longer
+                        // translation than English budgets for) even
+                        // though it should render at 1:1 scale now that
+                        // there's no deficit.
+                        top: 48 * s,
+                        left: 20 * s,
+                        right: 10 * s,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minWidth: constraints.maxWidth,
                               ),
-                            ),
-                            variant: kPlankTextVariant,
-                            font: kPlankTextFont,
-                            shadowStyle: kPlankShadowStyle,
-                          ),
-                          SizedBox(height: kBoardGap),
-                          _MenuPlankTile(
-                            label: tr(locale, 'leaderboard'),
-                            icon: Icons.leaderboard_rounded,
-                            iconAsset: 'assets/images/leaderboard.png',
-                            width: plankWidth,
-                            height: plankHeight,
-                            onTap: _openLeaderboard,
-                            variant: kPlankTextVariant,
-                            font: kPlankTextFont,
-                            shadowStyle: kPlankShadowStyle,
-                          ),
-                          SizedBox(height: kBoardGap),
-                          _MenuPlankTile(
-                            label: tr(locale, 'shop'),
-                            icon: Icons.storefront_rounded,
-                            iconAsset: 'assets/images/shop.png',
-                            width: plankWidth,
-                            height: plankHeight,
-                            onTap: () => _pushAndPauseFalling(
-                              MaterialPageRoute(
-                                builder: (_) => const ShopScreen(),
-                              ),
-                            ),
-                            variant: kPlankTextVariant,
-                            font: kPlankTextFont,
-                            shadowStyle: kPlankShadowStyle,
-                          ),
-                          SizedBox(height: kBoardGap),
-                          _MenuPlankTile(
-                            label: tr(locale, 'info'),
-                            icon: Icons.menu_book_rounded,
-                            iconAsset: 'assets/images/info.png',
-                            // 10% bigger again per feedback (was 1.2).
-                            // The left nudge that went with that bump
-                            // was too much per later feedback — it read
-                            // as out of line with every other tile's
-                            // icon — pulled back closer to centered,
-                            // just enough to keep the bigger icon off
-                            // the title text.
-                            iconScale: 1.32,
-                            iconShiftLeft: 0.04,
-                            width: plankWidth,
-                            height: plankHeight,
-                            onTap: () => _pushAndPauseFalling(
-                              MaterialPageRoute(
-                                builder: (_) => const InfoScreen(),
-                              ),
-                            ),
-                            variant: kPlankTextVariant,
-                            font: kPlankTextFont,
-                            shadowStyle: kPlankShadowStyle,
-                          ),
-                          SizedBox(height: kBoardGap),
-                          _MenuPlankTile(
-                            label: tr(locale, 'settings'),
-                            icon: Icons.settings_rounded,
-                            iconAsset: 'assets/images/settings.png',
-                            width: plankWidth,
-                            height: plankHeight,
-                            onTap: _openSettings,
-                            variant: kPlankTextVariant,
-                            font: kPlankTextFont,
-                            shadowStyle: kPlankShadowStyle,
-                          ),
-                          SizedBox(height: kBoardGap),
-                          SizedBox(
-                            width: plankWidth,
-                            height: plankHeight,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                CartoonBoard(
-                                  width: plankWidth,
-                                  height: plankHeight,
+                              child: _HudRow(
+                                scale: s,
+                                locale: locale,
+                                board: board,
+                                unlockedIngredient: _unlockedIngredient(board),
+                                onBuyCredits: () => showDialog<void>(
+                                  context: context,
+                                  builder: (_) => const GetCreditsDialog(),
                                 ),
-                                Center(
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _HudTab(
-                                        label: tr(locale, 'credits'),
-                                        width: hudTabWidth,
-                                        height: hudTabHeight,
-                                        // 2x bigger and switched to
-                                        // the same gold/orange
-                                        // gradient wood-font as the
-                                        // label above it, per
-                                        // feedback that plain blue
-                                        // text read too small and
-                                        // out of place here.
-                                        content: ColorfulPlankText(
-                                          text: '${board.credits}',
-                                          fontSize: hudTabHeight * 0.125 * 2,
-                                          variant:
-                                              PlankTextVariant.sunsetGradient,
-                                          font: kPlankTextFont,
-                                          shadowStyle: kPlankShadowStyle,
-                                        ),
-                                      ),
-                                      SizedBox(width: hudTabGap),
-                                      _HudTab(
-                                        label: tr(locale, 'level'),
-                                        width: hudTabWidth,
-                                        height: hudTabHeight,
-                                        content: ColorfulPlankText(
-                                          text: '${board.level}',
-                                          fontSize: hudTabHeight * 0.125 * 2,
-                                          variant:
-                                              PlankTextVariant.sunsetGradient,
-                                          font: kPlankTextFont,
-                                          shadowStyle: kPlankShadowStyle,
-                                        ),
-                                      ),
-                                      SizedBox(width: hudTabGap),
-                                      _HudTab(
-                                        label: tr(locale, 'unlocked'),
-                                        width: hudTabWidth,
-                                        height: hudTabHeight,
-                                        // Once a higher bar's ever been reached, its lowest
-                                        // tier still outranks every lower-bar tier, so the
-                                        // display switches over regardless of how far into
-                                        // that chain the matching highestTierUnlockedLevelN
-                                        // itself is (it can briefly be -1, right at the
-                                        // moment of leveling up before that chain's first
-                                        // tier's actually been seen — clamped to 0/Cherry
-                                        // rather than crashing).
-                                        content: GlassVisual(
-                                          ingredient:
-                                              board.highestLevelReached >= 4
-                                              ? kEvolutionChainLevel4[board
-                                                    .highestTierUnlockedLevel4
-                                                    .clamp(
-                                                      0,
-                                                      kEvolutionChainLevel4
-                                                              .length -
-                                                          1,
-                                                    )]
-                                              : board.highestLevelReached >= 3
-                                              ? kEvolutionChainLevel3[board
-                                                    .highestTierUnlockedLevel3
-                                                    .clamp(
-                                                      0,
-                                                      kEvolutionChainLevel3
-                                                              .length -
-                                                          1,
-                                                    )]
-                                              : board.highestLevelReached >= 2
-                                              ? kEvolutionChainLevel2[board
-                                                    .highestTierUnlockedLevel2
-                                                    .clamp(
-                                                      0,
-                                                      kEvolutionChainLevel2
-                                                              .length -
-                                                          1,
-                                                    )]
-                                              : kEvolutionChain[board
-                                                    .highestTierUnlocked],
-                                          size: hudTabHeight * 0.4,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                      Positioned(
+                        // Its own row above Level/Credits/Unlocked now,
+                        // rather than sharing that row's right edge —
+                        // frees the full row width back up for those 3
+                        // pills.
+                        top: 2 * s,
+                        right: 20 * s,
+                        child: _SettingsButton(scale: s, onTap: _openSettings),
+                      ),
+                      Positioned(
+                        // Shifted down by the same amount the HUD row
+                        // below it moved (40*s, to make room for the new
+                        // Settings row above) so the gap between logo and
+                        // HUD row stays the same as before, plus a further
+                        // 5% of the 390x844 reference frame's own height
+                        // (42*s) per feedback that the logo sat too high.
+                        top: (-19 + 42) * s,
+                        left: 0,
+                        right: 0,
+                        // IgnorePointer — ShadowedAsset defaults its
+                        // hit-testable box to width×width (no explicit
+                        // height given here), a full 350*s square even
+                        // though the logo art itself is much shorter.
+                        // Painted after (so on top of, for hit-testing
+                        // purposes) the HUD row above, that oversized
+                        // invisible square was silently swallowing every
+                        // tap landing on the credits pill's "+" button —
+                        // Stack hit-testing stops at the first (topmost)
+                        // child whose bounds contain the point. The logo
+                        // has no tap behavior of its own, so excluding it
+                        // from hit-testing entirely is strictly correct.
+                        child: IgnorePointer(
+                          child: Center(
+                            child: _FloatingLogo(
+                              scale: s,
+                              reduceMotion: reduceMotion,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 24 * s,
+                        right: 24 * s,
+                        // Was 206*s — nudged up a bit now that the HUD
+                        // row/logo above have both moved down to make
+                        // room for the new Settings row.
+                        bottom: 220 * s,
+                        child: _TileRow(
+                          scale: s,
+                          locale: locale,
+                          rankingsUnseen: ref
+                              .watch(leagueControllerProvider)
+                              .lastWeekResultIsNew,
+                          onShop: () => _push(
+                            MaterialPageRoute(
+                              builder: (_) => const ShopScreen(),
+                            ),
+                          ),
+                          onRankings: _openRankings,
+                          onGuide: () => _push(
+                            MaterialPageRoute(
+                              builder: (_) => const InfoScreen(),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        // Left/right match the tile row's own (24*s each)
+                        // so the Play bar's width equals the 3 combined
+                        // tiles' span, rather than its old narrower 40*s
+                        // inset.
+                        left: 24 * s,
+                        right: 24 * s,
+                        bottom: 115 * s,
+                        child: _PlayButton(
+                          scale: s,
+                          level: board.level,
+                          locale: locale,
+                          reduceMotion: reduceMotion,
+                          onTap: _playGame,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -601,262 +367,1053 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
   }
 }
 
-/// One of the three bottom HUD tabs (Credits/Level/Unlocked) — an
-/// empty_tab_white.png tile (a paler alternative used only for this
-/// row, to match the whitewashed board it sits on) with a small label
-/// and whatever content (a number, a picture) sits below it.
-class _HudTab extends StatelessWidget {
-  final String label;
-  final Widget content;
-  final double width;
-  final double height;
-  const _HudTab({
-    required this.label,
-    required this.content,
-    required this.width,
-    required this.height,
-  });
+/// Layer 2 of the backdrop — a vertical tone wash from deep night-blue up
+/// top, through the sunset's own colours in the middle, down to a dark
+/// plum at the bottom, sat over the beach photo.
+class _ToneGradient extends StatelessWidget {
+  const _ToneGradient();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // fit: fill (not contain) — contain left the wood square
-          // letterboxed by width whenever this box ran taller than the
-          // tile art's own aspect, centered in that taller box, while
-          // the text below stayed centered in the *full* box — the two
-          // drifted apart and the text ended up spilling past the
-          // wood's own visible edges. Filling the whole padded box
-          // keeps the wood and the text sharing the same footprint.
-          Padding(
-            padding: EdgeInsets.all(width * 0.07),
-            child: Image.asset(
-              'assets/images/empty_tab_white.png',
-              fit: BoxFit.fill,
-            ),
-          ),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Nudges the label down off the tile's own top edge —
-                // per feedback it read too close to it.
-                SizedBox(height: height * 0.07),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-                  // Some translations (e.g. "DESBLOQUEADO") run longer
-                  // than the English label the tab was sized for —
-                  // shrink-to-fit on one line rather than wrapping.
-                  // 1.5x bigger and switched from the old plain colored
-                  // text to the app's own gold/orange gradient wood-font
-                  // treatment, per feedback that it read too small and
-                  // plain next to everything else.
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: ColorfulPlankText(
-                      text: label.toUpperCase(),
-                      fontSize: height * 0.077 * 1.5,
-                      variant: PlankTextVariant.sunsetGradient,
-                      font: kPlankTextFont,
-                      shadowStyle: kPlankShadowStyle,
-                    ),
-                  ),
-                ),
-                SizedBox(height: height * 0.04),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-                  child: FittedBox(fit: BoxFit.scaleDown, child: content),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0.0, 0.18, 0.55, 0.78, 1.0],
+          colors: [
+            Color(0x8C0E2846),
+            Color(0x000E2846),
+            Color(0x00FFAA50),
+            Color(0x2E783214),
+            Color(0x8C28141E),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// One main-menu option — its own menu_board.png plank with a left-
-/// aligned label burnt-in-looking directly on the wood, and a light
-/// press-in animation on tap. [comingSoon] options render dimmed with a
-/// small badge and don't respond to taps.
-class _MenuPlankTile extends StatefulWidget {
-  final String label;
-  final IconData icon;
+/// Layer 3 of the backdrop — a soft radial darkening toward the edges,
+/// centred slightly above the screen's own middle.
+class _Vignette extends StatelessWidget {
+  const _Vignette();
 
-  /// A real picture standing in for [icon] when set — every tile has its
-  /// own custom art now, so [icon] only ever renders as a fallback if
-  /// one's ever added without matching art. Every tile using the same
-  /// Image-based path (rather than a mix of Icon/Image) is also what
-  /// keeps them all vertically aligned with each other — a plain
-  /// Material [Icon] doesn't share an image's exact visual weight/center
-  /// even at a matching nominal size.
-  final String? iconAsset;
-  final double width;
-  final double height;
-  final VoidCallback? onTap;
-  final bool comingSoon;
-  final String soonLabel;
-  final PlankTextVariant variant;
-  final PlankFont font;
-  final PlankShadowStyle shadowStyle;
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment(0.0, -0.1),
+          radius: 0.9,
+          stops: [0.0, 0.6, 1.0],
+          colors: [Colors.transparent, Colors.transparent, Color(0x47140A00)],
+        ),
+      ),
+    );
+  }
+}
 
-  /// Grows [iconAsset]'s rendered size relative to the standard
-  /// `height * 0.529` — Info, per feedback. 1.0 (every other tile) keeps
-  /// the original size. Rendered inside a fixed-size slot (see build's
-  /// own comment) so a scaled-up icon grows without shifting where the
-  /// title text starts — every tile's title lines up regardless of
-  /// iconScale.
-  final double iconScale;
+/// The three HUD pills (Level, Credits, Unlocked) in a spaceBetween row.
+class _HudRow extends StatelessWidget {
+  final double scale;
+  final AppLocale locale;
+  final BoardState board;
+  final Ingredient unlockedIngredient;
+  final VoidCallback onBuyCredits;
 
-  /// Shifts the icon left within its slot, as a fraction of [height] —
-  /// Info's own icon per feedback. 0 (every other tile) keeps it
-  /// centered. Purely visual: doesn't move the title text, same
-  /// decoupling as [iconScale].
-  final double iconShiftLeft;
-
-  const _MenuPlankTile({
-    required this.label,
-    required this.icon,
-    this.iconAsset,
-    required this.width,
-    required this.height,
-    required this.variant,
-    this.font = PlankFont.fredoka,
-    this.shadowStyle = PlankShadowStyle.soft,
-    this.onTap,
-    this.comingSoon = false,
-    this.soonLabel = 'SOON',
-    this.iconScale = 1.0,
-    this.iconShiftLeft = 0.0,
+  const _HudRow({
+    required this.scale,
+    required this.locale,
+    required this.board,
+    required this.unlockedIngredient,
+    required this.onBuyCredits,
   });
 
   @override
-  State<_MenuPlankTile> createState() => _MenuPlankTileState();
+  Widget build(BuildContext context) {
+    final s = scale;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _HudPill(
+          scale: s,
+          // 50 (was 46) — design_handoff_main_menu_v3 §2: the badge was
+          // covering the first "L" of LEVEL at the old padding.
+          leftPad: 50 * s,
+          rightPad: 10 * s,
+          badgeSize: 48 * s,
+          badgeLeft: -6 * s,
+          badgeTop: -8 * s,
+          badge: layeredCircle(
+            size: 48 * s,
+            shadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                offset: Offset(0, 3 * s),
+              ),
+            ],
+            rings: [
+              HudRing(width: 2 * s, color: HudColors.hudBorder),
+              HudRing(width: 3 * s, color: Colors.white),
+            ],
+            fill: DecoratedBox(
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  center: Alignment(-0.3, -0.4),
+                  radius: 1.0,
+                  stops: [0.0, 0.6, 1.0],
+                  colors: [
+                    HudColors.goldTop,
+                    HudColors.goldMid,
+                    HudColors.goldBottom,
+                  ],
+                ),
+              ),
+              child: Center(
+                child: OutlinedLabel(
+                  text: '${board.level}',
+                  fontSize: 24 * s,
+                  fill: Colors.white,
+                  stroke: HudColors.goldNumberStroke,
+                  strokeWidth: 4 * s,
+                ),
+              ),
+            ),
+          ),
+          content: OutlinedLabel(
+            text: tr(locale, 'level').toUpperCase(),
+            fontSize: 13 * s,
+            fill: Colors.white,
+            letterSpacing: 0.78 * s,
+          ),
+        ),
+        _HudPill(
+          scale: s,
+          leftPad: 40 * s,
+          rightPad: 34 * s,
+          badgeSize: 40 * s,
+          badgeLeft: -4 * s,
+          badgeTop: -4 * s,
+          badge: layeredCircle(
+            size: 40 * s,
+            rings: [
+              HudRing(width: 2 * s, color: HudColors.coinRim),
+              HudRing(
+                width: 4 * s,
+                color: Colors.white.withValues(alpha: 0.35),
+              ),
+            ],
+            fill: DecoratedBox(
+              // Blue (was the same gold as the coins art itself) — the
+              // gold coins were hard to make out against a gold badge.
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  center: Alignment(-0.3, -0.4),
+                  radius: 1.0,
+                  stops: [0.0, 0.6, 1.0],
+                  colors: [
+                    HudColors.plateTop,
+                    HudColors.plateMid,
+                    HudColors.plateBottom,
+                  ],
+                ),
+              ),
+              // See game_screen.dart's matching _GameCreditsPill comment —
+              // coins.png's own canvas has a lot of transparent padding
+              // around the actual coin stack, so BoxFit.cover (clipped to
+              // the circle) fills the badge properly where
+              // BoxFit.contain left it tiny.
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/coins.png',
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.cover,
+                  // This badge never renders bigger than ~40*s logical
+                  // px — see GlassVisual's matching comment.
+                  cacheWidth: (40 * s * MediaQuery.devicePixelRatioOf(context)).round(),
+                ),
+              ),
+            ),
+          ),
+          content: OutlinedLabel(
+            text: _formatCredits(board.credits),
+            fontSize: 19 * s,
+            fill: Colors.white,
+            stroke: HudColors.hudBorder,
+            strokeWidth: 3 * s,
+          ),
+          topRight: Positioned(
+            top: 2 * s,
+            right: 2 * s,
+            child: GestureDetector(
+              onTap: onBuyCredits,
+              child: Container(
+                width: 28 * s,
+                height: 28 * s,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(9 * s),
+                  border: Border.all(color: HudColors.plusBorder, width: 2 * s),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [HudColors.plusTop, HudColors.plusBottom],
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: OutlinedLabel(
+                  text: '+',
+                  fontSize: 22 * s,
+                  fill: Colors.white,
+                  stroke: HudColors.plusBorder,
+                  strokeWidth: 3 * s,
+                ),
+              ),
+            ),
+          ),
+        ),
+        _HudPill(
+          scale: s,
+          // 50 (was 44) — same badge-covers-the-first-letter fix as the
+          // Level pill above, per design_handoff_main_menu_v3 §2.
+          leftPad: 50 * s,
+          rightPad: 10 * s,
+          marginLeft: 8 * s,
+          badgeSize: 48 * s,
+          badgeLeft: -6 * s,
+          badgeTop: -8 * s,
+          badge: layeredCircle(
+            size: 48 * s,
+            shadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                offset: Offset(0, 3 * s),
+              ),
+            ],
+            rings: [
+              HudRing(width: 2 * s, color: HudColors.hudBorder),
+              HudRing(
+                width: 3 * s,
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [HudColors.creamTop, HudColors.creamBottom],
+                ),
+              ),
+            ],
+            fill: DecoratedBox(
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [HudColors.creamInnerTop, HudColors.creamInnerBottom],
+                ),
+              ),
+              child: Center(
+                child: GlassVisual(
+                  ingredient: unlockedIngredient,
+                  size: 48 * s * 0.82,
+                  // This badge is a small cosmetic preview circle, not the
+                  // physics table — applying gameplay's contact-matching
+                  // displayScale/displayScaleX here (some ingredients
+                  // stretch well past 1.0, e.g. Vodka's 1.652x) bled the
+                  // art outside the circle for several ingredients.
+                  applyDisplayScale: false,
+                ),
+              ),
+            ),
+          ),
+          content: OutlinedLabel(
+            text: tr(locale, 'unlocked').toUpperCase(),
+            fontSize: 13 * s,
+            fill: Colors.white,
+            letterSpacing: 0.78 * s,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _formatCredits(int value) {
+    final digits = value.toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+      buffer.write(digits[i]);
+    }
+    return buffer.toString();
+  }
 }
 
-class _MenuPlankTileState extends State<_MenuPlankTile> {
-  bool _pressed = false;
+/// One rounded HUD pill with a badge poking out of its left edge.
+class _HudPill extends StatelessWidget {
+  final double scale;
+  final double leftPad;
+  final double rightPad;
+  final double marginLeft;
+  final double badgeSize;
+  final double badgeLeft;
+  final double badgeTop;
+  final Widget badge;
+  final Widget content;
+  final Widget? topRight;
 
+  const _HudPill({
+    required this.scale,
+    required this.leftPad,
+    required this.rightPad,
+    this.marginLeft = 0,
+    required this.badgeSize,
+    required this.badgeLeft,
+    required this.badgeTop,
+    required this.badge,
+    required this.content,
+    this.topRight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = scale;
+    return Padding(
+      padding: EdgeInsets.only(left: marginLeft),
+      child: Container(
+        height: 36 * s,
+        constraints: BoxConstraints(minWidth: (leftPad + rightPad) + 20 * s),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18 * s),
+          border: Border.all(color: HudColors.hudBorder, width: 2 * s),
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [HudColors.hudNavyTop, HudColors.hudNavyBottom],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.30),
+              offset: Offset(0, 3 * s),
+            ),
+          ],
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              top: 1 * s,
+              left: 12 * s,
+              right: 12 * s,
+              child: Container(
+                height: 2 * s,
+                color: Colors.white.withValues(alpha: 0.22),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(left: leftPad, right: rightPad),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(fit: BoxFit.scaleDown, child: content),
+              ),
+            ),
+            Positioned(
+              left: badgeLeft,
+              top: badgeTop,
+              child: SizedBox(
+                width: badgeSize,
+                height: badgeSize,
+                child: badge,
+              ),
+            ),
+            ?topRight,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The floating Mixoloco wordmark — menu_logo_sticker.png (the same art
+/// as mixoloco_logo.png with the sticker outline/shadow baked in, see
+/// tools/bake_menu_logo_outline.dart) with a soft drop shadow and a slow
+/// bob-and-tilt loop.
+class _FloatingLogo extends StatefulWidget {
+  final double scale;
+  final bool reduceMotion;
+  const _FloatingLogo({required this.scale, required this.reduceMotion});
+
+  @override
+  State<_FloatingLogo> createState() => _FloatingLogoState();
+}
+
+class _FloatingLogoState extends State<_FloatingLogo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 4500),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.reduceMotion) _controller.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FloatingLogo oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.reduceMotion != oldWidget.reduceMotion) {
+      if (widget.reduceMotion) {
+        _controller.stop();
+        _controller.value = 0;
+      } else {
+        _controller.repeat();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.scale;
+    final width = 350 * s;
+    final logo = ShadowedAsset(
+      path: 'assets/images/menu_logo_sticker.png',
+      width: width,
+      shadows: [
+        SpriteShadow(
+          offset: Offset(0, 14 * s),
+          blur: 18 * s,
+          color: Colors.black.withValues(alpha: 0.35),
+        ),
+      ],
+    );
+    if (widget.reduceMotion) return logo;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        // A half-cosine wave, 0 -> 1 -> 0 over one loop: y 0 -> -7 -> 0 and
+        // rotate -1.5deg -> +1deg -> -1.5deg, matching the handoff's own
+        // float keyframes.
+        final wave = (1 - math.cos(_controller.value * 2 * math.pi)) / 2;
+        final lift = -7 * s * wave;
+        final angle = (-1.5 + 2.5 * wave) * math.pi / 180;
+        return Transform.translate(
+          offset: Offset(0, lift),
+          child: Transform.rotate(angle: angle, child: child),
+        );
+      },
+      child: logo,
+    );
+  }
+}
+
+/// The Shop/Rankings/Guide tile row (design_handoff_main_menu_v3 §4) —
+/// replaces the old 2x2 Shop/Best Scores/Info/Leaderboard grid now that
+/// Best Scores and Leaderboard are one merged Rankings screen and About
+/// has moved into Settings.
+class _TileRow extends StatelessWidget {
+  final double scale;
+  final AppLocale locale;
+  final bool rankingsUnseen;
+  final VoidCallback onShop;
+  final VoidCallback onRankings;
+  final VoidCallback onGuide;
+
+  const _TileRow({
+    required this.scale,
+    required this.locale,
+    required this.rankingsUnseen,
+    required this.onShop,
+    required this.onRankings,
+    required this.onGuide,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = scale;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _MenuTile(
+          scale: s,
+          label: tr(locale, 'shop'),
+          iconAsset: 'assets/images/icon_shop.png',
+          onTap: onShop,
+        ),
+        _MenuTile(
+          scale: s,
+          label: tr(locale, 'rankings'),
+          iconAsset: 'assets/images/icon_rankings.png',
+          onTap: onRankings,
+          showCountDot: rankingsUnseen,
+        ),
+        _MenuTile(
+          scale: s,
+          label: tr(locale, 'guide'),
+          iconAsset: 'assets/images/icon_guide.png',
+          onTap: onGuide,
+        ),
+      ],
+    );
+  }
+}
+
+/// One tile — a gold-rimmed navy "plate" with its icon breaking out the
+/// top and a gold ribbon label overlapping the bottom, per the v3
+/// handoff's §4a-d. `showCountDot` shows the small red unseen-count
+/// badge (Rankings only, driven by [LeagueState.lastWeekResultIsNew] —
+/// there's no real "shop has new stock" concept anywhere in the data
+/// model yet, so that NEW-badge slot from the handoff is deliberately
+/// not wired up here).
+class _MenuTile extends StatefulWidget {
+  final double scale;
+  final String label;
+  final String iconAsset;
+  final VoidCallback onTap;
+  final bool showCountDot;
+  const _MenuTile({
+    required this.scale,
+    required this.label,
+    required this.iconAsset,
+    required this.onTap,
+    this.showCountDot = false,
+  });
+
+  @override
+  State<_MenuTile> createState() => _MenuTileState();
+}
+
+class _MenuTileState extends State<_MenuTile> {
+  bool _pressed = false;
   void _setPressed(bool value) => setState(() => _pressed = value);
 
   @override
   Widget build(BuildContext context) {
-    final icon = widget.icon;
-    // No longer dimmed via Opacity when comingSoon — full-strength like
-    // every other board, with just the SOON badge doing the work of
-    // signalling the state, per feedback that the dimming read wrong.
-    final tile = SizedBox(
-      width: widget.width,
-      height: widget.height,
-      child: Stack(
-        alignment: Alignment.centerLeft,
-        children: [
-          CartoonBoard(width: widget.width, height: widget.height),
-          Padding(
-            padding: EdgeInsets.only(left: widget.width * 0.09),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.iconAsset != null)
-                  // A fixed-size slot at the *standard* (unscaled) icon
-                  // size — iconScale grows the image drawn inside it,
-                  // not the slot itself, so the title text after it
-                  // (sized off the Row's total width) starts at the same
-                  // x on every tile regardless of iconScale. iconShiftLeft
-                  // nudges the image within that slot, same independence
-                  // from the text's position.
-                  SizedBox(
-                    width: widget.height * 0.529,
-                    height: widget.height * 0.529,
-                    child: Transform.translate(
-                      offset: Offset(-widget.height * widget.iconShiftLeft, 0),
-                      child: Image.asset(
-                        widget.iconAsset!,
-                        width: widget.height * 0.529 * widget.iconScale,
-                        height: widget.height * 0.529 * widget.iconScale,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  )
-                else
-                  Icon(
-                    icon,
-                    size: widget.height * 0.391,
-                    color: plankAccentColor(widget.variant),
-                    shadows: const [
-                      Shadow(
-                        color: Colors.black38,
-                        blurRadius: 3,
-                        offset: Offset(1, 1.5),
-                      ),
-                    ],
-                  ),
-                SizedBox(width: widget.width * 0.025),
-                // Flexible — gives ColorfulPlankText's own Wrap a real
-                // bounded width to measure against, so a translation
-                // that runs wider than the English original (e.g.
-                // "Mejores Puntuaciones" for "Best Scores") wraps to a
-                // second line instead of overflowing past the board's
-                // edge.
-                Flexible(
-                  child: ColorfulPlankText(
-                    text: widget.label,
-                    fontSize: widget.height * 0.3,
-                    variant: widget.variant,
-                    font: widget.font,
-                    shadowStyle: widget.shadowStyle,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (widget.comingSoon)
-            Positioned(
-              right: widget.width * 0.06,
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: widget.width * 0.02,
-                  vertical: widget.height * 0.06,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.bg.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.15),
-                  ),
-                ),
-                child: Text(
-                  widget.soonLabel,
-                  style: TextStyle(
-                    fontSize: widget.height * 0.16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-
-    if (widget.onTap == null) return tile;
-
+    final s = widget.scale;
     return GestureDetector(
       onTapDown: (_) => _setPressed(true),
       onTapCancel: () => _setPressed(false),
       onTapUp: (_) => _setPressed(false),
       onTap: widget.onTap,
       child: AnimatedScale(
-        scale: _pressed ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 90),
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
-        child: tile,
+        child: SizedBox(
+          width: 104 * s,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    alignment: Alignment.bottomCenter,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 98 * s,
+                        height: 88 * s,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(26 * s),
+                          border: Border.all(
+                            color: HudColors.goldRim,
+                            width: 3 * s,
+                          ),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              HudColors.plateTop,
+                              HudColors.plateMid,
+                              HudColors.plateBottom,
+                            ],
+                            stops: [0.0, 0.7, 1.0],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: HudColors.hudBorder,
+                              offset: Offset(0, 6 * s),
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              offset: Offset(0, 12 * s),
+                              blurRadius: 18 * s,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        top: 6 * s,
+                        left: 6 * s,
+                        right: 6 * s,
+                        height: 88 * s * 0.3,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(20 * s),
+                              bottom: Radius.circular(30 * s),
+                            ),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.white.withValues(alpha: 0.22),
+                                Colors.white.withValues(alpha: 0),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 14 * s,
+                        child: ShadowedAsset(
+                          path: widget.iconAsset,
+                          width: 92 * s,
+                          height: 84 * s,
+                          shadows: [
+                            SpriteShadow(
+                              offset: Offset(0, 3 * s),
+                              color: Colors.white.withValues(alpha: 0.85),
+                            ),
+                            SpriteShadow(
+                              offset: Offset(0, 5 * s),
+                              blur: 6 * s,
+                              color: Colors.black.withValues(alpha: 0.35),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  Transform.translate(
+                    offset: Offset(0, -14 * s),
+                    child: Container(
+                      padding: EdgeInsets.fromLTRB(
+                        12 * s,
+                        3 * s,
+                        12 * s,
+                        4 * s,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10 * s),
+                        border: Border.all(
+                          color: HudColors.ribbonStroke,
+                          width: 2 * s,
+                        ),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [HudColors.ribbonTop, HudColors.ribbonBottom],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: HudColors.ribbonStroke,
+                            offset: Offset(0, 3 * s),
+                          ),
+                        ],
+                      ),
+                      // FittedBox (not a bare label) — "RANKINGS" at this
+                      // ribbon's width otherwise wraps to two lines
+                      // instead of shrinking to fit on one, same fix the
+                      // old grid tiles' labels already needed.
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: OutlinedLabel(
+                          text: widget.label.toUpperCase(),
+                          fontSize: 15 * s,
+                          fill: Colors.white,
+                          stroke: HudColors.ribbonStroke,
+                          strokeWidth: 3 * s,
+                          letterSpacing: 0.6 * s,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (widget.showCountDot)
+                Positioned(
+                  top: -6 * s,
+                  right: 2 * s,
+                  child: Container(
+                    width: 18 * s,
+                    height: 18 * s,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: HudColors.badgeRed,
+                      border: Border.all(color: Colors.white, width: 2 * s),
+                      boxShadow: [
+                        BoxShadow(
+                          color: HudColors.badgeRedEdge,
+                          offset: Offset(0, 2 * s),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The new top-right round Settings button (design_handoff_main_menu_v3
+/// §1) — replaces the old bare bottom-corner gear icon.
+class _SettingsButton extends StatefulWidget {
+  final double scale;
+  final VoidCallback onTap;
+  const _SettingsButton({required this.scale, required this.onTap});
+
+  @override
+  State<_SettingsButton> createState() => _SettingsButtonState();
+}
+
+class _SettingsButtonState extends State<_SettingsButton> {
+  bool _pressed = false;
+  void _setPressed(bool value) => setState(() => _pressed = value);
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.scale;
+    return GestureDetector(
+      onTapDown: (_) => _setPressed(true),
+      onTapCancel: () => _setPressed(false),
+      onTapUp: (_) => _setPressed(false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: layeredCircle(
+          size: 42 * s,
+          shadow: [
+            BoxShadow(color: HudColors.hudBorder, offset: Offset(0, 4 * s)),
+          ],
+          rings: [
+            HudRing(width: 2 * s, color: HudColors.hudBorder),
+            HudRing(width: 3 * s, color: HudColors.goldRim),
+          ],
+          fill: DecoratedBox(
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [HudColors.settingsPlateTop, HudColors.hudNavyBottom],
+              ),
+            ),
+            child: Center(
+              child: ShadowedAsset(
+                // 26 (was 34) — smaller gear within the same 42*s circle.
+                path: 'assets/images/icon_settings.png',
+                width: 26 * s,
+                shadows: [
+                  SpriteShadow(
+                    offset: Offset(0, 2 * s),
+                    blur: 2 * s,
+                    color: Colors.black.withValues(alpha: 0.4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The main Play call-to-action: a layered 3D button (base edge, glossy
+/// face, animated shine sweep, overflowing Play icon, PLAY/LEVEL n text),
+/// with a 5px press-down.
+class _PlayButton extends StatefulWidget {
+  final double scale;
+  final int level;
+  final AppLocale locale;
+  final bool reduceMotion;
+  final VoidCallback onTap;
+
+  const _PlayButton({
+    required this.scale,
+    required this.level,
+    required this.locale,
+    required this.reduceMotion,
+    required this.onTap,
+  });
+
+  @override
+  State<_PlayButton> createState() => _PlayButtonState();
+}
+
+class _PlayButtonState extends State<_PlayButton> {
+  bool _pressed = false;
+  void _setPressed(bool value) => setState(() => _pressed = value);
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.scale;
+    const height = 96.0;
+    final faceHeight = (height - 8) * s;
+
+    return GestureDetector(
+      onTapDown: (_) => _setPressed(true),
+      onTapCancel: () => _setPressed(false),
+      onTapUp: (_) => _setPressed(false),
+      onTap: widget.onTap,
+      child: SizedBox(
+        height: height * s,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Base / 3D edge.
+            Container(
+              height: height * s,
+              decoration: BoxDecoration(
+                color: HudColors.greenEdge,
+                borderRadius: BorderRadius.circular(30 * s),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF143C0A).withValues(alpha: 0.45),
+                    offset: Offset(0, 14 * s),
+                    blurRadius: 26 * s,
+                  ),
+                ],
+              ),
+            ),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 80),
+              curve: Curves.easeOut,
+              top: _pressed ? 5 * s : 0,
+              left: 0,
+              right: 0,
+              // Stack (not just the ClipRRect directly) — the play icon
+              // below is deliberately positioned to overlap past the
+              // button's own rounded edge, which a ClipRRect would cut
+              // clean off. Keeping the icon as a later sibling OUTSIDE
+              // the ClipRRect (rather than inside, where it used to live)
+              // both avoids that clipping and puts it in front of
+              // everything else, as it should be.
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(30 * s),
+                    child: Container(
+                      height: faceHeight,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: HudColors.greenEdge,
+                          width: 3 * s,
+                        ),
+                        borderRadius: BorderRadius.circular(30 * s),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: [0.0, 0.45, 1.0],
+                          colors: [
+                            HudColors.greenTop,
+                            HudColors.greenMid,
+                            HudColors.greenBottom,
+                          ],
+                        ),
+                      ),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned(
+                            top: 3 * s,
+                            left: 10 * s,
+                            right: 10 * s,
+                            child: Container(
+                              height: 3 * s,
+                              color: Colors.white.withValues(alpha: 0.55),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            left: 10 * s,
+                            right: 10 * s,
+                            child: Container(
+                              height: 6 * s,
+                              color: const Color(
+                                0xFF003C00,
+                              ).withValues(alpha: 0.18),
+                            ),
+                          ),
+                          Positioned(
+                            left: 10 * s,
+                            right: 10 * s,
+                            top: 5 * s,
+                            height: faceHeight * 0.34,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(22 * s),
+                                  topRight: Radius.circular(22 * s),
+                                  bottomLeft: Radius.circular(40 * s),
+                                  bottomRight: Radius.circular(40 * s),
+                                ),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.5),
+                                    Colors.white.withValues(alpha: 0.08),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (!widget.reduceMotion)
+                            Positioned.fill(
+                              child: _ShineSweep(bandWidthFraction: 0.3),
+                            ),
+                          Positioned.fill(
+                            left: 96 * s,
+                            child: Center(
+                              // scaleDown as a safety net in case some locale's
+                              // 'play' string still runs wider than this button
+                              // budgets for at the design's own 46*s size.
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    OutlinedLabel(
+                                      text: tr(
+                                        widget.locale,
+                                        'play',
+                                      ).toUpperCase(),
+                                      fontSize: 46 * s,
+                                      fill: Colors.white,
+                                      stroke: HudColors.greenEdge,
+                                      strokeWidth: 7 * s,
+                                      letterSpacing: 1.4 * s,
+                                      shadowOffset: Offset(0, 4 * s),
+                                      shadowColor: HudColors.greenEdge,
+                                    ),
+                                    SizedBox(height: 2 * s),
+                                    OutlinedLabel(
+                                      text:
+                                          '${tr(widget.locale, 'level').toUpperCase()} ${widget.level}',
+                                      fontSize: 14 * s,
+                                      fill: HudColors.playSubLabel,
+                                      stroke: HudColors.greenEdge,
+                                      strokeWidth: 3 * s,
+                                      letterSpacing: 1.4 * s,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Painted after (so in front of) the ClipRRect above —
+                  // and outside it, so the part that deliberately
+                  // overlaps past the button's rounded top-left corner
+                  // no longer gets clipped off.
+                  Positioned(
+                    left: -11.2 * s,
+                    top: -19.2 * s,
+                    child: ShadowedAsset(
+                      path: 'assets/images/icon_play.png',
+                      width: 94.4 * s,
+                      rotation: -8 * math.pi / 180,
+                      shadows: [
+                        SpriteShadow(
+                          offset: Offset(0, 4 * s),
+                          color: const Color(0xFF14460A).withValues(alpha: 0.6),
+                        ),
+                        SpriteShadow(
+                          offset: Offset(0, 8 * s),
+                          blur: 10 * s,
+                          color: Colors.black.withValues(alpha: 0.25),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The animated diagonal highlight band that sweeps across the Play
+/// button's face — rests just off the left edge for the first 60% of its
+/// 3.2s loop, then sweeps across to past the right edge.
+class _ShineSweep extends StatefulWidget {
+  final double bandWidthFraction;
+  const _ShineSweep({required this.bandWidthFraction});
+
+  @override
+  State<_ShineSweep> createState() => _ShineSweepState();
+}
+
+class _ShineSweepState extends State<_ShineSweep>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3200),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final t = _controller.value;
+          final progress = t < 0.6 ? 0.0 : (t - 0.6) / 0.4;
+          final position = -1.4 + progress * (2.6 - -1.4);
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final bandWidth = constraints.maxWidth * widget.bandWidthFraction;
+              return Transform.translate(
+                offset: Offset(position * bandWidth, 0),
+                child: Transform(
+                  transform: Matrix4.skewX(-20 * math.pi / 180),
+                  child: Container(
+                    width: bandWidth,
+                    height: constraints.maxHeight,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withValues(alpha: 0.55),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -974,7 +1531,7 @@ class _LoseProgressDialog extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textOnStoneMuted,
+                  color: Colors.black,
                 ),
               ),
             ),
@@ -1003,7 +1560,8 @@ class _LevelPickerDialog extends StatelessWidget {
     1 => 'Beach',
     2 => 'Rooftop',
     3 => 'Safari',
-    _ => 'Piazza',
+    4 => 'Piazza',
+    _ => 'Jungle',
   };
 
   @override

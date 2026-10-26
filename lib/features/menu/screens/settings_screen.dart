@@ -7,25 +7,44 @@ import '../../../core/services/auth_service.dart';
 import '../../../core/services/cocktail_mode_provider.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/utils/device_id_service.dart';
 import '../../../core/utils/nickname_generator.dart';
 import '../../../core/utils/progress_sync.dart';
-import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/notification_tablet.dart';
-import '../../../core/widgets/wood_plank.dart';
+import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/repositories/league_repository.dart';
 import '../../../data/services/league_local_service.dart';
 import '../../game/providers/game_state_provider.dart';
+import 'about_screen.dart';
 
 /// Music-in-menu, music-in-game, sound-effects, and language toggles —
-/// its own pushed screen (matching Best Scores/the main menu) rather
-/// than a modal sheet, so every "list of things on wood planks" page in
-/// the app reads as the same family. Watches [audioSettingsProvider]
-/// directly (no local mirrored state needed) since its setters update
-/// `state` synchronously before persisting.
+/// grouped into AUDIO/GAMEPLAY/ACCOUNT per design_handoff_submenus'
+/// Settings spec. Watches [audioSettingsProvider] directly (no local
+/// mirrored state needed) since its setters update `state` synchronously
+/// before persisting.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
+
+  /// Cocktail Mode changes which items count toward a level-up (see
+  /// GameStateNotifier._checkLevelUp) — safe to flip between runs, but
+  /// flipping it mid-run would leave the live board's own
+  /// completedCocktailIds/order chasing the OLD mode's rules. Rather
+  /// than let that drift silently, a run actually in progress (same
+  /// "inProgress" definition MenuScreen._playGame uses for its own
+  /// Continue/New-Game offer) gets a confirm first, then an explicit
+  /// restart-at-the-same-level (startNewGameAtLevel) — evolution tier,
+  /// highest level reached, and credits are untouched by that call, only
+  /// this run's table/score/order.
+  Future<void> _handleCocktailModeChange(BuildContext context, WidgetRef ref, AppLocale locale, bool enabled) async {
+    final board = ref.read(gameStateProvider);
+    final inProgress = !board.gameOver && (board.score > 0 || board.placedItems.isNotEmpty);
+    if (inProgress) {
+      final confirmed = await showDialog<bool>(context: context, builder: (_) => _CocktailModeChangeDialog(locale: locale));
+      if (confirmed != true) return;
+      ref.read(gameStateProvider.notifier).startNewGameAtLevel(board.level);
+    }
+    await ref.read(cocktailModeProvider.notifier).setEnabled(enabled);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,84 +52,69 @@ class SettingsScreen extends ConsumerWidget {
     final notifier = ref.read(audioSettingsProvider.notifier);
     final cocktailModeEnabled = ref.watch(cocktailModeProvider);
     final locale = ref.watch(localeProvider);
-    final screenSize = MediaQuery.sizeOf(context);
-    const sideMargin = 28.0;
-    final plankWidth = screenSize.width - sideMargin * 2;
-    final plankHeight = plankWidth / kMenuBoard3Aspect;
 
-    return Scaffold(
-      body: BarBackdrop(
-        showTable: false,
-        showHeaderBoard: false,
-        child: Stack(
+    return SubmenuScaffold(
+      title: tr(locale, 'settings'),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    WoodTitlePlank(
-                      title: tr(locale, 'settings'),
-                      icon: Icons.settings_rounded,
-                      width: plankWidth,
-                      height: plankHeight,
-                      assetPath: 'assets/images/menu_board_3.png',
-                      iconAsset: 'assets/images/settings.png',
-                    ),
-                    _SettingPlankRow(
-                      icon: Icons.music_note_rounded,
-                      label: tr(locale, 'music_in_menu'),
-                      value: settings.menuMusicEnabled,
-                      onChanged: notifier.setMenuMusicEnabled,
-                      width: plankWidth,
-                      height: plankHeight,
-                    ),
-                    _SettingPlankRow(
-                      icon: Icons.videogame_asset_rounded,
-                      label: tr(locale, 'music_in_game'),
-                      value: settings.gameMusicEnabled,
-                      onChanged: notifier.setGameMusicEnabled,
-                      width: plankWidth,
-                      height: plankHeight,
-                    ),
-                    _SettingPlankRow(
-                      icon: Icons.graphic_eq_rounded,
-                      label: tr(locale, 'sound_effects'),
-                      value: settings.sfxEnabled,
-                      onChanged: notifier.setSfxEnabled,
-                      width: plankWidth,
-                      height: plankHeight,
-                    ),
-                    _SettingPlankRow(
-                      icon: Icons.local_bar_rounded,
-                      label: tr(locale, 'cocktail_mode'),
-                      value: cocktailModeEnabled,
-                      onChanged: ref.read(cocktailModeProvider.notifier).setEnabled,
-                      width: plankWidth,
-                      height: plankHeight,
-                    ),
-                    _LanguagePlankRow(
-                      label: tr(locale, 'language'),
-                      value: locale,
-                      onChanged: (next) => ref.read(localeProvider.notifier).setLocale(next),
-                      width: plankWidth,
-                      height: plankHeight,
-                    ),
-                    _NicknamePlankRow(locale: locale, width: plankWidth, height: plankHeight),
-                    _GoogleSignInPlankRow(locale: locale, width: plankWidth, height: plankHeight),
-                    _ResetProgressPlankRow(
-                      locale: locale,
-                      onReset: () => ref.read(gameStateProvider.notifier).resetProgression(),
-                      width: plankWidth,
-                      height: plankHeight,
-                    ),
-                  ],
+            GroupHeader(text: tr(locale, 'settings_group_audio')),
+            InsetList(
+              rows: [
+                _ToggleRow(
+                  icon: Icons.music_note_rounded,
+                  label: tr(locale, 'music_in_menu'),
+                  value: settings.menuMusicEnabled,
+                  onChanged: notifier.setMenuMusicEnabled,
                 ),
-              ),
+                _ToggleRow(
+                  icon: Icons.videogame_asset_rounded,
+                  label: tr(locale, 'music_in_game'),
+                  value: settings.gameMusicEnabled,
+                  onChanged: notifier.setGameMusicEnabled,
+                ),
+                _ToggleRow(
+                  icon: Icons.graphic_eq_rounded,
+                  label: tr(locale, 'sound_effects'),
+                  value: settings.sfxEnabled,
+                  onChanged: notifier.setSfxEnabled,
+                ),
+              ],
             ),
-            // Painted last — see info_screen.dart's matching comment.
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
+            GroupHeader(text: tr(locale, 'settings_group_gameplay')),
+            InsetList(
+              rows: [
+                _ToggleRow(
+                  icon: Icons.local_bar_rounded,
+                  label: tr(locale, 'cocktail_mode'),
+                  value: cocktailModeEnabled,
+                  onChanged: (enabled) => _handleCocktailModeChange(context, ref, locale, enabled),
+                ),
+                _LanguageRow(
+                  locale: locale,
+                  onChanged: (next) => ref.read(localeProvider.notifier).setLocale(next),
+                ),
+              ],
+            ),
+            GroupHeader(text: tr(locale, 'settings_group_account')),
+            InsetList(
+              rows: [
+                _NicknameRow(locale: locale),
+                _GoogleBackupRow(locale: locale),
+                _ChevronRow(
+                  icon: Icons.info_rounded,
+                  label: tr(locale, 'about'),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutScreen())),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _ResetProgressButton(
+              locale: locale,
+              onReset: () => ref.read(gameStateProvider.notifier).resetProgression(),
+            ),
           ],
         ),
       ),
@@ -118,126 +122,94 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class _SettingPlankRow extends StatelessWidget {
+class _ToggleRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool value;
   final ValueChanged<bool> onChanged;
-  final double width;
-  final double height;
-  const _SettingPlankRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    required this.width,
-    required this.height,
-  });
+  const _ToggleRow({required this.icon, required this.label, required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    return WoodPlank(
-      width: width,
-      height: height,
-      assetPath: 'assets/images/menu_board_3.png',
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-        child: Row(
-          children: [
-            Icon(icon, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
-            SizedBox(width: width * 0.03),
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: ColorfulPlankText(
-                  text: label,
-                  fontSize: height * 0.22,
-                  variant: kPlankTextVariant,
-                  font: kPlankTextFont,
-                  shadowStyle: kPlankShadowStyle,
-                ),
-              ),
+    return SubmenuRow(
+      icon: icon,
+      label: label,
+      trailing: _SettingsToggle(value: value, onChanged: onChanged),
+      onTap: () => onChanged(!value),
+    );
+  }
+}
+
+/// The new toggle track/knob — replaces [PlankToggle] on this screen
+/// family only (PlankToggle's own carved-wood look stays on the screens
+/// that still use it).
+class _SettingsToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const _SettingsToggle({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 54,
+        height: 30,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          color: value ? SubmenuColors.green : SubmenuColors.toggleOffTrack,
+          border: Border.all(color: value ? SubmenuColors.greenEdge : SubmenuColors.toggleOffBorder, width: 2),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0, 1))],
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 22,
+            height: 22,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 2, offset: Offset(0, 2))],
             ),
-            PlankToggle(value: value, onChanged: onChanged, height: height),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// The Language row — two selectable pill buttons instead of a switch.
-/// Each language's own name is shown in that language itself (a picker
-/// labeled "English"/"Español" rather than translating "Spanish" into
-/// whatever's currently selected), which is how language pickers
-/// conventionally read regardless of the app's own current language.
-class _LanguagePlankRow extends StatelessWidget {
+class _ChevronRow extends StatelessWidget {
+  final IconData icon;
   final String label;
-  final AppLocale value;
-  final ValueChanged<AppLocale> onChanged;
-  final double width;
-  final double height;
-  const _LanguagePlankRow({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    required this.width,
-    required this.height,
-  });
+  final VoidCallback onTap;
+  const _ChevronRow({required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return WoodPlank(
-      width: width,
-      height: height,
-      assetPath: 'assets/images/menu_board_3.png',
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-        child: Row(
-          children: [
-            Icon(Icons.language_rounded, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
-            SizedBox(width: width * 0.03),
-            // Expanded (not Flexible+Spacer) — Flexible alongside a
-            // Spacer split the row's leftover width 50/50 between them,
-            // which starved a plain word like "Language" of room it
-            // didn't actually need and wrapped it into "LANG"/"UAGE" for
-            // no reason. Expanded alone claims all the leftover width in
-            // one place, leaving the dropdown pill its fixed size.
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: ColorfulPlankText(
-                  text: label,
-                  fontSize: height * 0.22,
-                  variant: kPlankTextVariant,
-                  font: kPlankTextFont,
-                  shadowStyle: kPlankShadowStyle,
-                ),
-              ),
-            ),
-            _LanguageDropdown(value: value, onChanged: onChanged, height: height),
-          ],
-        ),
-      ),
+    return SubmenuRow(
+      icon: icon,
+      label: label,
+      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 22),
+      onTap: onTap,
     );
   }
 }
 
-/// A single pill showing the current language — tapping it opens a
-/// dropdown menu listing every supported locale (just English/Español
-/// for now), replacing the old side-by-side chip pair per feedback
-/// that a picker naming just the active choice, with the rest a tap
-/// away, reads cleaner than showing every option at once.
-class _LanguageDropdown extends StatelessWidget {
-  final AppLocale value;
+/// The Language row — tapping it opens a dropdown menu listing every
+/// supported locale. Each language's own name is shown in that language
+/// itself (a picker labeled "English"/"Español" rather than translating
+/// "Spanish" into whatever's currently selected), which is how language
+/// pickers conventionally read regardless of the app's own current
+/// language.
+class _LanguageRow extends StatelessWidget {
+  final AppLocale locale;
   final ValueChanged<AppLocale> onChanged;
-  final double height;
-  const _LanguageDropdown({required this.value, required this.onChanged, required this.height});
+  const _LanguageRow({required this.locale, required this.onChanged});
 
-  // Each language's own name, in its own script — same convention a
-  // real language picker uses (an English speaker still recognizes
-  // "Español"/"Deutsch" even without reading them), so this doesn't
-  // need its own tr() entries.
   static String _name(AppLocale locale) => switch (locale) {
     AppLocale.en => 'English',
     AppLocale.es => 'Español',
@@ -252,87 +224,22 @@ class _LanguageDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<AppLocale>(
-      initialValue: value,
-      onSelected: onChanged,
-      color: const Color(0xFF3A2A18),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.black.withValues(alpha: 0.4))),
-      itemBuilder: (context) => [
-        for (final locale in AppLocale.values)
-          PopupMenuItem(
-            value: locale,
-            child: Text(
-              _name(locale),
-              style: GoogleFonts.luckiestGuy(fontSize: height * 0.16, color: locale == value ? AppColors.sunsetGold : Colors.white),
+    return SubmenuRow(
+      icon: Icons.language_rounded,
+      label: tr(locale, 'language'),
+      trailing: PopupMenuButton<AppLocale>(
+        initialValue: locale,
+        onSelected: onChanged,
+        color: SubmenuColors.panelBottom,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: SubmenuColors.ring)),
+        itemBuilder: (context) => [
+          for (final l in AppLocale.values)
+            PopupMenuItem(
+              value: l,
+              child: Text(_name(l), style: GoogleFonts.luckiestGuy(fontSize: 14, color: l == locale ? SubmenuColors.gold : Colors.white)),
             ),
-          ),
-      ],
-      // A carved wood-grain pill — the same bevel/gradient language the
-      // toggle track and plank rows use — with the language name in
-      // ColorfulPlankText's own orange combo, in place of the old flat
-      // Material-orange rectangle with plain white text that read as a
-      // generic app-chrome control dropped onto the wood.
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: height * 0.14, vertical: height * 0.07),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF8B5A2B), Color(0xFF5A3818)]),
-          border: Border.all(color: const Color(0xFF3B2412), width: 1.3),
-          boxShadow: const [
-            BoxShadow(color: Colors.black45, blurRadius: 3, offset: Offset(0, 2)),
-            BoxShadow(color: Colors.white24, blurRadius: 0, offset: Offset(0, 1)),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ColorfulPlankText(
-              text: _name(value),
-              fontSize: height * 0.17,
-              variant: PlankTextVariant.sunsetGradient,
-              font: kPlankTextFont,
-              shadowStyle: PlankShadowStyle.hardOffset,
-            ),
-            SizedBox(width: height * 0.03),
-            Icon(Icons.arrow_drop_down_rounded, color: AppColors.sunsetGold, size: height * 0.26),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The same carved wood-grain pill [_LanguageDropdown] shows its value
-/// in, pulled out for reuse wherever another row needs to display a
-/// short "current value" — plain colored text sitting directly on the
-/// wood grain (sunsetGold, textMuted, anything) didn't read clearly
-/// enough per feedback; this dark pill behind ColorfulPlankText is the
-/// one trailing-value treatment on this screen that's proven legible,
-/// so every row's value now uses it instead of inventing another look.
-class _ValuePill extends StatelessWidget {
-  final String text;
-  final double height;
-  const _ValuePill({required this.text, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: height * 0.14, vertical: height * 0.07),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF8B5A2B), Color(0xFF5A3818)]),
-        border: Border.all(color: const Color(0xFF3B2412), width: 1.3),
-        boxShadow: const [
-          BoxShadow(color: Colors.black45, blurRadius: 3, offset: Offset(0, 2)),
-          BoxShadow(color: Colors.white24, blurRadius: 0, offset: Offset(0, 1)),
         ],
-      ),
-      child: ColorfulPlankText(
-        text: text,
-        fontSize: height * 0.17,
-        variant: PlankTextVariant.sunsetGradient,
-        font: kPlankTextFont,
-        shadowStyle: PlankShadowStyle.hardOffset,
+        child: SubmenuValuePill(text: _name(locale), icon: Icons.arrow_drop_down_rounded),
       ),
     );
   }
@@ -340,27 +247,21 @@ class _ValuePill extends StatelessWidget {
 
 /// Lets a player change the name the Leaderboard shows for them after
 /// its one-time setup screen (nickname_setup_screen.dart) — that screen
-/// only ever runs once, the first time "Leaderboard" is tapped, with no
-/// way back into it afterward. Loads the locally-cached nickname (see
-/// league_local_service.dart) on its own rather than watching
-/// leagueControllerProvider, same reasoning as _GoogleSignInPlankRow's
-/// own doc comment — this is a lightweight local read, not worth a
-/// Firestore round trip just to label a Settings row. Shown regardless
-/// of whether a nickname's ever been set (reads "Not set" until it has)
-/// — tapping it either way opens the same edit dialog, which doubles as
-/// first-time setup for a player who reaches it before ever visiting
-/// the Leaderboard.
-class _NicknamePlankRow extends ConsumerStatefulWidget {
+/// only ever runs once, the first time "Rankings" is tapped with no
+/// nickname set, with no way back into it afterward. Loads the
+/// locally-cached nickname on its own rather than watching
+/// leagueControllerProvider, same reasoning as _GoogleBackupRow's own
+/// doc comment — this is a lightweight local read, not worth a
+/// Firestore round trip just to label a Settings row.
+class _NicknameRow extends ConsumerStatefulWidget {
   final AppLocale locale;
-  final double width;
-  final double height;
-  const _NicknamePlankRow({required this.locale, required this.width, required this.height});
+  const _NicknameRow({required this.locale});
 
   @override
-  ConsumerState<_NicknamePlankRow> createState() => _NicknamePlankRowState();
+  ConsumerState<_NicknameRow> createState() => _NicknameRowState();
 }
 
-class _NicknamePlankRowState extends ConsumerState<_NicknamePlankRow> {
+class _NicknameRowState extends ConsumerState<_NicknameRow> {
   String? _nickname;
 
   @override
@@ -397,11 +298,9 @@ class _NicknamePlankRowState extends ConsumerState<_NicknamePlankRow> {
     }
   }
 
-  // ColorfulPlankText's per-glyph Row has no overflow/ellipsis support
-  // (see colorful_plank_text.dart), so a long nickname (up to the edit
-  // dialog's 20-char max) is clipped here in plain Dart before it ever
-  // reaches the pill, rather than relying on Flutter's text layout to
-  // truncate it for us.
+  // Plain Text has no issue wrapping/overflowing like the old
+  // ColorfulPlankText did, but the pill's width budget is still tight —
+  // keep the same clip-to-10-chars safety net.
   static String _displayValue(String? nickname, AppLocale locale) {
     final raw = nickname ?? tr(locale, 'nickname_not_set');
     return raw.length > 10 ? '${raw.substring(0, 10)}…' : raw;
@@ -409,41 +308,17 @@ class _NicknamePlankRowState extends ConsumerState<_NicknamePlankRow> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return SubmenuRow(
+      icon: Icons.person_rounded,
+      label: tr(widget.locale, 'nickname_label'),
+      trailing: SubmenuValuePill(text: _displayValue(_nickname, widget.locale), icon: Icons.edit_rounded),
       onTap: _edit,
-      child: WoodPlank(
-        width: widget.width,
-        height: widget.height,
-        assetPath: 'assets/images/menu_board_3.png',
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: widget.width * 0.06),
-          child: Row(
-            children: [
-              Icon(Icons.badge_rounded, size: widget.height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
-              SizedBox(width: widget.width * 0.03),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ColorfulPlankText(
-                    text: tr(widget.locale, 'nickname_label'),
-                    fontSize: widget.height * 0.22,
-                    variant: kPlankTextVariant,
-                    font: kPlankTextFont,
-                    shadowStyle: kPlankShadowStyle,
-                  ),
-                ),
-              ),
-              _ValuePill(text: _displayValue(_nickname, widget.locale), height: widget.height),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
 
 /// The stone-tablet edit dialog itself — split out from
-/// [_NicknamePlankRowState._edit] since a TextField needs its own
+/// [_NicknameRowState._edit] since a TextField needs its own
 /// StatefulWidget to manage focus/rebuilds on every keystroke without
 /// rebuilding the whole Settings screen underneath it.
 class _NicknameEditDialog extends StatefulWidget {
@@ -492,7 +367,7 @@ class _NicknameEditDialogState extends State<_NicknameEditDialog> {
                 hintText: tr(widget.locale, 'edit_nickname_hint'),
                 hintStyle: const TextStyle(color: AppColors.textOnStoneMuted),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.5),
+                fillColor: Colors.black.withValues(alpha: 0.2),
                 counterStyle: const TextStyle(color: AppColors.textOnStoneMuted, fontSize: 11),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
@@ -510,7 +385,7 @@ class _NicknameEditDialogState extends State<_NicknameEditDialog> {
             StoneButton(
               onTap: () => Navigator.of(context).pop(),
               height: 40,
-              child: Text(tr(widget.locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
+              child: Text(tr(widget.locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black)),
             ),
           ],
         ),
@@ -526,47 +401,72 @@ class _NicknameEditDialogState extends State<_NicknameEditDialog> {
 /// than folding into SettingsScreen) since the linked/not-linked status
 /// isn't itself a Riverpod-watched value (FirebaseAuth's own current-user
 /// state), so this needs its own setState after a successful sign-in.
-class _GoogleSignInPlankRow extends ConsumerStatefulWidget {
+class _GoogleBackupRow extends ConsumerStatefulWidget {
   final AppLocale locale;
-  final double width;
-  final double height;
-  const _GoogleSignInPlankRow({required this.locale, required this.width, required this.height});
+  const _GoogleBackupRow({required this.locale});
 
   @override
-  ConsumerState<_GoogleSignInPlankRow> createState() => _GoogleSignInPlankRowState();
+  ConsumerState<_GoogleBackupRow> createState() => _GoogleBackupRowState();
 }
 
-class _GoogleSignInPlankRowState extends ConsumerState<_GoogleSignInPlankRow> {
+class _GoogleBackupRowState extends ConsumerState<_GoogleBackupRow> {
   late bool _linked = authService.isLinkedToGoogle;
 
   Future<void> _handleTap() async {
     if (_linked) {
+      // Already linked — treat a tap as "check again," not just a label
+      // lookup. This is also the only retry path for a sync that failed
+      // the first time around (see the comment below on why that's a
+      // real, not just theoretical, possibility).
+      final uid = authService.uid;
+      final outcome = uid == null
+          ? ProgressSyncOutcome.failed
+          : await syncProgress(ref.read(leagueRepositoryProvider), uid);
+      if (outcome == ProgressSyncOutcome.changed) {
+        await ref.read(gameStateProvider.notifier).refreshLifetimeFieldsFromDisk();
+      }
+      if (!mounted) return;
       final email = authService.linkedGoogleEmail;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(email ?? tr(widget.locale, 'connected'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            outcome == ProgressSyncOutcome.failed
+                ? tr(widget.locale, 'google_sign_in_restore_failed')
+                : (email ?? tr(widget.locale, 'connected')),
+          ),
+        ),
+      );
       return;
     }
     try {
       final result = await authService.linkGoogle();
       final uid = authService.uid;
-      if (uid != null) {
-        // Pulls down whatever this Google account already has on record
-        // and merges it with whatever this device played anonymously
-        // before signing in — see progress_sync.dart's own doc for why
-        // this is a safe max()-per-field merge rather than an overwrite
-        // either direction.
-        final changed = await syncProgress(ref.read(leagueRepositoryProvider), uid);
-        if (changed) await ref.read(gameStateProvider.notifier).refreshLifetimeFieldsFromDisk();
+      // Pulls down whatever this Google account already has on record
+      // and merges it with whatever this device played anonymously
+      // before signing in — see progress_sync.dart's own doc for why
+      // this is a safe max()-per-field merge rather than an overwrite
+      // either direction. syncProgress can genuinely fail (a transient
+      // permission-denied right after the account switch above is the
+      // likeliest real-world case — the auth token backing Firestore's
+      // own permission checks hasn't necessarily finished propagating
+      // the instant linkGoogle() returns) and retries internally, but a
+      // caller still has to treat "failed" as its own outcome rather
+      // than silently falling through to the success message below —
+      // that's exactly what let a sync failure look identical to "there
+      // was nothing to restore" before this was fixed.
+      final outcome = uid == null
+          ? ProgressSyncOutcome.failed
+          : await syncProgress(ref.read(leagueRepositoryProvider), uid);
+      if (outcome == ProgressSyncOutcome.changed) {
+        await ref.read(gameStateProvider.notifier).refreshLifetimeFieldsFromDisk();
       }
       if (!mounted) return;
       setState(() => _linked = true);
+      final messageKey = outcome == ProgressSyncOutcome.failed
+          ? 'google_sign_in_restore_failed'
+          : (result.restoredExistingAccount ? 'google_sign_in_restored' : 'google_sign_in_backed_up');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            tr(widget.locale, result.restoredExistingAccount ? 'google_sign_in_restored' : 'google_sign_in_backed_up'),
-          ),
-        ),
+        SnackBar(content: Text(tr(widget.locale, messageKey))),
       );
     } catch (e, st) {
       debugPrint('Google sign-in link failed: $e\n$st');
@@ -577,36 +477,73 @@ class _GoogleSignInPlankRowState extends ConsumerState<_GoogleSignInPlankRow> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return SubmenuRow(
+      icon: Icons.cloud_upload_rounded,
+      label: tr(widget.locale, 'back_up_progress'),
       onTap: _handleTap,
-      child: WoodPlank(
-        width: widget.width,
-        height: widget.height,
-        assetPath: 'assets/images/menu_board_3.png',
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: widget.width * 0.06),
-          child: Row(
-            children: [
-              Icon(Icons.cloud_upload_rounded, size: widget.height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
-              SizedBox(width: widget.width * 0.03),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ColorfulPlankText(
-                    text: tr(widget.locale, 'back_up_progress'),
-                    fontSize: widget.height * 0.22,
-                    variant: kPlankTextVariant,
-                    font: kPlankTextFont,
-                    shadowStyle: kPlankShadowStyle,
-                  ),
+      trailing: _linked
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  tr(widget.locale, 'backed_up'),
+                  style: const TextStyle(fontFamily: 'Nunito', fontSize: 12, fontWeight: FontWeight.w900, color: SubmenuColors.greenBright),
                 ),
-              ),
-              if (_linked)
-                Icon(Icons.check_circle_rounded, size: widget.height * 0.26, color: AppColors.sunsetGold)
-              else
-                _ValuePill(text: tr(widget.locale, 'sign_in_with_google'), height: widget.height),
-            ],
-          ),
+                const SizedBox(width: 6),
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: SubmenuColors.green,
+                    border: Border.all(color: SubmenuColors.greenEdge, width: 2),
+                  ),
+                  child: const Icon(Icons.check_rounded, color: Colors.white, size: 14),
+                ),
+              ],
+            )
+          : SubmenuValuePill(text: tr(widget.locale, 'sign_in_with_google'), icon: Icons.login_rounded),
+    );
+  }
+}
+
+/// The confirm step [SettingsScreen._handleCocktailModeChange] shows
+/// before flipping Cocktail Mode mid-run.
+class _CocktailModeChangeDialog extends StatelessWidget {
+  final AppLocale locale;
+  const _CocktailModeChangeDialog({required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: NotificationTablet(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              tr(locale, 'cocktail_mode_change_title'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textOnStone),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              tr(locale, 'cocktail_mode_change_body'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppColors.textOnStoneMuted),
+            ),
+            const SizedBox(height: 20),
+            StoneButton(
+              onTap: () => Navigator.of(context).pop(true),
+              child: Text(tr(locale, 'cocktail_mode_change_confirm'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
+            ),
+            const SizedBox(height: 10),
+            StoneButton(
+              onTap: () => Navigator.of(context).pop(false),
+              height: 40,
+              child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black)),
+            ),
+          ],
         ),
       ),
     );
@@ -618,14 +555,12 @@ class _GoogleSignInPlankRowState extends ConsumerState<_GoogleSignInPlankRow> {
 /// GameStateNotifier.resetProgression), for a player who's reached
 /// Level 2 and wants to play the beach bar again from scratch rather
 /// than every new game starting on the rooftop. Behind a confirmation
-/// dialog since it isn't reversible — unlike every toggle/dropdown else
-/// on this screen, this one changes game data, not a preference.
-class _ResetProgressPlankRow extends StatelessWidget {
+/// dialog since it isn't reversible — unlike every toggle/picker above,
+/// this one changes game data, not a preference.
+class _ResetProgressButton extends StatelessWidget {
   final AppLocale locale;
   final VoidCallback onReset;
-  final double width;
-  final double height;
-  const _ResetProgressPlankRow({required this.locale, required this.onReset, required this.width, required this.height});
+  const _ResetProgressButton({required this.locale, required this.onReset});
 
   Future<void> _confirm(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -656,7 +591,7 @@ class _ResetProgressPlankRow extends StatelessWidget {
               StoneButton(
                 onTap: () => Navigator.of(context).pop(false),
                 height: 40,
-                child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
+                child: Text(tr(locale, 'cancel'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black)),
               ),
             ],
           ),
@@ -670,30 +605,24 @@ class _ResetProgressPlankRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => _confirm(context),
-      child: WoodPlank(
-        width: width,
-        height: height,
-        assetPath: 'assets/images/menu_board_3.png',
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-          child: Row(
-            children: [
-              Icon(Icons.restart_alt_rounded, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
-              SizedBox(width: width * 0.03),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ColorfulPlankText(
-                    text: tr(locale, 'reset_progress'),
-                    fontSize: height * 0.2,
-                    variant: kPlankTextVariant,
-                    font: kPlankTextFont,
-                    shadowStyle: kPlankShadowStyle,
-                  ),
-                ),
-              ),
-            ],
-          ),
+      child: Container(
+        height: 46,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: SubmenuColors.resetBorder, width: 2),
+          color: SubmenuColors.red.withValues(alpha: 0.12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.restart_alt_rounded, color: SubmenuColors.resetText, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              tr(locale, 'reset_progress').toUpperCase(),
+              style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: SubmenuColors.resetText),
+            ),
+          ],
         ),
       ),
     );

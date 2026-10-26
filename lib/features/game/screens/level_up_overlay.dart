@@ -5,9 +5,10 @@ import '../../../core/services/ad_service.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/services/purchase_service.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colorful_plank_text.dart';
 import '../../../core/widgets/bar_backdrop.dart' show backgroundAssetPathForLevel;
-import '../../../core/widgets/wood_plank.dart';
+import '../../../core/widgets/notification_tablet.dart' show StoneButton;
+import '../../../core/widgets/submenu_kit.dart';
+import '../../menu/info_level_data.dart';
 
 enum _Step { celebrate, ad, ready }
 
@@ -57,8 +58,10 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _confettiController = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))..forward();
-    _confettiPieces = List.generate(28, (_) => _ConfettiPiece.random());
+    // Bigger celebration per feedback — more confetti, running longer,
+    // than the original 28-piece/2.2s burst.
+    _confettiController = AnimationController(vsync: this, duration: const Duration(milliseconds: 3000))..forward();
+    _confettiPieces = List.generate(48, (_) => _ConfettiPiece.random());
   }
 
   @override
@@ -108,7 +111,14 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
           // (no table/HUD yet — those are already loaded underneath,
           // just still covered) instead of the plain dark scrim the
           // celebrate/ad beats use.
-          if (_step == _Step.ready) Image.asset(backgroundAssetPathForLevel(widget.level), fit: BoxFit.cover, alignment: Alignment.topCenter),
+          if (_step == _Step.ready)
+            Image.asset(
+              backgroundAssetPathForLevel(widget.level),
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+              // See BarBackdrop's matching comment.
+              cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round(),
+            ),
           Container(color: Colors.black.withValues(alpha: _step == _Step.ready ? 0.35 : 0.75)),
           Center(
             child: Stack(
@@ -144,35 +154,42 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
       mainAxisSize: MainAxisSize.min,
       children: [
         TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.6, end: 1.0),
-          duration: const Duration(milliseconds: 450),
+          tween: Tween(begin: 0.4, end: 1.0),
+          duration: const Duration(milliseconds: 550),
           curve: Curves.elasticOut,
           builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
-          child: ColorfulPlankText(
-            text: tr(widget.locale, 'level_complete_title'),
-            fontSize: 34,
-            variant: PlankTextVariant.sunsetGradient,
-            font: kPlankTextFont,
-            shadowStyle: kPlankShadowStyle,
-          ),
-        ),
-        const SizedBox(height: 28),
-        GestureDetector(
-          onTap: _onNextPressed,
           child: Container(
-            width: 200,
-            height: 50,
-            decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(16)),
-            child: Center(
-              child: Text(tr(widget.locale, 'next'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
+            padding: const EdgeInsets.fromLTRB(32, 12, 32, 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: SubmenuColors.gold, width: 3),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [SubmenuColors.goldTop, SubmenuColors.goldBottom],
+              ),
+              boxShadow: [
+                BoxShadow(color: SubmenuColors.goldEdge, offset: const Offset(0, 6)),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.4), offset: const Offset(0, 14), blurRadius: 24),
+              ],
+            ),
+            child: OutlinedLabel(
+              text: tr(widget.locale, 'level_complete_title').toUpperCase(),
+              fontSize: 40,
+              fill: Colors.white,
+              stroke: SubmenuColors.goldEdge,
+              strokeWidth: 6,
             ),
           ),
         ),
+        const SizedBox(height: 32),
+        StoneButton(onTap: _onNextPressed, width: 220, height: 54, child: Text(tr(widget.locale, 'next'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black))),
       ],
     );
   }
 
   Widget _buildReadyMessage() {
+    final levelName = kInfoLevels.firstWhere((l) => l.level == widget.level, orElse: () => kInfoLevels.last).name;
     return Column(
       key: const ValueKey('ready'),
       mainAxisSize: MainAxisSize.min,
@@ -182,26 +199,20 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
           duration: const Duration(milliseconds: 450),
           curve: Curves.elasticOut,
           builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
-          child: ColorfulPlankText(
-            text: '${tr(widget.locale, 'level')} ${widget.level}',
-            fontSize: 34,
-            variant: PlankTextVariant.sunsetGradient,
-            font: kPlankTextFont,
-            shadowStyle: kPlankShadowStyle,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${tr(widget.locale, 'level')} ${widget.level}'.toUpperCase(),
+                style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, letterSpacing: 1.4, color: SubmenuColors.gold),
+              ),
+              const SizedBox(height: 4),
+              OutlinedLabel(text: levelName.toUpperCase(), fontSize: 44, fill: Colors.white, stroke: SubmenuColors.ring, strokeWidth: 6),
+            ],
           ),
         ),
-        const SizedBox(height: 28),
-        GestureDetector(
-          onTap: _finish,
-          child: Container(
-            width: 200,
-            height: 50,
-            decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(16)),
-            child: Center(
-              child: Text(tr(widget.locale, 'play_game'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
-            ),
-          ),
-        ),
+        const SizedBox(height: 32),
+        StoneButton(onTap: _finish, width: 220, height: 54, child: Text(tr(widget.locale, 'play_game'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black))),
       ],
     );
   }

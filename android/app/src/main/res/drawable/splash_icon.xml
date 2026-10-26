@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ launch splash icon: the menu wordmark (menu_logo_sticker.png)
+     pre-centred on a 1152px canvas in drawable-xxxhdpi (= exactly 288dp,
+     the splash icon size), sized to sit inside
+     the splash's visible centre circle.
+     -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/splash_icon_src"
+    android:gravity="center" />

@@ -9,7 +9,7 @@ import '../../data/services/progression_service.dart';
 /// 'assets/audio/' prefix. Playback starts on a random track each app
 /// launch (see AudioSettingsNotifier._trackIndex's initializer) rather
 /// than always opening on the first one.
-const kMusicTracks = ['Saltwater_Morning.mp3', 'Saltwater_Sunsets.mp3', 'Warm_Afternoon_Tide.mp3', 'Midday_at_the_Cabana.mp3'];
+const kMusicTracks = ['Mixoloco_Theme_Tune.mp3', 'Rendezvous_Bay.mp3', 'Pitons_in_the_Mist.mp3', 'Midday_at_the_Cabana.mp3'];
 
 /// The rooftop bar's own playlist (Level 2) — swapped in by
 /// [AudioSettingsNotifier.playGameMusic]'s `rooftop` flag once
@@ -27,12 +27,18 @@ const kMusicTracksLevel3 = ['Furaha_Iko_Hapa.mp3', 'Furaha_Iko_Mixoloco.mp3', 'H
 /// doc for how [musicTracksForLevel] picks between the four.
 const kMusicTracksLevel4 = ['Afternoon_in_the_Piazza.mp3', 'Midday_in_the_Piazza.mp3', 'Plaza_Aperitivo.mp3', 'Two_Glasses_on_the_Marble.mp3'];
 
+/// The jungle bar's own playlist (Level 5) — see [kMusicTracksLevel2]'s
+/// doc for how [musicTracksForLevel] picks between the four.
+const kMusicTracksLevel5 = ['noon_in_the_canopy.mp3', 'Rainforest_Morning_Mist.mp3', 'canopy_ritual.mp3', 'Mixoloco_en_Costa_Rica.mp3'];
+
 /// Which playlist plays for [level] — shared by [AudioSettingsNotifier
-/// .playGameMusic] so the beach/rooftop/safari/piazza choice can't drift
-/// out of sync between call sites. Menu music stays on [kMusicTracks]
-/// regardless of lifetime level reached — the home screen's own visuals
-/// (sign, sand, boards) never change, only the in-game table does.
+/// .playGameMusic] so the beach/rooftop/safari/piazza/jungle choice can't
+/// drift out of sync between call sites. Menu music stays on
+/// [kMusicTracks] regardless of lifetime level reached — the home
+/// screen's own visuals (sign, sand, boards) never change, only the
+/// in-game table does.
 List<String> musicTracksForLevel(int level) {
+  if (level >= 5) return kMusicTracksLevel5;
   if (level >= 4) return kMusicTracksLevel4;
   if (level >= 3) return kMusicTracksLevel3;
   if (level >= 2) return kMusicTracksLevel2;
@@ -44,13 +50,29 @@ class AudioSettings {
   final bool gameMusicEnabled;
   final bool sfxEnabled;
 
-  const AudioSettings({required this.menuMusicEnabled, required this.gameMusicEnabled, required this.sfxEnabled});
+  /// The gameplay screen's top-left mute button — a hard override on top
+  /// of the three toggles above (see [AudioSettingsNotifier.setAllSoundMuted]).
+  final bool allSoundMuted;
 
-  AudioSettings copyWith({bool? menuMusicEnabled, bool? gameMusicEnabled, bool? sfxEnabled}) => AudioSettings(
-    menuMusicEnabled: menuMusicEnabled ?? this.menuMusicEnabled,
-    gameMusicEnabled: gameMusicEnabled ?? this.gameMusicEnabled,
-    sfxEnabled: sfxEnabled ?? this.sfxEnabled,
-  );
+  const AudioSettings({
+    required this.menuMusicEnabled,
+    required this.gameMusicEnabled,
+    required this.sfxEnabled,
+    this.allSoundMuted = false,
+  });
+
+  AudioSettings copyWith({bool? menuMusicEnabled, bool? gameMusicEnabled, bool? sfxEnabled, bool? allSoundMuted}) =>
+      AudioSettings(
+        menuMusicEnabled: menuMusicEnabled ?? this.menuMusicEnabled,
+        gameMusicEnabled: gameMusicEnabled ?? this.gameMusicEnabled,
+        sfxEnabled: sfxEnabled ?? this.sfxEnabled,
+        allSoundMuted: allSoundMuted ?? this.allSoundMuted,
+      );
+
+  /// What MixolocoGame should actually honor for sound effects — combines
+  /// the regular Settings toggle with the mute override in one place
+  /// rather than every call site re-deriving it.
+  bool get effectiveSfxEnabled => sfxEnabled && !allSoundMuted;
 }
 
 /// Owns both the persisted audio settings and the actual music playlist
@@ -80,8 +102,18 @@ class AudioSettingsNotifier extends Notifier<AudioSettings> {
   }
 
   Future<void> _loadPersisted() async {
-    final results = await Future.wait([loadMenuMusicEnabled(), loadGameMusicEnabled(), loadSfxEnabled()]);
-    state = AudioSettings(menuMusicEnabled: results[0], gameMusicEnabled: results[1], sfxEnabled: results[2]);
+    final results = await Future.wait([
+      loadMenuMusicEnabled(),
+      loadGameMusicEnabled(),
+      loadSfxEnabled(),
+      loadAllSoundMuted(),
+    ]);
+    state = AudioSettings(
+      menuMusicEnabled: results[0],
+      gameMusicEnabled: results[1],
+      sfxEnabled: results[2],
+      allSoundMuted: results[3],
+    );
   }
 
   /// Called from the Settings toggle — also starts/stops playback
@@ -110,10 +142,24 @@ class AudioSettingsNotifier extends Notifier<AudioSettings> {
     await saveSfxEnabled(enabled);
   }
 
+  /// The gameplay screen's top-left mute button — called from there, but
+  /// a genuine app-wide override (also silences the menu's own music, not
+  /// just whatever's audible on the game screen right now), since that's
+  /// how a single on-screen "mute" control is expected to behave. Muting
+  /// stops whatever's currently playing immediately; un-muting doesn't
+  /// resume anything itself — the caller (GameScreen, the only place
+  /// this toggle lives) re-asserts its own playMenuMusic/playGameMusic
+  /// right after, same as resuming from a backgrounded app already does.
+  Future<void> setAllSoundMuted(bool muted) async {
+    state = state.copyWith(allSoundMuted: muted);
+    await saveAllSoundMuted(muted);
+    if (muted) await stopMusic();
+  }
+
   /// Starts (or keeps playing) the beach playlist if menu music is
   /// enabled — called whenever the menu screen becomes current.
   Future<void> playMenuMusic() async {
-    if (!state.menuMusicEnabled) {
+    if (!state.menuMusicEnabled || state.allSoundMuted) {
       await stopMusic();
       return;
     }
@@ -126,7 +172,7 @@ class AudioSettingsNotifier extends Notifier<AudioSettings> {
   /// GameScreen._runLevelUp). [level] picks the right playlist via
   /// [musicTracksForLevel].
   Future<void> playGameMusic({int level = 1}) async {
-    if (!state.gameMusicEnabled) {
+    if (!state.gameMusicEnabled || state.allSoundMuted) {
       await stopMusic();
       return;
     }

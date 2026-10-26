@@ -11,13 +11,28 @@ import '../../../data/models/ingredient.dart';
 /// source.
 const _highlightAlignment = Alignment(-0.45, -0.45);
 
+/// The bounds every cached gradient shader below is built against — a
+/// canonical unit circle centered on the origin, not each piece's actual
+/// (constantly moving/growing) on-screen position. A RadialGradient's
+/// [Alignment]-based center/radius are fractions of whatever bounds its
+/// shader is built from, so a shader built once against this fixed unit
+/// circle renders identically to one rebuilt every frame against the
+/// piece's real bounds, as long as the same translate/rotate/scale that
+/// would have produced those real bounds is applied to the canvas before
+/// drawing (see render() below) — this is what lets every shard/debris
+/// piece share one cached Shader for its whole lifetime instead of each
+/// of the ~23 pieces calling the comparatively expensive
+/// Gradient.createShader() every single frame.
+final Rect _unitBounds = Rect.fromCircle(center: Offset.zero, radius: 1);
+
 Color _lighten(Color c, double amount) => Color.lerp(c, Colors.white, amount)!;
 Color _darken(Color c, double amount) => Color.lerp(c, Colors.black, amount)!;
 
 /// A radial gradient from a bright highlight down to a darkened rim —
 /// the same "glossy sphere" shading trick used for every round/curved
 /// piece below, so flat solid fills don't read as flat paper cutouts.
-Paint _shadedFill(Color base, Rect bounds, double alpha) {
+/// Built once (against [_unitBounds]) and reused — see its doc.
+Paint _shadedFillPaint(Color base) {
   final gradient = RadialGradient(
     center: _highlightAlignment,
     radius: 1.1,
@@ -26,10 +41,9 @@ Paint _shadedFill(Color base, Rect bounds, double alpha) {
   );
   // With a shader set, Paint.color's RGB is ignored but its alpha still
   // modulates the shader output — this is how the fade-out is applied on
-  // top of the gradient.
-  return Paint()
-    ..shader = gradient.createShader(bounds)
-    ..color = Colors.black.withValues(alpha: alpha);
+  // top of the gradient. The caller mutates just the alpha each frame,
+  // never rebuilding the shader itself.
+  return Paint()..shader = gradient.createShader(_unitBounds);
 }
 
 /// A radiating burst of shards at [position] — plays once two same-tier
@@ -94,6 +108,41 @@ class MergeExplosionComponent extends PositionComponent {
 
   static final _random = Random();
 
+  // Every gradient-filled piece in this burst shares just two cached
+  // Shaders (ingredient-colored "glossy" and the fixed glass-blue one) —
+  // see _shadedFillPaint's doc for why reusing one Paint, translated/
+  // scaled per piece at draw time, renders identically to building a
+  // fresh one per piece per frame.
+  late final Paint _glossyPaint = _shadedFillPaint(color);
+  late final Paint _glassFillPaint = _shadedFillPaint(_glassBase);
+  final Paint _glassEdgePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 0.12;
+  final Paint _leafVeinPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 0.06;
+
+  static const _glassBase = Color(0xFFBEE3F0);
+
+  // Canonical (size=1) local-space paths — each debris piece's actual
+  // [_Debris.size] is applied as a canvas scale at draw time instead of
+  // being baked into the path, so every piece of a given shape reuses
+  // the exact same Path object too.
+  static final Path _glassShardPath = Path()
+    ..moveTo(0, -1)
+    ..lineTo(0.65, 0.25)
+    ..lineTo(-0.35, 0.55)
+    ..close();
+  static final Path _peelPath = Path()
+    ..addArc(_unitBounds, -1.0, 2.6)
+    ..arcTo(Rect.fromCircle(center: Offset.zero, radius: 0.5), 1.6, -2.6, false)
+    ..close();
+  static final Path _leafPath = Path()
+    ..moveTo(0, -1)
+    ..quadraticBezierTo(0.7, 0, 0, 1)
+    ..quadraticBezierTo(-0.7, 0, 0, -1)
+    ..close();
+
   @override
   void update(double dt) {
     super.update(dt);
@@ -136,9 +185,12 @@ class MergeExplosionComponent extends PositionComponent {
       // Opaque the whole time it's flying — only fades right at the very
       // end, rather than being translucent throughout.
       final alpha = t < 0.75 ? 1.0 : (1 - (t - 0.75) / 0.25).clamp(0.0, 1.0);
-      final offset = pos.toOffset();
-      final bounds = Rect.fromCircle(center: offset, radius: r);
-      canvas.drawCircle(offset, r, _shadedFill(color, bounds, alpha));
+      canvas.save();
+      canvas.translate(pos.x, pos.y);
+      canvas.scale(r);
+      _glossyPaint.color = Colors.black.withValues(alpha: alpha);
+      canvas.drawCircle(Offset.zero, 1, _glossyPaint);
+      canvas.restore();
     }
 
     final debrisAlpha = t < 0.8 ? 1.0 : (1 - (t - 0.8) / 0.2).clamp(0.0, 1.0);
@@ -148,74 +200,50 @@ class MergeExplosionComponent extends PositionComponent {
       canvas.save();
       canvas.translate(pos.x, pos.y);
       canvas.rotate(d.spin * t * _duration);
-      _renderDebrisShape(canvas, d.size, debrisAlpha);
+      canvas.scale(d.size);
+      _renderDebrisShape(canvas, debrisAlpha);
       canvas.restore();
     }
   }
 
-  void _renderDebrisShape(Canvas canvas, double size, double alpha) {
+  void _renderDebrisShape(Canvas canvas, double alpha) {
     switch (ingredient.debris) {
       case DebrisType.glass:
-        _renderGlassShard(canvas, size, alpha);
+        _renderGlassShard(canvas, alpha);
       case DebrisType.peel:
-        _renderPeel(canvas, size, alpha);
+        _renderPeel(canvas, alpha);
       case DebrisType.leaf:
-        _renderLeaf(canvas, size, alpha);
+        _renderLeaf(canvas, alpha);
     }
   }
 
   /// A jagged little triangle rendered pale/translucent (like actual
   /// glass, not the ingredient's own color), shaded like a faceted chip
-  /// catching the light rather than a flat translucent flag.
-  void _renderGlassShard(Canvas canvas, double size, double alpha) {
-    final path = Path()
-      ..moveTo(0, -size)
-      ..lineTo(size * 0.65, size * 0.25)
-      ..lineTo(-size * 0.35, size * 0.55)
-      ..close();
-    const glassBase = Color(0xFFBEE3F0);
-    final bounds = path.getBounds();
-    final gradient = RadialGradient(
-      center: _highlightAlignment,
-      radius: 1.1,
-      colors: [_lighten(glassBase, 0.85), glassBase, _darken(glassBase, 0.25)],
-      stops: const [0.0, 0.5, 1.0],
-    );
-    final fillPaint = Paint()
-      ..shader = gradient.createShader(bounds)
-      ..color = Colors.black.withValues(alpha: alpha * 0.6);
-    canvas.drawPath(path, fillPaint);
-    final edgePaint = Paint()
-      ..color = Colors.white.withValues(alpha: alpha * 0.85)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size * 0.12;
-    canvas.drawPath(path, edgePaint);
+  /// catching the light rather than a flat translucent flag. Canvas is
+  /// already translated/rotated/scaled to this piece's position/spin/
+  /// size by render() above, so everything here draws in canonical
+  /// (size=1) local space.
+  void _renderGlassShard(Canvas canvas, double alpha) {
+    _glassFillPaint.color = Colors.black.withValues(alpha: alpha * 0.6);
+    canvas.drawPath(_glassShardPath, _glassFillPaint);
+    _glassEdgePaint.color = Colors.white.withValues(alpha: alpha * 0.85);
+    canvas.drawPath(_glassShardPath, _glassEdgePaint);
   }
 
   /// A thin curled crescent in the fruit's own color, like a peeled
   /// strip — shaded so the curl itself reads as rolled/3D rather than a
   /// flat cutout.
-  void _renderPeel(Canvas canvas, double size, double alpha) {
-    final path = Path()
-      ..addArc(Rect.fromCircle(center: Offset.zero, radius: size), -1.0, 2.6)
-      ..arcTo(Rect.fromCircle(center: Offset.zero, radius: size * 0.5), 1.6, -2.6, false)
-      ..close();
-    canvas.drawPath(path, _shadedFill(color, path.getBounds(), alpha));
+  void _renderPeel(Canvas canvas, double alpha) {
+    _glossyPaint.color = Colors.black.withValues(alpha: alpha);
+    canvas.drawPath(_peelPath, _glossyPaint);
   }
 
   /// A small pointed leaf with a center vein.
-  void _renderLeaf(Canvas canvas, double size, double alpha) {
-    final path = Path()
-      ..moveTo(0, -size)
-      ..quadraticBezierTo(size * 0.7, 0, 0, size)
-      ..quadraticBezierTo(-size * 0.7, 0, 0, -size)
-      ..close();
-    canvas.drawPath(path, _shadedFill(color, path.getBounds(), alpha));
-    final veinPaint = Paint()
-      ..color = Colors.black.withValues(alpha: alpha * 0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size * 0.06;
-    canvas.drawLine(Offset(0, -size * 0.8), Offset(0, size * 0.8), veinPaint);
+  void _renderLeaf(Canvas canvas, double alpha) {
+    _glossyPaint.color = Colors.black.withValues(alpha: alpha);
+    canvas.drawPath(_leafPath, _glossyPaint);
+    _leafVeinPaint.color = Colors.black.withValues(alpha: alpha * 0.3);
+    canvas.drawLine(const Offset(0, -0.8), const Offset(0, 0.8), _leafVeinPaint);
   }
 }
 

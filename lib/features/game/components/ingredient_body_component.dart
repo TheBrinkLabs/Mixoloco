@@ -1,6 +1,17 @@
-import 'dart:math' show sin;
+import 'dart:math' show cos, pi, sin, sqrt;
 import 'package:flame_forge2d/flame_forge2d.dart';
-import 'package:flutter/material.dart' show BlurStyle, Canvas, Color, MaskFilter, Offset, Paint, PaintingStyle, Size;
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/material.dart'
+    show
+        BlurStyle,
+        Canvas,
+        Color,
+        MaskFilter,
+        Offset,
+        Paint,
+        PaintingStyle,
+        Rect,
+        Size;
 import '../../../data/models/ingredient.dart';
 import '../mixoloco_game.dart';
 import 'ingredient_sprite.dart';
@@ -12,7 +23,8 @@ import 'table_boundary_component.dart' show kTableFarInset;
 /// lives on [MixolocoGame] instead of here, since it needs to see every
 /// body on the table at once — this component only reports its own
 /// contacts up to it.
-class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCallbacks {
+class IngredientBodyComponent extends BodyComponent<MixolocoGame>
+    with ContactCallbacks {
   IngredientBodyComponent({
     required this.tier,
     required this.ingredient,
@@ -20,13 +32,53 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
     required this.radius,
     Vector2? initialVelocity,
     double? throwTargetFarX,
+    this.debugShowFixtures = false,
+    this.debugPinned = false,
   }) : _spawnPosition = spawnPosition,
        _initialVelocity = initialVelocity ?? Vector2.zero(),
        _throwTargetFarX = throwTargetFarX,
        // Only a player-thrown drop needs bullet mode to start with — see
        // _bulletTimeRemaining's own doc.
        _bulletTimeRemaining = throwTargetFarX != null ? _bulletDuration : 0,
-       super(renderBody: false);
+       // BodyComponent's own renderBody draws the *real* fixture geometry
+       // directly — exactly what the collision calibration testbed needs
+       // (see MixolocoGame.debugSpawnIngredient/debugShowerProbes), no
+       // custom shape-drawing math required. Stroke-only paint so it
+       // outlines the sprite instead of covering it (the default Paint()
+       // BodyComponent falls back to is a solid fill). strokeWidth is set
+       // as a fraction of radius rather than a flat pixel count — this
+       // body's canvas is still in Forge2D's meters-space here (the
+       // meters-to-pixels scale is applied further up the render tree, by
+       // the camera), the same space radius itself is in, so a flat width
+       // like "2" became ~2 *meters* wide once that scale landed — far
+       // bigger than the whole circle, which read as a solid fill instead
+       // of a thin outline. 0.04 (~4px on a typical device) was still too
+       // thick for pixel-level calibration work: Canvas centers a stroke
+       // on the path, so half that width oversails the true boundary on
+       // the outside — at 0.04 that's a ~2px outward overhang on top of
+       // whatever the collision data itself gets wrong, easy to mistake
+       // for a data error. Halved to keep the stroke visible while
+       // cutting that overhang closer to sub-pixel.
+       super(
+         renderBody: debugShowFixtures,
+         paint: debugShowFixtures
+             ? (Paint()
+                 ..color = const Color(0xFFFF1744)
+                 ..style = PaintingStyle.stroke
+                 ..strokeWidth = radius * 0.02)
+             : null,
+       );
+
+  /// Draws this body's real Box2D fixture outline on top of its sprite —
+  /// only ever set true by the debug collision-calibration testbed (see
+  /// MixolocoGame's debug* methods and GameScreen's kDebugMode-gated
+  /// panel), never by normal gameplay spawns.
+  final bool debugShowFixtures;
+
+  /// Testbed-only: a static body that stays exactly where it was spawned,
+  /// upright and clear of the table edges, so its outline can be judged
+  /// against the sprite without it toppling or sliding to the far wall.
+  final bool debugPinned;
 
   final int tier;
   final Ingredient ingredient;
@@ -112,7 +164,13 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
       maxFrac = 1.0;
     } else {
       for (final c in profile) {
-        if (c.radius > maxFrac) maxFrac = c.radius;
+        final frac = switch (c) {
+          CollisionCircle(:final radius) => radius,
+          CollisionEllipse(:final radiusX, :final radiusY) => radiusX > radiusY ? radiusX : radiusY,
+          CollisionPolygon(:final points, :final cornerRadius) =>
+            points.map((p) => sqrt(p.$1 * p.$1 + p.$2 * p.$2)).reduce((a, b) => a > b ? a : b) + cornerRadius,
+        };
+        if (frac > maxFrac) maxFrac = frac;
       }
     }
     final extra = ingredient.extraCircles;
@@ -128,7 +186,7 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
   Body createBody() {
     final bodyDef = BodyDef(
       position: _spawnPosition,
-      type: BodyType.dynamic,
+      type: debugPinned ? BodyType.static : BodyType.dynamic,
       userData: this,
       linearVelocity: _initialVelocity,
       angularDamping: 2.5,
@@ -177,14 +235,64 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
         ),
       );
     } else if (profile == null || profile.isEmpty) {
-      _currentShapes.add(b.createShape(Circle(radius: radius * multiplier), _shapeDef));
+      _currentShapes.add(
+        b.createShape(Circle(radius: radius * multiplier), _shapeDef),
+      );
     } else {
       for (final c in profile) {
+        switch (c) {
+          case CollisionCircle():
+            _currentShapes.add(
+              b.createShape(
+                Circle(
+                  radius: radius * c.radius * multiplier,
+                  center: Vector2(
+                    radius * c.offsetX * multiplier,
+                    radius * c.offsetY * multiplier,
+                  ),
+                ),
+                _shapeDef,
+              ),
+            );
+          case CollisionEllipse():
+            _currentShapes.add(
+              b.createShape(_ellipsePolygon(c, multiplier), _shapeDef),
+            );
+          case CollisionPolygon():
+            // Box2D welds hull vertices closer than 4x linearSlop (2cm),
+            // so a thin band can collapse to <3 points at a small tier
+            // radius or under the shake's squish multiplier — and the
+            // resulting ArgumentError, thrown from inside onLoad, stalls
+            // Flame's component loading so every later spawn silently
+            // never appears. A sub-shape that small is negligible to the
+            // overall silhouette; skip it rather than take the game down.
+            try {
+              _currentShapes.add(
+                b.createShape(
+                  Polygon(
+                    [
+                      for (final p in c.points)
+                        Vector2(
+                          radius * p.$1 * multiplier,
+                          radius * p.$2 * multiplier,
+                        ),
+                    ],
+                    radius: radius * c.cornerRadius * multiplier,
+                  ),
+                  _shapeDef,
+                ),
+              );
+            } on ArgumentError catch (e) {
+              debugPrint(
+                'Skipped degenerate collision polygon on '
+                '${ingredient.id} (radius $radius x$multiplier): $e',
+              );
+            }
+        }
+      }
+      if (_currentShapes.isEmpty) {
         _currentShapes.add(
-          b.createShape(
-            Circle(radius: radius * c.radius * multiplier, center: Vector2(radius * c.offsetX * multiplier, radius * c.offsetY * multiplier)),
-            _shapeDef,
-          ),
+          b.createShape(Circle(radius: radius * multiplier), _shapeDef),
         );
       }
     }
@@ -193,12 +301,40 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
       for (final c in extra) {
         _currentShapes.add(
           b.createShape(
-            Circle(radius: radius * c.radius * multiplier, center: Vector2(radius * c.offsetX * multiplier, radius * c.offsetY * multiplier)),
+            Circle(
+              radius: radius * c.radius * multiplier,
+              center: Vector2(
+                radius * c.offsetX * multiplier,
+                radius * c.offsetY * multiplier,
+              ),
+            ),
             _shapeDef,
           ),
         );
       }
     }
+  }
+
+  /// Approximates [e] as a Box2D [Polygon] sampled around its perimeter —
+  /// Box2D has no native ellipse shape, just circle/capsule/segment/
+  /// polygon (see [CollisionEllipse]'s own doc), and [Polygon.maxVertices]
+  /// caps a convex polygon at 8 points. 8 evenly-spaced points already
+  /// reads as a smooth oval at this game's render scale (the same reason
+  /// an 8-gon is the usual "good enough" circle approximation generally),
+  /// so there's no need to spend more of that budget than that.
+  Polygon _ellipsePolygon(CollisionEllipse e, double multiplier) {
+    const sides = 8;
+    final cx = radius * e.offsetX * multiplier;
+    final cy = radius * e.offsetY * multiplier;
+    final rx = radius * e.radiusX * multiplier;
+    final ry = radius * e.radiusY * multiplier;
+    return Polygon([
+      for (var i = 0; i < sides; i++)
+        Vector2(
+          cx + rx * cos(2 * pi * i / sides),
+          cy + ry * sin(2 * pi * i / sides),
+        ),
+    ]);
   }
 
   /// Temporarily resizes this body's actual collision circle to
@@ -309,18 +445,59 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
 
   @override
   void render(Canvas canvas) {
-    final scale = perspectiveScaleForY(body.position.y, game.worldHeight);
-    final baseSize = physicsVisualSize(radius) * scale;
+    // No depth-cue scaling by table position: the sprite must stay the
+    // same size as its collision shape everywhere on the table.
+    final baseSize = physicsVisualSize(radius);
     // Purely cosmetic squash/stretch during a Shaker Maker shake — see
     // MixolocoGame.shakeSquishScaleFor. (1, 1) outside a shake, so this
     // is a no-op the rest of the time.
     final squish = game.shakeSquishScaleFor(this);
     final size = Size(baseSize.width * squish.x, baseSize.height * squish.y);
+
+    // Ground shadow — counter-rotate renderTree's own body.angle rotation
+    // first so it reads as sitting flat on the table regardless of which
+    // way the piece has tumbled, rather than spinning with it.
+    canvas.save();
+    canvas.rotate(-body.angle);
+    _paintDropShadow(canvas, size);
+    canvas.restore();
+
+    // Sprite rotates only with the body itself (renderTree's body.angle):
+    // any extra sprite-only tilt would swing the art away from its
+    // collision shape and read as items overlapping.
     canvas.save();
     canvas.translate(-size.width / 2, -size.height / 2);
     if (_isOutOfZone) _paintDangerGlow(canvas, size);
     paintIngredient(canvas, ingredient, size);
     canvas.restore();
+
+    // This override replaces BodyComponent's own render() entirely, so its
+    // renderBody/renderShape fixture-outline drawing (what the collision
+    // calibration testbed relies on — see debugShowFixtures above) would
+    // otherwise never run. Calling it last draws the outline on top of the
+    // sprite, in the same body-local frame renderTree already set up; it's
+    // a no-op whenever renderBody is false (every non-debug spawn).
+    super.render(canvas);
+  }
+
+  /// A soft dark oval beneath and slightly behind the piece — purely
+  /// cosmetic, per the gameplay redesign handoff's ingredient shadow spec.
+  void _paintDropShadow(Canvas canvas, Size size) {
+    final offset = Offset(size.shortestSide * 0.05, size.shortestSide * 0.12);
+    final shadowPaint = Paint()
+      ..color = const Color(0xFF281400).withValues(alpha: 0.35)
+      ..maskFilter = MaskFilter.blur(
+        BlurStyle.normal,
+        size.shortestSide * 0.08,
+      );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: offset,
+        width: size.width * 0.8,
+        height: size.height * 0.35,
+      ),
+      shadowPaint,
+    );
   }
 
   /// True once this body has crossed the game-over line (see
@@ -329,7 +506,10 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
   /// trigger uses, since the glow's job is an early visual warning
   /// ("you're heading for the line"), not a precise readout of whether
   /// this exact body currently counts toward ending the game.
-  bool get _isOutOfZone => !consumed && (body.position.y - radius) > game.worldHeight * (1 - kGameOverLineFraction);
+  bool get _isOutOfZone =>
+      !consumed &&
+      (body.position.y - radius) >
+          game.worldHeight * (1 - kGameOverLineFraction);
 
   /// A soft, thin red ring around the item's own circular footprint —
   /// deliberately not shaped to the art's silhouette (which varies a lot
@@ -344,7 +524,10 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame> with ContactCa
       ..color = Color.fromRGBO(255, 45, 45, pulse)
       ..style = PaintingStyle.stroke
       ..strokeWidth = size.shortestSide * 0.05
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.shortestSide * 0.06);
+      ..maskFilter = MaskFilter.blur(
+        BlurStyle.normal,
+        size.shortestSide * 0.06,
+      );
     canvas.drawCircle(center, glowRadius, glowPaint);
 
     final crispPaint = Paint()

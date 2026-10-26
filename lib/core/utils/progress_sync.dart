@@ -37,85 +37,126 @@ import '../../data/services/progression_service.dart';
 /// server up immediately rather than waiting for its next local progress
 /// event (merge, tier-up, game over, ...).
 ///
-/// Returns true if local state actually changed, so a caller (the
-/// Settings sign-in row, or MenuScreen's own launch check) knows whether
-/// to refresh anything reading those values and/or tell the player their
-/// progress was restored.
-Future<bool> syncProgress(LeagueRepository leagueRepo, String uid) async {
-  try {
-    final server = await leagueRepo.fetchProgress(uid);
-    final lastSyncAt = await loadLastProgressSyncAt();
-
-    final localCredits = await loadCredits();
-    final localTier1 = await loadHighestTier();
-    final localTier2 = await loadHighestTierLevel2();
-    final localTier3 = await loadHighestTierLevel3();
-    final localTier4 = await loadHighestTierLevel4();
-    final localLevel = await loadHighestLevelReached();
-    final localScores = await loadHighScores();
-
-    int mergedCredits;
-    if (server == null) {
-      mergedCredits = localCredits;
-    } else if (lastSyncAt != null && server.updatedAt != null) {
-      mergedCredits = server.updatedAt!.isAfter(lastSyncAt) ? server.credits : localCredits;
-    } else {
-      // No local sync marker yet (first-ever sync on this device) or a
-      // pre-updatedAt server snapshot — same safe max-merge as the other
-      // fields rather than guessing which side is "right."
-      mergedCredits = _max(localCredits, server.credits);
+/// Returns [ProgressSyncOutcome.changed] if local state actually changed,
+/// [ProgressSyncOutcome.unchanged] if the sync completed but there was
+/// nothing new to pull down, or [ProgressSyncOutcome.failed] if the whole
+/// attempt (after retrying) never completed — a caller (the Settings
+/// sign-in row, the nickname-setup "restore" option, or MenuScreen's own
+/// launch check) needs this three-way split, not just a bool, so it can
+/// tell the difference between "nothing to restore" and "we don't
+/// actually know, this didn't work" — the UI should never claim "your
+/// progress has been restored" off the back of a failed sync. A previous
+/// version silently swallowed any failure (debugPrint + return false),
+/// which combined with the Settings row showing "restored" purely off of
+/// Firebase Auth having switched to the player's older linked account
+/// (not off this function's own result) meant a transient failure right
+/// after that account switch — exactly when the auth token most recently
+/// changed and a permission-denied race is most likely — looked
+/// identical to a genuinely empty backup: the player saw "welcome back,
+/// restored!" while still sitting on a fresh Level 1 save. Retrying a
+/// few times with a short backoff (same shape as GameStateNotifier.
+/// _loadPersisted's own retry) makes a merely transient failure recover
+/// on its own instead of surfacing as a false "nothing to restore."
+Future<ProgressSyncOutcome> syncProgress(LeagueRepository leagueRepo, String uid) async {
+  const maxAttempts = 3;
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await _syncProgressOnce(leagueRepo, uid);
+    } catch (e, st) {
+      debugPrint('Progress sync attempt $attempt/$maxAttempts failed: $e\n$st');
+      if (attempt == maxAttempts) return ProgressSyncOutcome.failed;
+      await Future.delayed(Duration(milliseconds: 300 * attempt));
     }
-    final mergedTier1 = server == null ? localTier1 : _max(localTier1, server.highestTierUnlocked);
-    final mergedTier2 = server == null ? localTier2 : _max(localTier2, server.highestTierUnlockedLevel2);
-    final mergedTier3 = server == null ? localTier3 : _max(localTier3, server.highestTierUnlockedLevel3);
-    final mergedTier4 = server == null ? localTier4 : _max(localTier4, server.highestTierUnlockedLevel4);
-    final mergedLevel = server == null ? localLevel : _max(localLevel, server.highestLevelReached);
-
-    final mergedScores = <int>{...localScores, ...?server?.highScores}.toList()..sort((a, b) => b.compareTo(a));
-    final topScores = mergedScores.take(kMaxHighScores).toList();
-
-    final changed =
-        mergedCredits != localCredits ||
-        mergedTier1 != localTier1 ||
-        mergedTier2 != localTier2 ||
-        mergedTier3 != localTier3 ||
-        mergedTier4 != localTier4 ||
-        mergedLevel != localLevel ||
-        !_sameList(topScores, localScores);
-
-    if (changed) {
-      await saveCredits(mergedCredits);
-      await saveHighestTier(mergedTier1);
-      await saveHighestTierLevel2(mergedTier2);
-      await saveHighestTierLevel3(mergedTier3);
-      await saveHighestTierLevel4(mergedTier4);
-      await saveHighestLevelReached(mergedLevel);
-      await saveHighScores(topScores);
-    }
-
-    await leagueRepo.pushProgress(
-      uid: uid,
-      progress: PlayerProgress(
-        credits: mergedCredits,
-        highestTierUnlocked: mergedTier1,
-        highestTierUnlockedLevel2: mergedTier2,
-        highestTierUnlockedLevel3: mergedTier3,
-        highestTierUnlockedLevel4: mergedTier4,
-        highestLevelReached: mergedLevel,
-        highScores: topScores,
-      ),
-    );
-    // This device's credits (merged or not) are now known to match what
-    // was just pushed — marks the point future syncs compare the
-    // server's own updatedAt against.
-    await saveLastProgressSyncAt(DateTime.now());
-
-    return changed;
-  } catch (e, st) {
-    debugPrint('Progress sync failed (non-fatal): $e\n$st');
-    return false;
   }
+  return ProgressSyncOutcome.failed;
 }
+
+Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, String uid) async {
+  final server = await leagueRepo.fetchProgress(uid);
+  final lastSyncAt = await loadLastProgressSyncAt();
+
+  final localCredits = await loadCredits();
+  final localTier1 = await loadHighestTier();
+  final localTier2 = await loadHighestTierLevel2();
+  final localTier3 = await loadHighestTierLevel3();
+  final localTier4 = await loadHighestTierLevel4();
+  final localTier5 = await loadHighestTierLevel5();
+  final localLevel = await loadHighestLevelReached();
+  final localScores = await loadHighScores();
+  final localMixedCocktails = await loadMixedCocktailIds();
+
+  int mergedCredits;
+  if (server == null) {
+    mergedCredits = localCredits;
+  } else if (lastSyncAt != null && server.updatedAt != null) {
+    mergedCredits = server.updatedAt!.isAfter(lastSyncAt) ? server.credits : localCredits;
+  } else {
+    // No local sync marker yet (first-ever sync on this device) or a
+    // pre-updatedAt server snapshot — same safe max-merge as the other
+    // fields rather than guessing which side is "right."
+    mergedCredits = _max(localCredits, server.credits);
+  }
+  final mergedTier1 = server == null ? localTier1 : _max(localTier1, server.highestTierUnlocked);
+  final mergedTier2 = server == null ? localTier2 : _max(localTier2, server.highestTierUnlockedLevel2);
+  final mergedTier3 = server == null ? localTier3 : _max(localTier3, server.highestTierUnlockedLevel3);
+  final mergedTier4 = server == null ? localTier4 : _max(localTier4, server.highestTierUnlockedLevel4);
+  final mergedTier5 = server == null ? localTier5 : _max(localTier5, server.highestTierUnlockedLevel5);
+  final mergedLevel = server == null ? localLevel : _max(localLevel, server.highestLevelReached);
+
+  final mergedScores = <int>{...localScores, ...?server?.highScores}.toList()..sort((a, b) => b.compareTo(a));
+  final topScores = mergedScores.take(kMaxHighScores).toList();
+
+  // Same "only ever grows" reasoning as the tier/level fields — a union
+  // rather than a max() since this is a set of distinct achievements,
+  // not a single comparable number.
+  final mergedMixedCocktails = <String>{...localMixedCocktails, ...?server?.mixedCocktailIds};
+
+  final changed =
+      mergedCredits != localCredits ||
+      mergedTier1 != localTier1 ||
+      mergedTier2 != localTier2 ||
+      mergedTier3 != localTier3 ||
+      mergedTier4 != localTier4 ||
+      mergedTier5 != localTier5 ||
+      mergedLevel != localLevel ||
+      !_sameList(topScores, localScores) ||
+      mergedMixedCocktails.length != localMixedCocktails.length;
+
+  if (changed) {
+    await saveCredits(mergedCredits);
+    await saveHighestTier(mergedTier1);
+    await saveHighestTierLevel2(mergedTier2);
+    await saveHighestTierLevel3(mergedTier3);
+    await saveHighestTierLevel4(mergedTier4);
+    await saveHighestTierLevel5(mergedTier5);
+    await saveHighestLevelReached(mergedLevel);
+    await saveHighScores(topScores);
+    await saveMixedCocktailIds(mergedMixedCocktails);
+  }
+
+  await leagueRepo.pushProgress(
+    uid: uid,
+    progress: PlayerProgress(
+      credits: mergedCredits,
+      highestTierUnlocked: mergedTier1,
+      highestTierUnlockedLevel2: mergedTier2,
+      highestTierUnlockedLevel3: mergedTier3,
+      highestTierUnlockedLevel4: mergedTier4,
+      highestTierUnlockedLevel5: mergedTier5,
+      highestLevelReached: mergedLevel,
+      highScores: topScores,
+      mixedCocktailIds: mergedMixedCocktails.toList(),
+    ),
+  );
+  // This device's credits (merged or not) are now known to match what
+  // was just pushed — marks the point future syncs compare the
+  // server's own updatedAt against.
+  await saveLastProgressSyncAt(DateTime.now());
+
+  return changed ? ProgressSyncOutcome.changed : ProgressSyncOutcome.unchanged;
+}
+
+enum ProgressSyncOutcome { changed, unchanged, failed }
 
 int _max(int a, int b) => a > b ? a : b;
 

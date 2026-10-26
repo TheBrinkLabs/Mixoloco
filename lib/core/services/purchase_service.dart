@@ -22,6 +22,35 @@ const kAdFreeProductIds = {
   AdFreeTier.forever: 'ads_free_forever',
 };
 
+/// The two credit packs sold from [GetCreditsDialog] — same "permanent
+/// contract" rule as [kAdFreeProductIds]: both ids must be created by
+/// hand in Play Console as CONSUMABLE in-app products (rebuyable, same
+/// shape as ads_free_1_day) before either row there will do anything but
+/// show "not available yet".
+enum CreditPack { small, large }
+
+const kCreditPackProductIds = {
+  CreditPack.small: 'credits_1000',
+  CreditPack.large: 'credits_10000',
+};
+
+/// How many credits each pack grants — looked up by
+/// [PurchaseService._applyPurchaseLocked] once Play Billing actually
+/// reports the purchase as complete, not assumed up front.
+const kCreditPackAmounts = {CreditPack.small: 1000, CreditPack.large: 10000};
+
+/// ShopScreen's "Unlock Next Level" row — same "permanent contract" rule
+/// as the ids above: a CONSUMABLE in-app product (rebuyable — a player
+/// who's already bought their way past one level can buy it again for
+/// the next), created by hand in Play Console before the row does
+/// anything but show "not available yet". Raises
+/// BoardState.highestLevelReached by one (see
+/// GameStateNotifier.unlockNextLevelFromPurchase) — it doesn't touch
+/// evolution tiers or credits, and doesn't teleport an in-progress run
+/// there either; it just lets the player start a New Game at that level
+/// whenever they choose, same as reaching it by play would.
+const kUnlockLevelProductId = 'unlock_next_level';
+
 /// Owns every "is this player ad-free right now" question in the app —
 /// every ad-serving call site (the persistent banner, the score-threshold
 /// MREC ad break, the level-up interstitial) checks [isAdFree] before
@@ -45,6 +74,8 @@ class PurchaseService {
   final InAppPurchase _iap = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _sub;
   final _adFreeController = StreamController<bool>.broadcast();
+  final _creditPackController = StreamController<int>.broadcast();
+  final _unlockLevelController = StreamController<void>.broadcast();
 
   bool _adFree = false;
   bool get isAdFree => _adFree;
@@ -52,6 +83,18 @@ class PurchaseService {
   /// Fires whenever [isAdFree] changes — GameScreen/BannerAdWidget can
   /// listen instead of polling.
   Stream<bool> get adFreeChanges => _adFreeController.stream;
+
+  /// Fires the credit amount (see [kCreditPackAmounts]) once per
+  /// completed credit-pack purchase — unlike [adFreeChanges] this isn't a
+  /// "current value" stream, it's a one-shot event per purchase, since
+  /// crediting the player is an action (GameStateNotifier.build() listens
+  /// globally and calls addPurchasedCredits), not a state to render.
+  Stream<int> get creditPackPurchases => _creditPackController.stream;
+
+  /// Fires once per completed "Unlock Next Level" purchase — same
+  /// one-shot-event shape as [creditPackPurchases], not a current-value
+  /// stream.
+  Stream<void> get unlockLevelPurchases => _unlockLevelController.stream;
 
   /// Set within a single [refresh] call as subscription purchases are
   /// seen come through the stream — reset to false at the start of each
@@ -71,6 +114,8 @@ class PurchaseService {
   void dispose() {
     _sub?.cancel();
     _adFreeController.close();
+    _creditPackController.close();
+    _unlockLevelController.close();
   }
 
   /// Re-asks Play Billing what this account currently owns/is subscribed
@@ -101,30 +146,54 @@ class PurchaseService {
     await _recomputeAdFree();
   }
 
+  /// Every product id the app knows how to sell, in one query — shared by
+  /// ShopScreen (ad-free tiers) and GetCreditsDialog (credit packs) so
+  /// either can look up any of them from the same call.
   Future<List<ProductDetails>> queryProducts() async {
-    final response = await _iap.queryProductDetails(kAdFreeProductIds.values.toSet());
+    final ids = {...kAdFreeProductIds.values, ...kCreditPackProductIds.values, kUnlockLevelProductId};
+    final response = await _iap.queryProductDetails(ids);
     return response.productDetails;
   }
 
-  /// Starts the platform purchase flow for [details] — 1 Day is a
-  /// consumable (each purchase stacks another day), Monthly/Yearly need
-  /// their subscription offer token, Forever is a plain non-consumable.
+  /// Starts the platform purchase flow for [details] — 1 Day and both
+  /// credit packs are consumables (rebuyable every time), Monthly/Yearly
+  /// need their subscription offer token, Forever is a plain
+  /// non-consumable.
   Future<void> buy(ProductDetails details) async {
-    if (details.id == kAdFreeProductIds[AdFreeTier.oneDay]) {
-      await _iap.buyConsumable(purchaseParam: PurchaseParam(productDetails: details), autoConsume: true);
+    final isConsumable =
+        details.id == kAdFreeProductIds[AdFreeTier.oneDay] ||
+        kCreditPackProductIds.values.contains(details.id) ||
+        details.id == kUnlockLevelProductId;
+    if (isConsumable) {
+      await _iap.buyConsumable(
+        purchaseParam: PurchaseParam(productDetails: details),
+        autoConsume: true,
+      );
       return;
     }
-    final isSubscription = details.id == kAdFreeProductIds[AdFreeTier.monthly] || details.id == kAdFreeProductIds[AdFreeTier.yearly];
-    if (isSubscription && details is GooglePlayProductDetails && details.offerToken != null) {
-      await _iap.buyNonConsumable(purchaseParam: GooglePlayPurchaseParam(productDetails: details, offerToken: details.offerToken));
+    final isSubscription =
+        details.id == kAdFreeProductIds[AdFreeTier.monthly] ||
+        details.id == kAdFreeProductIds[AdFreeTier.yearly];
+    if (isSubscription &&
+        details is GooglePlayProductDetails &&
+        details.offerToken != null) {
+      await _iap.buyNonConsumable(
+        purchaseParam: GooglePlayPurchaseParam(
+          productDetails: details,
+          offerToken: details.offerToken,
+        ),
+      );
       return;
     }
-    await _iap.buyNonConsumable(purchaseParam: PurchaseParam(productDetails: details));
+    await _iap.buyNonConsumable(
+      purchaseParam: PurchaseParam(productDetails: details),
+    );
   }
 
   void _onPurchaseUpdate(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      if (purchase.status == PurchaseStatus.purchased || purchase.status == PurchaseStatus.restored) {
+      if (purchase.status == PurchaseStatus.purchased ||
+          purchase.status == PurchaseStatus.restored) {
         await _applyPurchase(purchase);
       }
       if (purchase.pendingCompletePurchase) {
@@ -160,7 +229,9 @@ class PurchaseService {
       // exactly 24h from now, so buying a second day before the first
       // runs out doesn't waste the remainder of the first.
       final existing = await loadAdFreeOneDayExpiry();
-      final base = existing != null && existing.isAfter(DateTime.now()) ? existing : DateTime.now();
+      final base = existing != null && existing.isAfter(DateTime.now())
+          ? existing
+          : DateTime.now();
       await saveAdFreeOneDayExpiry(base.add(const Duration(days: 1)));
     } else if (purchase.productID == kAdFreeProductIds[AdFreeTier.forever]) {
       await saveAdFreeForever(true);
@@ -168,13 +239,30 @@ class PurchaseService {
         purchase.productID == kAdFreeProductIds[AdFreeTier.yearly]) {
       _subscriptionSeenThisRefresh = true;
       await saveAdFreeSubscriptionCached(true);
+    } else if (purchase.productID == kUnlockLevelProductId) {
+      // Consumable, same "every event is a fresh buy" reasoning as
+      // ads_free_1_day above — no on-disk state of its own to persist
+      // here either, just announce it for GameStateNotifier to apply.
+      _unlockLevelController.add(null);
+    } else {
+      // Consumable, same "every event is a fresh buy" reasoning as
+      // ads_free_1_day above — no on-disk state of its own to persist
+      // here, just announce the amount for GameStateNotifier to credit.
+      for (final tier in CreditPack.values) {
+        if (purchase.productID == kCreditPackProductIds[tier]) {
+          _creditPackController.add(kCreditPackAmounts[tier]!);
+          break;
+        }
+      }
     }
   }
 
   Future<bool> _loadCachedAdFree() async {
     if (await loadAdFreeForever()) return true;
     final oneDayExpiry = await loadAdFreeOneDayExpiry();
-    if (oneDayExpiry != null && oneDayExpiry.isAfter(DateTime.now())) return true;
+    if (oneDayExpiry != null && oneDayExpiry.isAfter(DateTime.now())) {
+      return true;
+    }
     return loadAdFreeSubscriptionCached();
   }
 
@@ -197,3 +285,17 @@ final adFreeProvider = StreamProvider<bool>((ref) async* {
   yield purchaseService.isAdFree;
   yield* purchaseService.adFreeChanges;
 });
+
+/// Each completed credit-pack purchase's amount, as a one-shot event —
+/// GameStateNotifier.build() listens to this globally and credits the
+/// player, so this stays a thin pass-through with no "current value"
+/// semantics (unlike [adFreeProvider]).
+final creditPackPurchaseProvider = StreamProvider<int>(
+  (ref) => purchaseService.creditPackPurchases,
+);
+
+/// Each completed "Unlock Next Level" purchase, as a one-shot event —
+/// same shape/reasoning as [creditPackPurchaseProvider].
+final unlockLevelPurchaseProvider = StreamProvider<void>(
+  (ref) => purchaseService.unlockLevelPurchases,
+);

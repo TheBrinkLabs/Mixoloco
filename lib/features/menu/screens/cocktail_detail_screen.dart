@@ -3,257 +3,355 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
-import '../../../core/theme/colorful_plank_text.dart';
-import '../../../core/widgets/bar_backdrop.dart';
+import '../../../core/services/share_service.dart';
 import '../../../core/widgets/glass_visual.dart';
-import '../../../core/widgets/wood_plank.dart';
+import '../../../core/widgets/hud_kit.dart';
+import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
+import '../../../data/services/progression_service.dart';
 import '../cocktail_instructions.dart';
+import '../info_level_data.dart';
 
-/// cocktail_intructions.png's own aspect — a tall parchment recipe-card
-/// photo with a decorative glass sketch in its own top-left corner (see
-/// _InstructionsCard), kept as one constant so the compact preview and
-/// the full-screen view both size off the same real ratio instead of
-/// stretching the art.
-const _kInstructionsCardAspect = 848 / 1264;
-
-/// One cocktail's own page — its picture and name up top, the
-/// ingredients it needs listed below, and (where we have one — see
-/// [kCocktailInstructions]) a brief step-by-step how-to-make on its own
-/// recipe-card graphic underneath, tap to view full-screen. Reached by
-/// tapping its row on [CocktailsScreen], which also passes through
-/// that row's own level backdrop so a Rooftop cocktail's page shows the
-/// Rooftop photo, not always the beach one.
-class CocktailDetailScreen extends ConsumerWidget {
+/// One lifetime-mixed cocktail paired with the level it belongs to —
+/// the hero's prev/next arrows step through a flattened list of these
+/// across every level, not just the current one.
+class _Entry {
+  final InfoLevelData level;
   final CocktailRecipe recipe;
-  final String backgroundAssetPath;
-  const CocktailDetailScreen({super.key, required this.recipe, this.backgroundAssetPath = 'assets/images/beach_background.png'});
+  const _Entry(this.level, this.recipe);
+}
+
+_Entry _entryForId(String id) {
+  for (final level in kInfoLevels) {
+    for (final recipe in level.recipes) {
+      if (recipe.id == id) return _Entry(level, recipe);
+    }
+  }
+  throw StateError('Unknown recipe id: $id');
+}
+
+List<_Entry> _mixedEntries(Set<String> mixedIds) => [
+  for (final level in kInfoLevels)
+    for (final recipe in level.recipes)
+      if (mixedIds.contains(recipe.id)) _Entry(level, recipe),
+];
+
+/// A cocktail's own page — reached by tapping an unlocked cocktail on
+/// [IngredientsScreen]'s "Used In" sheet or [CocktailsScreen]'s grid.
+/// The hero up top lets the player step through every cocktail they've
+/// ever mixed, in any level, via the prev/next arrows or a swipe — it
+/// wraps at the ends rather than stopping at this level's own list, per
+/// design_handoff_submenus/README.md's "Screen 5: Cocktail detail".
+class CocktailDetailScreen extends ConsumerStatefulWidget {
+  final CocktailRecipe recipe;
+  const CocktailDetailScreen({super.key, required this.recipe});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final locale = ref.watch(localeProvider);
-    final screenSize = MediaQuery.sizeOf(context);
-    const sideMargin = 28.0;
-    final plankWidth = screenSize.width - sideMargin * 2;
-    final plankHeight = plankWidth / kMenuBoard3Aspect;
-    final steps = kCocktailInstructions[recipe.id];
+  ConsumerState<CocktailDetailScreen> createState() => _CocktailDetailScreenState();
+}
 
-    return Scaffold(
-      body: BarBackdrop(
-        showTable: false,
-        showHeaderBoard: false,
-        backgroundAssetPath: backgroundAssetPath,
-        child: Stack(
+class _CocktailDetailScreenState extends ConsumerState<CocktailDetailScreen> {
+  late String _currentId = widget.recipe.id;
+  Set<String>? _mixedIds;
+
+  @override
+  void initState() {
+    super.initState();
+    loadMixedCocktailIds().then((ids) {
+      if (mounted) setState(() => _mixedIds = ids);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider);
+    final mixedIds = _mixedIds;
+    var entries = mixedIds != null ? _mixedEntries(mixedIds) : [_entryForId(_currentId)];
+    var index = entries.indexWhere((e) => e.recipe.id == _currentId);
+    if (index == -1) {
+      // The id we opened with isn't (yet) in the lifetime-mixed set —
+      // shouldn't normally happen since every entry point only links to
+      // an already-mixed cocktail, but falls back to showing just it,
+      // arrows disabled, rather than crashing on a bad index.
+      entries = [_entryForId(_currentId)];
+      index = 0;
+    }
+    final entry = entries[index];
+    final n = entries.length;
+    final steps = kCocktailInstructions[entry.recipe.id] ?? const <String>[];
+
+    void goTo(int newIndex) {
+      setState(() => _currentId = entries[newIndex % n].recipe.id);
+    }
+
+    return SubmenuScaffold(
+      title: entry.recipe.name,
+      panelTop: 276,
+      ribbonTop: 252,
+      panelBottom: 86,
+      aboveRibbon: [
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 82,
+          child: _Hero(
+            recipe: entry.recipe,
+            canNavigate: n > 1,
+            onPrev: () => goTo((index - 1 + n) % n),
+            onNext: () => goTo((index + 1) % n),
+          ),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Text(
+              '${index + 1} of $n · ${entry.level.name}',
+              style: submenuNunito(size: 12, weight: FontWeight.w900, color: SubmenuColors.textSecondary),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            tr(locale, 'ingredients').toUpperCase(),
+            style: const TextStyle(fontFamily: 'Lilita One', fontSize: 12, color: SubmenuColors.gold),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final id in entry.recipe.ingredientIds) _IngredientChip(ingredient: findIngredientById(id)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Center(
+            child: SubmenuGoldButton(
+              label: tr(locale, 'share'),
+              onTap: () => shareText(tr(locale, 'share_cocktail_text').replaceFirst('{cocktail}', entry.recipe.name)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(child: _RecipeCard(locale: locale, steps: steps)),
+        ],
+      ),
+    );
+  }
+}
+
+class _Hero extends StatelessWidget {
+  final CocktailRecipe recipe;
+  final bool canNavigate;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  const _Hero({required this.recipe, required this.canNavigate, required this.onPrev, required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragEnd: !canNavigate
+          ? null
+          : (details) {
+              final v = details.primaryVelocity ?? 0;
+              if (v < -200) {
+                onNext();
+              } else if (v > 200) {
+                onPrev();
+              }
+            },
+      child: SizedBox(
+        height: 170,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.asset(
-                        recipe.assetPath,
-                        width: plankWidth * 0.5,
-                        height: plankWidth * 0.5,
-                        fit: BoxFit.contain,
-                        // See cocktails_screen.dart's matching comment —
-                        // some Level 3 recipes' art hasn't landed yet.
-                        errorBuilder: (context, error, stackTrace) => Icon(Icons.local_bar_rounded, size: plankWidth * 0.3, color: kPlankIconColor),
+            GoldArrowButton(icon: Icons.chevron_left_rounded, enabled: canNavigate, onTap: onPrev, size: 44),
+            const SizedBox(width: 24),
+            SizedBox(
+              width: 170,
+              height: 170,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 170,
+                    height: 170,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [Color(0xD9FFF4D6), Color(0x73FFDC96), Color(0x00FFDC96)],
+                        stops: [0.0, 0.45, 0.70],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    ColorfulPlankText(text: recipe.name, fontSize: plankHeight * 0.3, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-                    const SizedBox(height: 18),
-                    WoodTitlePlank(
-                      title: tr(locale, 'ingredients'),
-                      icon: Icons.local_bar_rounded,
-                      iconAsset: 'assets/images/ingredient_cherry.png',
-                      width: plankWidth,
-                      height: plankHeight * 0.85,
-                      assetPath: 'assets/images/menu_board_3.png',
-                      fontScale: 0.85,
-                    ),
-                    for (final id in recipe.ingredientIds) _IngredientRow(ingredient: findIngredientById(id), width: plankWidth, height: plankHeight * 0.85),
-                    if (steps != null) ...[
-                      const SizedBox(height: 18),
-                      _InstructionsCard(
-                        recipeName: recipe.name,
-                        steps: steps,
-                        width: plankWidth,
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _InstructionsFullScreen(recipeName: recipe.name, steps: steps))),
-                      ),
+                  ),
+                  ShadowedAsset(
+                    key: ValueKey(recipe.id),
+                    path: recipe.assetPath,
+                    width: 150,
+                    shadows: const [
+                      SpriteShadow(offset: Offset(0, 10), color: Color(0x59000000), blur: 14),
+                      SpriteShadow(offset: Offset(-3, 0), color: Colors.white),
+                      SpriteShadow(offset: Offset(3, 0), color: Colors.white),
+                      SpriteShadow(offset: Offset(0, -3), color: Colors.white),
+                      SpriteShadow(offset: Offset(0, 3), color: Colors.white),
                     ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 24),
+            GoldArrowButton(icon: Icons.chevron_right_rounded, enabled: canNavigate, onTap: onNext, size: 44),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IngredientChip extends StatelessWidget {
+  final Ingredient ingredient;
+  const _IngredientChip({required this.ingredient});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 76,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: SubmenuColors.gold, width: 2),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [SubmenuColors.cardTop, SubmenuColors.cardBottom],
+              ),
+              boxShadow: [BoxShadow(color: SubmenuColors.ring, offset: const Offset(0, 3))],
+            ),
+            child: GlassVisual(ingredient: ingredient, size: 42, applyDisplayScale: false),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            ingredient.label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: submenuNunito(size: 11, weight: FontWeight.w900, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The code-drawn parchment recipe card — replaces the old
+/// Cocktail_intructions.png-based card with the redesign's own layout
+/// (numbered Caveat steps, dashed dividers), scrolling internally if the
+/// step list is too long for the space left under the ingredient chips.
+class _RecipeCard extends StatelessWidget {
+  final AppLocale locale;
+  final List<String> steps;
+  const _RecipeCard({required this.locale, required this.steps});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: SubmenuColors.paperBorder, width: 2),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [SubmenuColors.paperTop, SubmenuColors.paperBottom],
+        ),
+        boxShadow: [BoxShadow(color: SubmenuColors.ring, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            tr(locale, 'recipe_label').toUpperCase(),
+            style: const TextStyle(fontFamily: 'Lilita One', fontSize: 12, color: SubmenuColors.paperLabel),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < steps.length; i++) _StepRow(number: i + 1, text: steps[i], isLast: i == steps.length - 1),
                   ],
                 ),
               ),
             ),
-            // Painted last — see info_screen.dart's matching comment.
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _IngredientRow extends StatelessWidget {
-  final Ingredient ingredient;
-  final double width;
-  final double height;
-  const _IngredientRow({required this.ingredient, required this.width, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return WoodPlank(
-      width: width,
-      height: height,
-      assetPath: 'assets/images/menu_board_3.png',
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-        child: Row(
-          children: [
-            GlassVisual(ingredient: ingredient, size: height * 0.72, applyDisplayScale: false),
-            SizedBox(width: width * 0.04),
-            Expanded(
-              child: ColorfulPlankText(text: ingredient.label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The numbered step list laid out on cocktail_intructions.png's own
-/// parchment card — dark text (the card is light, unlike every wood
-/// plank elsewhere), a handwriting-style font (fits a "recipe card"
-/// much better than the game's usual chunky plank lettering), and the
-/// cocktail's own name as a title sitting beside the card's own
-/// decorative glass sketch rather than floating separately above it.
-/// Tappable: opens [_InstructionsFullScreen] for a bigger, easier read.
-class _InstructionsCard extends StatelessWidget {
-  final String recipeName;
-  final List<String> steps;
-  final double width;
-  final VoidCallback onTap;
-  const _InstructionsCard({required this.recipeName, required this.steps, required this.width, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final height = width / _kInstructionsCardAspect;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset('assets/images/Cocktail_intructions.png', fit: BoxFit.fill),
-            // To the right of the card's own sketched glass (its top-left
-            // corner), not above the card — top-aligned with the glass
-            // drawing's own rim (measured ~0.135 of the card's height),
-            // not the card's edge, so the title sits level with the art
-            // rather than floating above it.
-            Positioned(
-              top: height * 0.135,
-              left: width * 0.38,
-              right: width * 0.08,
-              child: Text(
-                recipeName,
-                style: GoogleFonts.caveat(fontSize: width * 0.078, fontWeight: FontWeight.w700, color: Colors.black87),
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.only(top: height * 0.3, left: width * 0.14, right: width * 0.1, bottom: height * 0.08),
-              child: _StepList(steps: steps, fontSize: width * 0.038),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StepList extends StatelessWidget {
-  final List<String> steps;
-  final double fontSize;
-  const _StepList({required this.steps, required this.fontSize});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < steps.length; i++)
-          Padding(
-            padding: EdgeInsets.only(bottom: fontSize * 0.5),
-            child: Text(
-              '${i + 1}. ${steps[i]}',
-              style: GoogleFonts.caveat(fontSize: fontSize, fontWeight: FontWeight.w600, color: Colors.black87, height: 1.25),
-            ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-/// The same recipe card, full-screen and bigger — reached by tapping
-/// [_InstructionsCard] on the detail page.
-class _InstructionsFullScreen extends StatelessWidget {
-  final String recipeName;
-  final List<String> steps;
-  const _InstructionsFullScreen({required this.recipeName, required this.steps});
+class _StepRow extends StatelessWidget {
+  final int number;
+  final String text;
+  final bool isLast;
+  const _StepRow({required this.number, required this.text, required this.isLast});
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.sizeOf(context);
-    const sideMargin = 20.0;
-    final width = screenSize.width - sideMargin * 2;
-    final height = width / _kInstructionsCardAspect;
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: SizedBox(
-                  width: width,
-                  height: height,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.asset('assets/images/Cocktail_intructions.png', fit: BoxFit.fill),
-                      Positioned(
-                        top: height * 0.135,
-                        left: width * 0.38,
-                        right: width * 0.08,
-                        child: Text(
-                          recipeName,
-                          style: GoogleFonts.caveat(fontSize: width * 0.065, fontWeight: FontWeight.w700, color: Colors.black87),
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.only(top: height * 0.3, left: width * 0.14, right: width * 0.1, bottom: height * 0.08),
-                        child: _StepList(steps: steps, fontSize: width * 0.050),
-                      ),
-                    ],
-                  ),
-                ),
+    final stepStyle = GoogleFonts.caveat(fontSize: 22, fontWeight: FontWeight.w600, color: SubmenuColors.paperInk, height: 1.25);
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 18,
+                child: Text('$number.', style: GoogleFonts.caveat(fontSize: 22, fontWeight: FontWeight.w600, color: SubmenuColors.paperNumber)),
               ),
-            ),
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
+              const SizedBox(width: 6),
+              Expanded(child: Text(text, style: stepStyle)),
+            ],
+          ),
+          if (!isLast) ...[
+            const SizedBox(height: 8),
+            CustomPaint(painter: _DashedLinePainter(), size: const Size(double.infinity, 1)),
           ],
-        ),
+        ],
       ),
     );
   }
+}
+
+class _DashedLinePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF785A28).withValues(alpha: 0.25)
+      ..strokeWidth = 1;
+    const dashWidth = 5.0;
+    const dashGap = 4.0;
+    var x = 0.0;
+    while (x < size.width) {
+      canvas.drawLine(Offset(x, 0), Offset(x + dashWidth, 0), paint);
+      x += dashWidth + dashGap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

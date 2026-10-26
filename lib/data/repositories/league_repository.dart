@@ -36,6 +36,7 @@ class LeagueLeaderboardEntry {
   final int highestTierUnlockedLevel2;
   final int highestTierUnlockedLevel3;
   final int highestTierUnlockedLevel4;
+  final int highestTierUnlockedLevel5;
   final int highestLevelReached;
 
   const LeagueLeaderboardEntry({
@@ -47,6 +48,7 @@ class LeagueLeaderboardEntry {
     this.highestTierUnlockedLevel2 = -1,
     this.highestTierUnlockedLevel3 = -1,
     this.highestTierUnlockedLevel4 = -1,
+    this.highestTierUnlockedLevel5 = -1,
     this.highestLevelReached = 1,
   });
 
@@ -54,6 +56,9 @@ class LeagueLeaderboardEntry {
   /// higher-level-outranks-lower rule the main menu's own Unlocked tab
   /// uses (see menu_screen.dart).
   Ingredient get evolutionIngredient {
+    if (highestLevelReached >= 5) {
+      return kEvolutionChainLevel5[highestTierUnlockedLevel5.clamp(0, kEvolutionChainLevel5.length - 1)];
+    }
     if (highestLevelReached >= 4) {
       return kEvolutionChainLevel4[highestTierUnlockedLevel4.clamp(0, kEvolutionChainLevel4.length - 1)];
     }
@@ -79,8 +84,14 @@ class PlayerProgress {
   final int highestTierUnlockedLevel2;
   final int highestTierUnlockedLevel3;
   final int highestTierUnlockedLevel4;
+  final int highestTierUnlockedLevel5;
   final int highestLevelReached;
   final List<int> highScores;
+
+  /// Lifetime cocktail-mixed ids (see progression_service.dart's
+  /// loadMixedCocktailIds) — the Guide/Cocktails screens' own "ever
+  /// mixed" set, backed up the same way every other lifetime field is.
+  final List<String> mixedCocktailIds;
 
   /// When this snapshot was last written (see [LeagueRepository.
   /// pushProgress]'s own `FieldValue.serverTimestamp()`) — null only for
@@ -96,8 +107,10 @@ class PlayerProgress {
     required this.highestTierUnlockedLevel2,
     required this.highestTierUnlockedLevel3,
     required this.highestTierUnlockedLevel4,
+    this.highestTierUnlockedLevel5 = -1,
     required this.highestLevelReached,
     required this.highScores,
+    this.mixedCocktailIds = const [],
     this.updatedAt,
   });
 }
@@ -129,31 +142,43 @@ class LeagueRepository {
   /// forever like any other player. The daily join job deletes accounts
   /// flagged this way after 72h — see assignNewJoiners.js.
   Future<void> ensurePlayerDocument({required String uid, required String nickname, String? deviceId}) async {
+    // Same timeout reasoning as pushProgress/fetchProgress above — this
+    // is the very first Firestore round trip every new player's
+    // nickname-setup flow makes, so a hang here (rather than a clean
+    // failure the screen's own try/catch can show an error for) was the
+    // single most commonly hit "perpetual loading" dead end in the app.
+    const timeout = Duration(seconds: 20);
     final ref = _players.doc(uid);
-    final snap = await ref.get();
+    final snap = await ref.get().timeout(timeout);
     if (snap.exists) return;
-    await ref.set({
-      'nickname': nickname,
-      'nicknameLower': nickname.toLowerCase(),
-      'tier': 'bronze',
-      'roomId': null,
-      'pendingJoin': true,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'isTestAccount': kDebugMode,
-      if (deviceId != null) 'deviceId': deviceId,
-    });
+    await ref
+        .set({
+          'nickname': nickname,
+          'nicknameLower': nickname.toLowerCase(),
+          'tier': 'bronze',
+          'roomId': null,
+          'pendingJoin': true,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'isTestAccount': kDebugMode,
+          if (deviceId != null) 'deviceId': deviceId,
+        })
+        .timeout(timeout);
   }
 
   Future<void> syncNickname({required String uid, required String nickname}) async {
-    await _players.doc(uid).update({
-      'nickname': nickname,
-      'nicknameLower': nickname.toLowerCase(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _players
+        .doc(uid)
+        .update({
+          'nickname': nickname,
+          'nicknameLower': nickname.toLowerCase(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        })
+        .timeout(const Duration(seconds: 20));
   }
 
-  Future<DocumentSnapshot<Map<String, dynamic>>> getPlayer(String uid) => _players.doc(uid).get();
+  Future<DocumentSnapshot<Map<String, dynamic>>> getPlayer(String uid) =>
+      _players.doc(uid).get().timeout(const Duration(seconds: 20));
 
   /// This player's recorded result for [weekId] — written by rollover.js
   /// to players/{uid}/weekHistory/{weekId} at the end of that week
@@ -203,6 +228,7 @@ class LeagueRepository {
     int highestTierUnlockedLevel2 = -1,
     int highestTierUnlockedLevel3 = -1,
     int highestTierUnlockedLevel4 = -1,
+    int highestTierUnlockedLevel5 = -1,
     int highestLevelReached = 1,
   }) async {
     final playedAtUtc = (playedAt ?? DateTime.now()).toUtc();
@@ -221,6 +247,7 @@ class LeagueRepository {
         'highestTierUnlockedLevel2': highestTierUnlockedLevel2,
         'highestTierUnlockedLevel3': highestTierUnlockedLevel3,
         'highestTierUnlockedLevel4': highestTierUnlockedLevel4,
+        'highestTierUnlockedLevel5': highestTierUnlockedLevel5,
         'highestLevelReached': highestLevelReached,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -280,6 +307,7 @@ class LeagueRepository {
         highestTierUnlockedLevel2: (scoreData?['highestTierUnlockedLevel2'] as int?) ?? -1,
         highestTierUnlockedLevel3: (scoreData?['highestTierUnlockedLevel3'] as int?) ?? -1,
         highestTierUnlockedLevel4: (scoreData?['highestTierUnlockedLevel4'] as int?) ?? -1,
+        highestTierUnlockedLevel5: (scoreData?['highestTierUnlockedLevel5'] as int?) ?? -1,
         highestLevelReached: (scoreData?['highestLevelReached'] as int?) ?? 1,
       );
     }));
@@ -295,23 +323,35 @@ class LeagueRepository {
   /// is always supplied together, so there's no stale-field risk the way
   /// a partial merge could leave behind.
   Future<void> pushProgress({required String uid, required PlayerProgress progress}) async {
-    await _players.doc(uid).collection('progress').doc('current').set({
-      'credits': progress.credits,
-      'highestTierUnlocked': progress.highestTierUnlocked,
-      'highestTierUnlockedLevel2': progress.highestTierUnlockedLevel2,
-      'highestTierUnlockedLevel3': progress.highestTierUnlockedLevel3,
-      'highestTierUnlockedLevel4': progress.highestTierUnlockedLevel4,
-      'highestLevelReached': progress.highestLevelReached,
-      'highScores': progress.highScores,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    // Same reasoning as AuthService.linkGoogle's own timeouts — a plain
+    // Firestore call with nothing bounding it can hang indefinitely on a
+    // bad connection, and progress_sync.dart's retry loop only actually
+    // helps if each individual attempt eventually gives up and fails
+    // rather than hanging forever.
+    await _players
+        .doc(uid)
+        .collection('progress')
+        .doc('current')
+        .set({
+          'credits': progress.credits,
+          'highestTierUnlocked': progress.highestTierUnlocked,
+          'highestTierUnlockedLevel2': progress.highestTierUnlockedLevel2,
+          'highestTierUnlockedLevel3': progress.highestTierUnlockedLevel3,
+          'highestTierUnlockedLevel4': progress.highestTierUnlockedLevel4,
+          'highestTierUnlockedLevel5': progress.highestTierUnlockedLevel5,
+          'highestLevelReached': progress.highestLevelReached,
+          'highScores': progress.highScores,
+          'mixedCocktailIds': progress.mixedCocktailIds,
+          'updatedAt': FieldValue.serverTimestamp(),
+        })
+        .timeout(const Duration(seconds: 20));
   }
 
   /// Reads this player's backed-up progress, or null if they've never
   /// pushed one (never signed in with Google, or signed in but nothing's
   /// synced yet).
   Future<PlayerProgress?> fetchProgress(String uid) async {
-    final doc = await _players.doc(uid).collection('progress').doc('current').get();
+    final doc = await _players.doc(uid).collection('progress').doc('current').get().timeout(const Duration(seconds: 20));
     final data = doc.data();
     if (data == null) return null;
     return PlayerProgress(
@@ -320,8 +360,10 @@ class LeagueRepository {
       highestTierUnlockedLevel2: (data['highestTierUnlockedLevel2'] as int?) ?? -1,
       highestTierUnlockedLevel3: (data['highestTierUnlockedLevel3'] as int?) ?? -1,
       highestTierUnlockedLevel4: (data['highestTierUnlockedLevel4'] as int?) ?? -1,
+      highestTierUnlockedLevel5: (data['highestTierUnlockedLevel5'] as int?) ?? -1,
       highestLevelReached: (data['highestLevelReached'] as int?) ?? 1,
       highScores: ((data['highScores'] as List?) ?? const []).cast<int>(),
+      mixedCocktailIds: ((data['mixedCocktailIds'] as List?) ?? const []).cast<String>(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }

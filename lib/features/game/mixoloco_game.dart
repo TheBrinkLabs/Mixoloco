@@ -1,9 +1,10 @@
 import 'dart:async' show unawaited;
-import 'dart:math' show Random, pi, sin;
+import 'dart:math' show Random, cos, pi, sin;
 import 'package:flame/components.dart' show Anchor;
 import 'package:flame_audio/flame_audio.dart';
 import 'package:flame_forge2d/flame_forge2d.dart';
-import 'package:flutter/material.dart' show Color, Colors, Curves;
+import 'package:flutter/material.dart'
+    show Color, Colors, Curves, ValueNotifier;
 import '../../core/widgets/bar_backdrop.dart' show kAimConvergenceRatio;
 import '../../data/models/cocktail_recipe.dart';
 import '../../data/models/ingredient.dart';
@@ -15,7 +16,8 @@ import 'components/ingredient_sprite.dart';
 import 'components/merge_explosion_component.dart';
 import 'components/staging_component.dart';
 import 'components/table_boundary_component.dart';
-import 'providers/game_state_provider.dart' show BoardState, PlacedItem, kMaxLevel;
+import 'providers/game_state_provider.dart'
+    show BoardState, PlacedItem, kMaxLevel;
 
 /// The physics world is laid out in meters (Box2D's own comfortable
 /// range), with the table's width fixed at this many of them — its
@@ -31,6 +33,11 @@ const kWorldWidthMeters = 4.0;
 /// here shrinks every ingredient on the table by the same amount,
 /// giving the board more breathing room before it fills up.
 const kBaseRadiusMeters = 0.19 * 0.95 * 0.95;
+
+/// Every item on the game table, art and collision shape alike — the
+/// average size the old far-to-near depth shrink (85%..100%) used to
+/// give, kept now that items draw at one consistent size everywhere.
+const kTableItemScale = 0.925;
 
 /// How much bigger Level 2 (rooftop) plays than Level 1, per tier — 1%
 /// for tier 0, 2% for tier 1, 3% for tier 2, and so on (tier index + 1,
@@ -82,21 +89,6 @@ const kCocktailSoundFile = 'pour.wav';
 /// over a typical ~2.2:1 phone aspect ratio).
 const kStagingInset = 0.5;
 
-/// How much smaller an item renders at the far edge than the same tier
-/// right at the staging edge — purely a visual depth cue (real-world
-/// perspective: distant things look smaller), never the physics radius,
-/// so it doesn't touch collision or merge sizing at all. Kept subtle —
-/// see [perspectiveScaleForY].
-const kFarPerspectiveScale = 0.85;
-
-/// The render-size multiplier for an item resting at world [y], given
-/// the table's [worldHeight] — 1.0 right at the near/staging edge,
-/// [kFarPerspectiveScale] at the true far edge, linear in between.
-double perspectiveScaleForY(double y, double worldHeight) {
-  final t = (y / worldHeight).clamp(0.0, 1.0);
-  return kFarPerspectiveScale + (1 - kFarPerspectiveScale) * t;
-}
-
 /// The physical bar table: a Box2D world where items fall (accelerated by
 /// [kGravityMagnitude] toward the far edge, exactly like a Suika-style
 /// merge game mirrored top/bottom), roll to rest against the curved
@@ -135,20 +127,26 @@ class MixolocoGame extends Forge2DGame {
   /// or Level 3's flat [kLevel3SizeMultiplier]. The single source every
   /// radius computation below reads from, so neither rule can drift out
   /// of sync between them.
-  double _radiusForTier(int tier, Ingredient ingredient) => radiusForTier(tier, kBaseRadiusMeters) *
+  double _radiusForTier(int tier, Ingredient ingredient) =>
+      radiusForTier(tier, kBaseRadiusMeters) *
+      kTableItemScale *
       ingredient.sizeMultiplier *
-      (_level == 2 ? _level2SizeMultiplier(tier) : (_level == 3 ? kLevel3SizeMultiplier : 1.0));
+      (_level == 2
+          ? _level2SizeMultiplier(tier)
+          : (_level == 3 ? kLevel3SizeMultiplier : 1.0));
 
   /// Items to recreate on the table as soon as the world's ready — a
   /// snapshot taken via [capturePlacedItems] the last time this screen
   /// was left, so leaving and coming back doesn't wipe the table.
   final List<PlacedItem> initialItems;
 
-  /// A snapshot of the Settings sound-effects toggle at the moment this
-  /// screen opened — Settings only ever opens from the menu screen, so
-  /// there's no live game session for a mid-game toggle to react to;
-  /// this just needs to reflect whatever it was set to going in.
-  final bool sfxEnabled;
+  /// The Settings sound-effects toggle, combined with the gameplay
+  /// screen's own top-left mute override (see
+  /// AudioSettings.effectiveSfxEnabled) — mutable (not a one-time
+  /// snapshot) since GameScreen updates this live the moment either one
+  /// changes, rather than only reflecting whatever it was set to when
+  /// this game was constructed.
+  bool sfxEnabled;
 
   /// A same-tier merge happened at [tier] (the tier of the two items that
   /// merged, not the tier they became) — award `10 * 2^tier`.
@@ -223,7 +221,8 @@ class MixolocoGame extends Forge2DGame {
   bool get isAnimating => _activeAnimations > 0;
 
   final Set<IngredientBodyComponent> _liveBodies = {};
-  final Map<IngredientBodyComponent, Set<IngredientBodyComponent>> _adjacency = {};
+  final Map<IngredientBodyComponent, Set<IngredientBodyComponent>> _adjacency =
+      {};
 
   /// Set by handleContactBegin/End — Box2D can fire many contact events
   /// in a single frame (a heavy drop landing on a big pile, or a shake
@@ -242,6 +241,14 @@ class MixolocoGame extends Forge2DGame {
   /// bodies on it, for a barely-perceptible detection delay.
   static const _sweepInterval = 0.15;
   double _sweepTimer = 0;
+
+  /// Set whenever a body is added to the table — the one event that can
+  /// introduce a near-miss pair the settled-table check below wouldn't
+  /// otherwise catch (a freshly spawned body is, for a frame or two,
+  /// moving fast enough that the velocity check already covers it, but
+  /// this also catches it the instant it's added, before it's even
+  /// started moving). Cleared once a sweep has actually run.
+  bool _bodiesChangedSinceSweep = true;
 
   /// A hard ceiling on how many bodies can ever be live on the table at
   /// once. TableBoundaryComponent lets a pile spread out sideways quite a
@@ -338,6 +345,24 @@ class MixolocoGame extends Forge2DGame {
   /// so those are skipped here (and picked up naturally once mounted,
   /// a frame later).
   void _sweepForMerges() {
+    // The expensive part below is the per-tier pairwise distance check —
+    // O(bodies-of-that-tier squared), run every _sweepInterval regardless
+    // of whether the table's actually changed since the last pass. If
+    // nothing's moved and no body's been added since then, a fresh sweep
+    // can only find the exact same (already-resolved) pairs it found last
+    // time, so it's safe to skip entirely. This first pass is still O(n)
+    // over every live body, but a single velocity-length check per body
+    // is far cheaper than the nested distance comparisons it's gating —
+    // real savings on a table that's settled (the common case once a
+    // combo's finished playing out) with a lot of bodies on it.
+    if (!_bodiesChangedSinceSweep) {
+      final anyMoving = _liveBodies.any(
+        (b) => !b.consumed && b.isMounted && b.body.linearVelocity.length >= kRestSpeedThreshold,
+      );
+      if (!anyMoving) return;
+    }
+    _bodiesChangedSinceSweep = false;
+
     final byTier = <int, List<IngredientBodyComponent>>{};
     for (final b in _liveBodies) {
       if (b.consumed || !b.isMounted) continue;
@@ -351,7 +376,8 @@ class MixolocoGame extends Forge2DGame {
         for (var j = i + 1; j < group.length; j++) {
           final b = group[j];
           if (b.consumed) continue;
-          final threshold = (a.contactRadius + b.contactRadius) * kIngredientVisualPad;
+          final threshold =
+              (a.contactRadius + b.contactRadius) * kIngredientVisualPad;
           if (a.body.position.distanceTo(b.body.position) <= threshold) {
             _tryMerge(a, b);
             if (a.consumed) break;
@@ -378,18 +404,44 @@ class MixolocoGame extends Forge2DGame {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    await preloadIngredientArt([...kEvolutionChain, ...kEvolutionChainLevel2, ...kEvolutionChainLevel3]);
+    await preloadIngredientArt([
+      ...kEvolutionChain,
+      ...kEvolutionChainLevel2,
+      ...kEvolutionChainLevel3,
+      ...kEvolutionChainLevel4,
+      ...kEvolutionChainLevel5,
+    ]);
     await preloadImageAssets([
-      for (final recipe in [...kCocktailRecipes, ...kCocktailRecipesLevel2, ...kCocktailRecipesLevel3]) recipe.assetPath,
+      for (final recipe in [
+        ...kCocktailRecipes,
+        ...kCocktailRecipesLevel2,
+        ...kCocktailRecipesLevel3,
+        ...kCocktailRecipesLevel4,
+        ...kCocktailRecipesLevel5,
+      ])
+        recipe.assetPath,
     ]);
     try {
-      _mergePool = await FlameAudio.createPool(kMergeSoundFile, minPlayers: 2, maxPlayers: 6);
-      _cocktailPool = await FlameAudio.createPool(kCocktailSoundFile, minPlayers: 1, maxPlayers: 2);
+      _mergePool = await FlameAudio.createPool(
+        kMergeSoundFile,
+        minPlayers: 2,
+        maxPlayers: 6,
+      );
+      _cocktailPool = await FlameAudio.createPool(
+        kCocktailSoundFile,
+        minPlayers: 1,
+        maxPlayers: 2,
+      );
     } catch (_) {
       // Soft failure — _playMergeSound/_playCocktailSound just no-op if
       // their pool never got created, same spirit as the art preloaders.
     }
-    staging = StagingComponent(worldWidth: kWorldWidthMeters, worldHeight: _worldHeight, spawnY: _worldHeight - kStagingInset, onDrop: _handleDrop);
+    staging = StagingComponent(
+      worldWidth: kWorldWidthMeters,
+      worldHeight: _worldHeight,
+      spawnY: _worldHeight - kStagingInset,
+      onDrop: _handleDrop,
+    );
     world.add(staging);
     final geometry = _pendingGeometry;
     if (geometry != null) _applyGeometry(geometry);
@@ -404,6 +456,13 @@ class MixolocoGame extends Forge2DGame {
   }
 
   void syncBoard(BoardState board) {
+    // Switching to a new order (e.g. Cocktail Mode's auto-pick) can land on
+    // a recipe whose ingredients are already sitting on the table, already
+    // touching — without dirtying the check here, nothing re-evaluates that
+    // cluster until some unrelated contact begin/end event fires later,
+    // which is what showed up as "had the ingredients but it took several
+    // more throws to complete."
+    if (board.order?.id != _currentOrder?.id) _cocktailCheckDirty = true;
     _currentOrder = board.order;
     _latestIngredient = board.current;
     if (!isLoaded) {
@@ -428,7 +487,10 @@ class MixolocoGame extends Forge2DGame {
   }
 
   void _applyGeometry(BoardGeometry geometry) {
-    final changed = !_geometry.isValid || (geometry.width - _geometry.width).abs() > 0.5 || (geometry.height - _geometry.height).abs() > 0.5;
+    final changed =
+        !_geometry.isValid ||
+        (geometry.width - _geometry.width).abs() > 0.5 ||
+        (geometry.height - _geometry.height).abs() > 0.5;
     _geometry = geometry;
     if (!changed && _boundary != null) return;
 
@@ -438,15 +500,26 @@ class MixolocoGame extends Forge2DGame {
     camera.viewfinder.position = Vector2.zero();
 
     _boundary?.removeFromParent();
-    _boundary = TableBoundaryComponent(worldWidth: kWorldWidthMeters, worldHeight: _worldHeight);
+    _boundary = TableBoundaryComponent(
+      worldWidth: kWorldWidthMeters,
+      worldHeight: _worldHeight,
+    );
     world.add(_boundary!);
 
     _gameOverLine?.removeFromParent();
-    _gameOverLine = GameOverLineComponent(worldWidth: kWorldWidthMeters, lineY: _worldHeight * (1 - kGameOverLineFraction));
+    _gameOverLine = GameOverLineComponent(
+      worldWidth: kWorldWidthMeters,
+      lineY: _worldHeight * (1 - kGameOverLineFraction),
+    );
     world.add(_gameOverLine!);
 
     staging.removeFromParent();
-    staging = StagingComponent(worldWidth: kWorldWidthMeters, worldHeight: _worldHeight, spawnY: _worldHeight - kStagingInset, onDrop: _handleDrop);
+    staging = StagingComponent(
+      worldWidth: kWorldWidthMeters,
+      worldHeight: _worldHeight,
+      spawnY: _worldHeight - kStagingInset,
+      onDrop: _handleDrop,
+    );
     world.add(staging);
     final pending = _pendingIngredient;
     if (pending != null) _setStagedIngredient(pending);
@@ -478,7 +551,12 @@ class MixolocoGame extends Forge2DGame {
     // resting right there; see _spawnBody's jitter for the other half
     // of this.
     final targetFarX = _farXFor(aimX);
-    _spawnBody(tier: tier, position: spawnPos, velocity: Vector2(0, -0.6), throwTargetFarX: targetFarX);
+    _spawnBody(
+      tier: tier,
+      position: spawnPos,
+      velocity: Vector2(0, -0.6),
+      throwTargetFarX: targetFarX,
+    );
     onThrowCommitted();
   }
 
@@ -556,7 +634,10 @@ class MixolocoGame extends Forge2DGame {
     // normalize — that can produce NaN and poison the whole simulation
     // (freezing it, rather than just looking glitchy) instead of just
     // resolving as an ordinary overlap.
-    final jitter = Vector2((_random.nextDouble() - 0.5) * 0.01, (_random.nextDouble() - 0.5) * 0.01);
+    final jitter = Vector2(
+      (_random.nextDouble() - 0.5) * 0.01,
+      (_random.nextDouble() - 0.5) * 0.01,
+    );
     final body = IngredientBodyComponent(
       tier: tier,
       ingredient: ingredient,
@@ -567,8 +648,81 @@ class MixolocoGame extends Forge2DGame {
     );
     world.add(body);
     _liveBodies.add(body);
+    _bodiesChangedSinceSweep = true;
     onTierSeen(tier);
     return body;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Collision calibration testbed — debug-only, wired up from
+  // GameScreen's kDebugMode-gated panel. Spawns bypass onTierSeen
+  // deliberately (unlike _spawnBody) so poking around here never grants
+  // real credits/tier-unlock progress — these bodies are purely visual/
+  // physics probes, not real gameplay events.
+  // ─────────────────────────────────────────────────────────────────
+
+  /// Where debug spawns are pinned, as a fraction of table height — mid
+  /// table, on plain wood well clear of the edges and the staging area.
+  static const _debugSpawnYFraction = 0.42;
+
+  /// Spawns [ingredientId] (searched across every level's chain, not
+  /// just the current one — see findIngredientById) near the table's
+  /// staging edge (see [_debugSpawnYFraction]) with its real fixture
+  /// outline drawn on top of its sprite.
+  void debugSpawnIngredient(String ingredientId) {
+    final ingredient = findIngredientById(ingredientId);
+    final radius = _radiusForTier(ingredient.tier, ingredient);
+    final body = IngredientBodyComponent(
+      tier: ingredient.tier,
+      ingredient: ingredient,
+      spawnPosition: Vector2(kWorldWidthMeters / 2, _worldHeight * _debugSpawnYFraction),
+      radius: radius,
+      debugShowFixtures: true,
+      debugPinned: true,
+    );
+    world.add(body);
+    _liveBodies.add(body);
+    _bodiesChangedSinceSweep = true;
+  }
+
+  /// Showers [count] small probe ingredients (default blackcurrant — a
+  /// genuinely small tier-0 item) around the same near-edge spot
+  /// debugSpawnIngredient uses (see [_debugSpawnYFraction]), each with
+  /// its own fixture outline visible, so where they come to rest
+  /// against whatever's already there shows the real collision boundary
+  /// directly, not just a guess from how the sprite art lines up.
+  void debugShowerProbes({String probeId = 'blackcurrant', int count = 24}) {
+    final probeIngredient = findIngredientById(probeId);
+    final radius = _radiusForTier(probeIngredient.tier, probeIngredient);
+    final center = Vector2(kWorldWidthMeters / 2, _worldHeight * _debugSpawnYFraction);
+    for (var i = 0; i < count; i++) {
+      final angle = _random.nextDouble() * pi * 2;
+      final distance = 0.6 + _random.nextDouble() * 0.6;
+      final position = center + Vector2(cos(angle), sin(angle)) * distance;
+      final velocity = Vector2(
+        (_random.nextDouble() - 0.5) * 0.4,
+        (_random.nextDouble() - 0.5) * 0.4,
+      );
+      final body = IngredientBodyComponent(
+        tier: probeIngredient.tier,
+        ingredient: probeIngredient,
+        spawnPosition: position,
+        radius: radius,
+        initialVelocity: velocity,
+        debugShowFixtures: true,
+      );
+      world.add(body);
+      _liveBodies.add(body);
+    }
+    _bodiesChangedSinceSweep = true;
+  }
+
+  /// Removes every body currently on the table — the testbed's own
+  /// reset, unconditional (unlike cherryBomb, which only sweeps one id).
+  void debugClearTable() {
+    for (final b in List.of(_liveBodies)) {
+      _removeBody(b);
+    }
   }
 
   void _removeBody(IngredientBodyComponent c) {
@@ -592,7 +746,10 @@ class MixolocoGame extends Forge2DGame {
   /// Called by [IngredientBodyComponent.beginContact] for every pair of
   /// touching items — not just same-tier ones, since the cocktail-touch
   /// graph needs every contact to find connected clusters.
-  void handleContactBegin(IngredientBodyComponent a, IngredientBodyComponent b) {
+  void handleContactBegin(
+    IngredientBodyComponent a,
+    IngredientBodyComponent b,
+  ) {
     // A compound collision shape (several circles — see
     // Ingredient.collisionProfile, used by prosecco/champagne/gin/
     // vermouth) means two touching bodies can share more than one
@@ -634,6 +791,39 @@ class MixolocoGame extends Forge2DGame {
     final mergedTier = a.tier;
     final midpoint = (a.body.position + b.body.position) / 2;
     final ingredient = a.ingredient;
+    // The chain's own capstone (the "jug") is a one-off climax, not just
+    // another step — give it the same fly-to-center/burst/reveal
+    // treatment CocktailRevealComponent gives a completed order, instead
+    // of the plain MergeExplosionComponent every ordinary tier-up gets.
+    // Only on a genuine within-chain merge producing it (not the
+    // already-exhausted jug+jug case just above, which either no-ops or
+    // ends the game) — reached via this normal merge path specifically
+    // because nextTier lands exactly on the chain's last index.
+    final producesJug = !chainExhausted && nextTier == _chain.length - 1;
+    if (producesJug) {
+      final captured = [
+        (start: a.body.position.clone(), ingredient: a.ingredient, radius: a.radius),
+        (start: b.body.position.clone(), ingredient: b.ingredient, radius: b.radius),
+      ];
+      _removeBody(a);
+      _removeBody(b);
+      final center = Vector2(kWorldWidthMeters / 2, _worldHeight / 2);
+      unawaited(_playCocktailSound());
+      _activeAnimations++;
+      world.add(
+        CocktailRevealComponent(
+          pieces: captured,
+          center: center,
+          cocktailAssetPath: _chain[nextTier].assetPath ?? '',
+          onComplete: () {
+            _spawnBody(tier: nextTier, position: center);
+            _activeAnimations--;
+          },
+        ),
+      );
+      onMerge(mergedTier);
+      return;
+    }
     _removeBody(a);
     _removeBody(b);
     unawaited(_playMergeSound());
@@ -643,7 +833,9 @@ class MixolocoGame extends Forge2DGame {
       MergeExplosionComponent(
         position: midpoint,
         ingredient: ingredient,
-        onSpawnReady: chainExhausted ? () {} : () => _spawnBody(tier: nextTier, position: midpoint),
+        onSpawnReady: chainExhausted
+            ? () {}
+            : () => _spawnBody(tier: nextTier, position: midpoint),
         onFinished: () => _activeAnimations--,
       ),
     );
@@ -683,14 +875,17 @@ class MixolocoGame extends Forge2DGame {
 
     final visited = <IngredientBodyComponent>{};
     for (final start in _liveBodies) {
-      if (start.consumed || !start.isMounted || visited.contains(start)) continue;
+      if (start.consumed || !start.isMounted || visited.contains(start)) {
+        continue;
+      }
       final component = <IngredientBodyComponent>{};
       final queue = [start];
       visited.add(start);
       while (queue.isNotEmpty) {
         final current = queue.removeLast();
         component.add(current);
-        for (final neighbor in _adjacency[current] ?? const <IngredientBodyComponent>{}) {
+        for (final neighbor
+            in _adjacency[current] ?? const <IngredientBodyComponent>{}) {
           if (neighbor.consumed || visited.contains(neighbor)) continue;
           visited.add(neighbor);
           queue.add(neighbor);
@@ -723,12 +918,20 @@ class MixolocoGame extends Forge2DGame {
     }
   }
 
-  void _completeCocktail(CocktailRecipe order, List<IngredientBodyComponent> pieces) {
+  void _completeCocktail(
+    CocktailRecipe order,
+    List<IngredientBodyComponent> pieces,
+  ) {
     for (final p in pieces) {
       p.consumed = true;
     }
     final captured = [
-      for (final p in pieces) (start: p.body.position.clone(), ingredient: p.ingredient, radius: p.radius),
+      for (final p in pieces)
+        (
+          start: p.body.position.clone(),
+          ingredient: p.ingredient,
+          radius: p.radius,
+        ),
     ];
     for (final p in pieces) {
       _removeBody(p);
@@ -753,7 +956,8 @@ class MixolocoGame extends Forge2DGame {
   /// survive navigating away.
   List<PlacedItem> capturePlacedItems() => [
     for (final b in _liveBodies)
-      if (!b.consumed && b.isMounted) PlacedItem(tier: b.tier, x: b.body.position.x, y: b.body.position.y),
+      if (!b.consumed && b.isMounted)
+        PlacedItem(tier: b.tier, x: b.body.position.x, y: b.body.position.y),
   ];
 
   /// Wipes the table for a fresh run — everything except the staging
@@ -785,6 +989,7 @@ class MixolocoGame extends Forge2DGame {
     // restore loop over an empty/stale _liveBodies do nothing useful,
     // or a leftover world.gravity multiplier survive into the new game.
     _shakeTimeRemaining = 0;
+    shakeActive.value = false;
     _shakeSquishApplied = false;
     _shakeSettleElapsed = 0;
     _shakeRestoreStep = 0;
@@ -820,6 +1025,13 @@ class MixolocoGame extends Forge2DGame {
   static const _shakePulseInterval = 0.1;
   double _shakeTimeRemaining = 0;
   double _shakePulseTimer = 0;
+
+  /// Mirrors `_shakeTimeRemaining > 0` as a public, listenable signal —
+  /// read-only (set only by this class, from the handful of places below
+  /// that already change `_shakeTimeRemaining`) for GameScreen's
+  /// power-up tray to show a pulsing glow on Shake/Mega-Shake while
+  /// either effect is still running, per the gameplay redesign handoff.
+  final shakeActive = ValueNotifier<bool>(false);
 
   /// World gravity doubles for the whole shake window on top of the
   /// stronger pulses — each pop then falls back down harder/faster
@@ -887,6 +1099,7 @@ class MixolocoGame extends Forge2DGame {
 
   void _startShakeImpulses(double impulseMultiplier) {
     _shakeTimeRemaining = _shakeDuration;
+    shakeActive.value = true;
     _shakePulseTimer = 0;
     _shakeSettleElapsed = 0;
     // A second Mega-Shake fired while the first's restore steps were
@@ -921,11 +1134,16 @@ class MixolocoGame extends Forge2DGame {
     }
   }
 
-  /// Removes every cherry (the lowest evolution tier) currently on the
-  /// table — the Cherry Bomb purchase.
+  /// Removes every instance of the current level's own tier-0 ingredient
+  /// currently on the table — the Cherry Bomb purchase (renamed per
+  /// level in GameScreen's own power-up tile — Currant Bomb on Piazza,
+  /// Sugar Bomb on Jungle — but the same underlying sweep-and-delete
+  /// power everywhere, parameterized by id instead of hardcoded to
+  /// literal cherries).
   void cherryBomb() {
+    final targetId = _chain.first.id;
     for (final b in List.of(_liveBodies)) {
-      if (b.ingredient.id == 'cherry') {
+      if (b.ingredient.id == targetId) {
         _removeBody(b);
       }
     }
@@ -936,6 +1154,7 @@ class MixolocoGame extends Forge2DGame {
       _shakeTimeRemaining -= dt;
       if (_shakeTimeRemaining <= 0) {
         world.gravity = Vector2(0, -kGravityMagnitude);
+        shakeActive.value = false;
       }
       _shakePulseTimer -= dt;
       if (_shakePulseTimer <= 0) {
@@ -948,9 +1167,17 @@ class MixolocoGame extends Forge2DGame {
           // given the camera's angle) rather than a subtle
           // omnidirectional jitter. Every magnitude doubled ("twice as
           // aggressive") per feedback.
-          final horizontal = (_shakeRandom.nextDouble() - 0.5) * 2.4 * _shakeImpulseMultiplier * b.body.mass;
+          final horizontal =
+              (_shakeRandom.nextDouble() - 0.5) *
+              2.4 *
+              _shakeImpulseMultiplier *
+              b.body.mass;
           final verticalSign = _shakeRandom.nextBool() ? 1.0 : -1.0;
-          final vertical = verticalSign * (2.6 + _shakeRandom.nextDouble() * 2.2) * _shakeImpulseMultiplier * b.body.mass;
+          final vertical =
+              verticalSign *
+              (2.6 + _shakeRandom.nextDouble() * 2.2) *
+              _shakeImpulseMultiplier *
+              b.body.mass;
           b.body.applyLinearImpulse(Vector2(horizontal, vertical));
         }
       }
@@ -973,7 +1200,9 @@ class MixolocoGame extends Forge2DGame {
     _shakeRestoreStep++;
     final multiplier = _shakeRestoreStep >= _shakeRestoreSteps
         ? 1.0
-        : _shakeSquishBase + (1.0 - _shakeSquishBase) * (_shakeRestoreStep / _shakeRestoreSteps);
+        : _shakeSquishBase +
+              (1.0 - _shakeSquishBase) *
+                  (_shakeRestoreStep / _shakeRestoreSteps);
     for (final b in _liveBodies) {
       if (b.isMounted) b.setPhysicsRadiusMultiplier(multiplier);
     }
@@ -998,24 +1227,34 @@ class MixolocoGame extends Forge2DGame {
     final phase = (c.hashCode & 0xFFF) / 0xFFF * pi * 2;
     Vector2 wobbleAt(double t) {
       if (t < _shakeShrinkInDuration) {
-        final p = Curves.easeOut.transform((t / _shakeShrinkInDuration).clamp(0.0, 1.0));
+        final p = Curves.easeOut.transform(
+          (t / _shakeShrinkInDuration).clamp(0.0, 1.0),
+        );
         final s = 1.0 - p * (1.0 - _shakeSquishBase);
         return Vector2(s, s);
       }
       final localT = t - _shakeShrinkInDuration;
-      final x = _shakeSquishBase + sin(localT * _shakeWobbleFrequency + phase) * _shakeWobbleAmplitude;
+      final x =
+          _shakeSquishBase +
+          sin(localT * _shakeWobbleFrequency + phase) * _shakeWobbleAmplitude;
       // A full half-cycle out of phase with X (not a partial offset) —
       // when X is at its smallest, Y is at its biggest, and vice versa,
       // which is what actually reads as squashing/stretching rather
       // than everything just pulsing together.
-      final y = _shakeSquishBase + sin(localT * _shakeWobbleFrequency + phase + pi) * _shakeWobbleAmplitude;
+      final y =
+          _shakeSquishBase +
+          sin(localT * _shakeWobbleFrequency + phase + pi) *
+              _shakeWobbleAmplitude;
       return Vector2(x, y);
     }
+
     if (_shakeTimeRemaining > 0) {
       return wobbleAt(_shakeDuration - _shakeTimeRemaining);
     }
     final atShakeEnd = wobbleAt(_shakeDuration);
-    final p = Curves.easeOut.transform((_shakeSettleElapsed / _shakeSettleDuration).clamp(0.0, 1.0));
+    final p = Curves.easeOut.transform(
+      (_shakeSettleElapsed / _shakeSettleDuration).clamp(0.0, 1.0),
+    );
     return Vector2(
       atShakeEnd.x + (1.0 - atShakeEnd.x) * p,
       atShakeEnd.y + (1.0 - atShakeEnd.y) * p,

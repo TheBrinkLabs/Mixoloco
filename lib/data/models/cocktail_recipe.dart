@@ -34,8 +34,20 @@ class CocktailRecipe {
 const kStarterCocktailId = 'screwdriver';
 
 const kCocktailRecipes = [
-  CocktailRecipe(id: 'mojito', name: 'Mojito', ingredientIds: ['rum', 'lime', 'soda', 'mint'], assetPath: 'assets/images/mohito.png', price: 200),
-  CocktailRecipe(id: 'screwdriver', name: 'Screwdriver', ingredientIds: ['vodka', 'orange'], assetPath: 'assets/images/screwdriver.png', price: 250),
+  CocktailRecipe(
+    id: 'mojito',
+    name: 'Mojito',
+    ingredientIds: ['rum', 'lime', 'soda', 'mint'],
+    assetPath: 'assets/images/mohito.png',
+    price: 200,
+  ),
+  CocktailRecipe(
+    id: 'screwdriver',
+    name: 'Screwdriver',
+    ingredientIds: ['vodka', 'orange'],
+    assetPath: 'assets/images/game/c_screwdriver.png',
+    price: 250,
+  ),
   CocktailRecipe(
     // Lemon added alongside lime — a real rum punch is usually a mix of
     // citrus juices, and this also gives Lemon its first recipe use
@@ -53,7 +65,7 @@ const kCocktailRecipes = [
     id: 'cherry_daiquiri',
     name: 'Cherry Daiquiri',
     ingredientIds: ['rum', 'cherry', 'lime'],
-    assetPath: 'assets/images/cherry_daiquiri.png',
+    assetPath: 'assets/images/game/c_cherry_daiquiri.png',
     price: 350,
   ),
   CocktailRecipe(
@@ -76,12 +88,13 @@ const kCocktailRecipes = [
     id: 'blue_hawaiian',
     name: 'Blue Hawaiian',
     ingredientIds: ['rum', 'blue_curacao', 'pineapple', 'cherry'],
-    assetPath: 'assets/images/blue_hawaiian.png',
+    assetPath: 'assets/images/game/c_blue_hawaiian.png',
     price: 500,
   ),
 ];
 
-CocktailRecipe get kStarterCocktail => kCocktailRecipes.firstWhere((r) => r.id == kStarterCocktailId);
+CocktailRecipe get kStarterCocktail =>
+    kCocktailRecipes.firstWhere((r) => r.id == kStarterCocktailId);
 
 /// The rooftop bar's own cocktail list (Level 2) — ordered easiest to
 /// hardest by the highest evolution tier each recipe needs (see
@@ -156,7 +169,8 @@ const kCocktailRecipesLevel2 = [
   ),
 ];
 
-CocktailRecipe get kStarterCocktailLevel2 => kCocktailRecipesLevel2.firstWhere((r) => r.id == kStarterCocktailIdLevel2);
+CocktailRecipe get kStarterCocktailLevel2 =>
+    kCocktailRecipesLevel2.firstWhere((r) => r.id == kStarterCocktailIdLevel2);
 
 /// The safari bar's own cocktail list (Level 3) — same shape as
 /// [kCocktailRecipesLevel2], ordered easiest to hardest by highest
@@ -170,7 +184,13 @@ CocktailRecipe get kStarterCocktailLevel2 => kCocktailRecipesLevel2.firstWhere((
 const kStarterCocktailIdLevel3 = 'dawa';
 
 const kCocktailRecipesLevel3 = [
-  CocktailRecipe(id: 'dawa', name: 'Dawa', ingredientIds: ['vodka', 'honey', 'lime'], assetPath: 'assets/images/dawa.png', price: 200),
+  CocktailRecipe(
+    id: 'dawa',
+    name: 'Dawa',
+    ingredientIds: ['vodka', 'honey', 'lime'],
+    assetPath: 'assets/images/game/c_dawa.png',
+    price: 200,
+  ),
   CocktailRecipe(
     id: 'marula_sunset',
     name: 'Marula Sunset',
@@ -192,7 +212,7 @@ const kCocktailRecipesLevel3 = [
     id: 'citrus_mule',
     name: 'Citrus Mule',
     ingredientIds: ['vodka', 'ginger_beer', 'lime'],
-    assetPath: 'assets/images/citrus_mule.png',
+    assetPath: 'assets/images/game/c_citrus_mule.png',
     price: 350,
   ),
   CocktailRecipe(
@@ -211,10 +231,17 @@ const kCocktailRecipesLevel3 = [
     assetPath: 'assets/images/golden_pineapple.png',
     price: 450,
   ),
-  CocktailRecipe(id: 'mimosa', name: 'Mimosa', ingredientIds: ['prosecco', 'orange_slice'], assetPath: 'assets/images/mimosa.png', price: 500),
+  CocktailRecipe(
+    id: 'mimosa',
+    name: 'Mimosa',
+    ingredientIds: ['prosecco', 'orange_slice'],
+    assetPath: 'assets/images/mimosa.png',
+    price: 500,
+  ),
 ];
 
-CocktailRecipe get kStarterCocktailLevel3 => kCocktailRecipesLevel3.firstWhere((r) => r.id == kStarterCocktailIdLevel3);
+CocktailRecipe get kStarterCocktailLevel3 =>
+    kCocktailRecipesLevel3.firstWhere((r) => r.id == kStarterCocktailIdLevel3);
 
 /// The piazza bar's own cocktail list (Level 4) — same shape as
 /// [kCocktailRecipesLevel3], ordered easiest to hardest by highest
@@ -279,27 +306,99 @@ const kCocktailRecipesLevel4 = [
     // doesn't carry Lime (already on Levels 1-3), so Lemon's the
     // closest citrus actually available here.
     ingredientIds: ['mint', 'lemon', 'elderflower_liqueur', 'prosecco'],
-    assetPath: 'assets/images/hugo_spritz.png',
+    assetPath: 'assets/images/game/c_hugo_spritz.png',
     price: 450,
   ),
   CocktailRecipe(
     id: 'french_75',
     name: 'French 75',
     ingredientIds: ['cognac', 'lemon', 'prosecco'],
-    assetPath: 'assets/images/french_75.png',
+    assetPath: 'assets/images/game/c_french_75.png',
     price: 500,
   ),
 ];
 
-CocktailRecipe get kStarterCocktailLevel4 => kCocktailRecipesLevel4.firstWhere((r) => r.id == kStarterCocktailIdLevel4);
+CocktailRecipe get kStarterCocktailLevel4 =>
+    kCocktailRecipesLevel4.firstWhere((r) => r.id == kStarterCocktailIdLevel4);
+
+/// Jungle bar's own 7 recipes (Costa Rica/Caribbean-themed) — ordered by
+/// rising ingredient tier complexity, same convention every earlier
+/// level's price ladder follows. Guaro Sour is the starter: its 3
+/// ingredients (sugar/guaro/lime) are this chain's lowest tiers, same
+/// "cheap and immediately reachable" reasoning every other level's
+/// starter follows.
+const kStarterCocktailIdLevel5 = 'guaro_sour';
+
+const kCocktailRecipesLevel5 = [
+  CocktailRecipe(
+    id: 'guaro_sour',
+    name: 'Guaro Sour',
+    ingredientIds: ['guaro', 'lime', 'sugar_cube'],
+    assetPath: 'assets/images/guaro_sour.png',
+    price: 200,
+  ),
+  CocktailRecipe(
+    id: 'cuba_libre',
+    name: 'Cuba Libre',
+    ingredientIds: ['rum', 'cola', 'lime'],
+    assetPath: 'assets/images/cuba_libre.png',
+    price: 250,
+  ),
+  CocktailRecipe(
+    id: 'daiquiri',
+    name: 'Daiquiri',
+    ingredientIds: ['rum', 'lime', 'sugar_cube'],
+    assetPath: 'assets/images/daiquiri.png',
+    price: 300,
+  ),
+  CocktailRecipe(
+    id: 'banana_daiquiri',
+    name: 'Banana Daiquiri',
+    ingredientIds: ['rum', 'banana', 'lime', 'sugar_cube'],
+    assetPath: 'assets/images/banana_daiquiri.png',
+    price: 350,
+  ),
+  CocktailRecipe(
+    id: 'guaro_paloma',
+    name: 'Guaro Paloma',
+    ingredientIds: ['guaro', 'grapefruit', 'lime', 'soda'],
+    assetPath: 'assets/images/guaro_paloma.png',
+    price: 400,
+  ),
+  CocktailRecipe(
+    id: 'chiliguaro',
+    name: 'Chiliguaro',
+    ingredientIds: ['guaro', 'tomato_juice', 'hot_sauce', 'lime'],
+    assetPath: 'assets/images/chiliguaro.png',
+    price: 450,
+  ),
+  CocktailRecipe(
+    id: 'pina_colada',
+    name: 'Piña Colada',
+    ingredientIds: ['rum', 'coconut', 'pineapple_fruit'],
+    assetPath: 'assets/images/pina_colada.png',
+    price: 500,
+  ),
+];
+
+CocktailRecipe get kStarterCocktailLevel5 =>
+    kCocktailRecipesLevel5.firstWhere((r) => r.id == kStarterCocktailIdLevel5);
 
 /// The cocktail list for [level] — see evolutionChainForLevel (in
 /// ingredient.dart) for the matching evolution-chain split and why a
-/// future Level 5 needs a parallel branch added here too.
-List<CocktailRecipe> cocktailRecipesForLevel(int level) =>
-    level >= 4 ? kCocktailRecipesLevel4 : (level >= 3 ? kCocktailRecipesLevel3 : (level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes));
+/// future Level 6 needs a parallel branch added here too.
+List<CocktailRecipe> cocktailRecipesForLevel(int level) => level >= 5
+    ? kCocktailRecipesLevel5
+    : (level >= 4
+          ? kCocktailRecipesLevel4
+          : level >= 3
+          ? kCocktailRecipesLevel3
+          : (level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes));
 
 /// The free starter order for a fresh run at [level] — see
 /// [cocktailRecipesForLevel].
-CocktailRecipe starterCocktailForLevel(int level) =>
-    level >= 4 ? kStarterCocktailLevel4 : (level >= 3 ? kStarterCocktailLevel3 : (level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail));
+CocktailRecipe starterCocktailForLevel(int level) => level >= 4
+    ? kStarterCocktailLevel4
+    : (level >= 3
+          ? kStarterCocktailLevel3
+          : (level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail));

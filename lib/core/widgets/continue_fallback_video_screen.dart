@@ -59,16 +59,33 @@ const _fallbackWatchSeconds = 20;
 /// the way the MREC fallback's 300x250 card is. The whole video is the
 /// tap target for Capitle's Play Store listing — no separate CTA button
 /// — matching how a real video ad's click-through normally works.
-Future<bool> showContinueFallbackVideo(BuildContext context, AppLocale locale) async {
+/// [restoreBannerOnExit] defaults to true — right for this screen's other
+/// two callers (shop_screen.dart/get_credits_dialog.dart's "watch ad for
+/// credits," reachable directly from the menu, with nothing else that
+/// will ever restore the banner once this hides it). GameScreen's own
+/// call passes false, since it hides the banner for its own entire
+/// lifetime and only its own dispose should bring it back — restoring it
+/// here too would flip the banner visible while popping back to a still-
+/// mounted GameScreen that wants it hidden. The bug this fixes: this
+/// screen used to never restore the banner at all (a stale comment here
+/// claimed GameScreen was "the only real caller," which stopped being
+/// true once the Shop's ad-credits flow started using it too) — hitting
+/// it from Shop left the banner hidden for the rest of the session, on
+/// every screen, with nothing left to ever bring it back.
+Future<bool> showContinueFallbackVideo(BuildContext context, AppLocale locale, {bool restoreBannerOnExit = true}) async {
   final result = await Navigator.of(context).push<bool>(
-    MaterialPageRoute(fullscreenDialog: true, builder: (_) => _ContinueFallbackVideoScreen(locale: locale)),
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _ContinueFallbackVideoScreen(locale: locale, restoreBannerOnExit: restoreBannerOnExit),
+    ),
   );
   return result ?? false;
 }
 
 class _ContinueFallbackVideoScreen extends ConsumerStatefulWidget {
   final AppLocale locale;
-  const _ContinueFallbackVideoScreen({required this.locale});
+  final bool restoreBannerOnExit;
+  const _ContinueFallbackVideoScreen({required this.locale, required this.restoreBannerOnExit});
 
   @override
   ConsumerState<_ContinueFallbackVideoScreen> createState() => _ContinueFallbackVideoScreenState();
@@ -103,16 +120,8 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
         setState(() => _secondsRemaining--);
       }
     });
-    // GameScreen (the only real caller — see _watchAdToContinue) already
-    // hides the persistent banner for as long as it's mounted, so this
-    // is normally redundant — but it's not safe to rely on that: this
-    // widget is also reachable in isolation (e.g. a debug/test entry
-    // point that skips GameScreen), where nothing else would have
-    // hidden it, and the banner ends up sitting over the Continue
-    // button. Deliberately does NOT restore it to `bottom` on dispose
-    // — this screen pops back to GameScreen, which still wants it
-    // hidden for the rest of the run; only GameScreen's own dispose
-    // should ever bring it back.
+    // Hidden unconditionally on entry regardless of caller — see
+    // [restoreBannerOnExit]'s doc for the exit side of this.
     ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
     _controller = VideoPlayerController.asset('assets/videos/continue_fallback_capitle.mp4');
     _controller
@@ -131,6 +140,9 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
 
   @override
   void dispose() {
+    if (widget.restoreBannerOnExit) {
+      ref.read(bannerPositionProvider.notifier).state = BannerPosition.bottom;
+    }
     _countdownTimer?.cancel();
     WakelockPlus.disable();
     _controller.dispose();

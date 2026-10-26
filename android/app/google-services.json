@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "727783490936-1sf6k62rdoou7md5g812m2tkvvd5lrti.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.brinklabs.mixoloco",
+            "certificate_hash": "8d1dfcc659b7a756ebed876e4a589822d374dbcb"
+          }
+        },
+        {
           "client_id": "727783490936-8fvd4dvkq0aqvtj9pnp0okcof7j5jfv9.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

@@ -19,6 +19,13 @@ void main() {
     'vodka_tonic.png',
     'cosmopolitan.png',
     'cocktail_jug.png',
+    'guaro_sour.png',
+    'banana_daiquiri.png',
+    'cuba_libre.png',
+    'daiquiri.png',
+    'pina_colada.png',
+    'chiliguaro.png',
+    'guaro_paloma.png',
   };
   final files = dir.listSync().whereType<File>().where((file) {
     final name = file.uri.pathSegments.last;

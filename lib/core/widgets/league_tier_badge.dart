@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
 import '../i18n/strings.dart';
 import '../services/locale_provider.dart';
+import 'submenu_kit.dart';
 
 const _bronze = Color(0xFFCD7F32);
+const _bronzeDark = Color(0xFF8A5323);
 const _silver = Color(0xFFC0C0C8);
+const _silverDark = Color(0xFF86868E);
 const _gold = Color(0xFFFFD54A);
+const _goldDark = Color(0xFFB8860B);
+
+Color _darkForTier(String tier) {
+  switch (tier) {
+    case 'silver':
+      return _silverDark;
+    case 'gold':
+      return _goldDark;
+    default:
+      return _bronzeDark;
+  }
+}
 
 Color colorForTier(String tier) {
   switch (tier) {
@@ -28,72 +43,58 @@ String labelForTier(String tier, AppLocale locale) {
   }
 }
 
-/// bronze_league.png's own aspect once cropped tight to its plate (was
-/// 1408x768 with a lot of transparent padding baked in, cropped down
-/// to 1238x452) — used to size it without letterboxing. gold_league.png/
-/// silver_league.png were supplied and cropped the same way, landing
-/// within a pixel or two of the same aspect, so this one constant covers
-/// all three.
-const kLeaguePlateAspect = 1238 / 452;
-
-/// The engraved-metal plate art for every tier.
-String? leagueAssetForTier(String tier) {
-  switch (tier) {
-    case 'gold':
-      return 'assets/images/gold_league.png';
-    case 'silver':
-      return 'assets/images/silver_league.png';
-    case 'bronze':
-      return 'assets/images/bronze_league.png';
-    default:
-      return null;
-  }
-}
-
-/// A league tier badge — the real engraved plate art
-/// (assets/images/bronze_league.png etc) when one exists for [tier],
-/// otherwise a colour-coded pill as a placeholder. Used both as the
-/// league screen's own full-width header (pass [width]) and as a
-/// small badge elsewhere (pass [fontSize] instead).
+/// A league tier badge — a gold-rimmed blue tab with a tier-coloured
+/// coin for the league screen's own full-width header (pass [width]),
+/// or a small colour-coded pill elsewhere (pass [fontSize] instead, no
+/// [width] — e.g. a future compact badge; nothing currently calls this
+/// branch, but it's kept as the no-width fallback shape).
 class LeagueTierBadge extends StatelessWidget {
   final String tier;
   final AppLocale locale;
   final double fontSize;
-
-  /// When set, renders as a full-width banner at this width (height
-  /// follows [kLeaguePlateAspect]) instead of the small auto-sized
-  /// badge — the league screen's own header row.
   final double? width;
   const LeagueTierBadge({super.key, required this.tier, required this.locale, this.fontSize = 11, this.width});
 
   @override
   Widget build(BuildContext context) {
-    final asset = leagueAssetForTier(tier);
     final color = colorForTier(tier);
     if (width != null) {
       final w = width!;
-      final h = w / kLeaguePlateAspect;
-      if (asset != null) {
-        return Image.asset(asset, width: w, height: h, fit: BoxFit.contain);
-      }
+      final dark = _darkForTier(tier);
       return Container(
         width: w,
-        height: h,
-        alignment: Alignment.center,
+        height: 54,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(h * 0.22),
-          border: Border.all(color: color, width: 1.4),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: SubmenuColors.gold, width: 2),
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [SubmenuColors.cardTop, SubmenuColors.cardBottom],
+          ),
+          boxShadow: [BoxShadow(color: SubmenuColors.ring, offset: const Offset(0, 3))],
         ),
-        child: Text(
-          '${labelForTier(tier, locale)} ${tr(locale, 'leaderboard')}',
-          style: TextStyle(fontSize: h * 0.3, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: color),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: dark, width: 2),
+                gradient: RadialGradient(colors: [color, dark]),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '${labelForTier(tier, locale)} ${tr(locale, 'league_word')}'.toUpperCase(),
+              style: const TextStyle(fontFamily: 'Lilita One', fontSize: 18, color: Colors.white),
+            ),
+          ],
         ),
       );
-    }
-    if (asset != null) {
-      final height = fontSize * 3.6;
-      return Image.asset(asset, height: height, width: height * kLeaguePlateAspect, fit: BoxFit.contain);
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

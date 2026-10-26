@@ -1,26 +1,24 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 
-/// A real stone/ceramic notification panel — assets/images/
-/// Notification_tablet.png — replacing the old flat AppColors.surface
-/// rounded box every confirm/choice popup in the app used, per feedback
-/// that flat color read as "a plain black notification bar," out of
-/// place next to every other wood/stone surface in the game.
-///
-/// Nine-slice stretched (see [_centerSlice]) rather than a plain
-/// BoxFit.fill — the source art's own rounded corners/raised rim were
-/// originally ~130px in a 1286x502 file, which would stretch into huge,
-/// mushy corners on a dialog only a few hundred logical pixels across if
-/// scaled uniformly. The asset itself is pre-downscaled to 178x70 (one
-/// Write, not computed at runtime) so its corner reads as a deliberate
-/// ~18 logical px at native size — in the same ballpark as every other
-/// rounded-rect surface in the app — while [_centerSlice]'s flat middle
-/// still stretches to fit whatever width/height the dialog's content
-/// needs.
-///
-/// [padding] is deliberately bigger than the plain box it replaced —
-/// big enough to clear the rim entirely (the ~18px corner above, given
-/// real breathing room) so text/buttons never sit on top of it.
+// A self-contained gold/navy token set, same reasoning as hud_kit.dart's
+// and submenu_kit.dart's own: every popup in the app reaches for this
+// file, so it stays decoupled from the sub-menu screens' own
+// SubmenuColors rather than importing that (menu-screen-specific) file
+// into every dialog call site.
+const _gold = Color(0xFFFFC94A);
+const _goldTop = Color(0xFFFFD95E);
+const _goldBottom = Color(0xFFF39A12);
+const _goldEdge = Color(0xFF7A3A00);
+const _panelTop = Color(0xFF1F5385);
+const _panelBottom = Color(0xFF143A5E);
+const _ring = Color(0xFF0B2238);
+
+/// Every confirm/choice popup in the app's shared container — a
+/// gold-rimmed navy panel, matching the sub-menu redesign's own
+/// SubmenuPanel look (design_handoff_submenus) rather than the earlier
+/// light-stone-tablet art it replaced. Nested like SubmenuPanel for the
+/// same double-ring effect (an outer 2px navy ring around an inner 3px
+/// gold border) since a single Container can only paint one border.
 class NotificationTablet extends StatelessWidget {
   final Widget child;
   final double? width;
@@ -29,35 +27,43 @@ class NotificationTablet extends StatelessWidget {
     super.key,
     required this.child,
     this.width,
-    this.padding = const EdgeInsets.symmetric(horizontal: 32, vertical: 30),
+    this.padding = const EdgeInsets.symmetric(horizontal: 28, vertical: 26),
   });
-
-  static const _centerSlice = Rect.fromLTRB(18, 18, 160, 52);
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: width,
-      padding: padding,
-      decoration: const BoxDecoration(
-        image: DecorationImage(image: AssetImage('assets/images/Notification_tablet.png'), centerSlice: _centerSlice, fit: BoxFit.fill),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: _ring, width: 2),
       ),
-      child: child,
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _gold, width: 3),
+          gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [_panelTop, _panelBottom]),
+          boxShadow: [
+            BoxShadow(color: _ring, offset: const Offset(0, 8)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.4), offset: const Offset(0, 18), blurRadius: 30),
+          ],
+        ),
+        child: child,
+      ),
     );
   }
 }
 
-/// A real stone/ceramic button — assets/images/button.png, same
-/// nine-slice/pre-downscale reasoning as [NotificationTablet] (was a
-/// ~175px native corner in an 852x639 file, same problem a plain
-/// BoxFit.fill had on any button much wider than it is tall, which every
-/// one of these is — now pre-downscaled to 78x58, an ~16 logical px
-/// corner at native size, matching the app's existing
-/// BorderRadius.circular(14-16) buttons rather than a smeared oval).
-/// [selected] draws a gold ring on top (for [_LevelPickerDialog]'s own
-/// highlighted-level-row use, the only place more than one of these
-/// appears at once needing one picked out from the rest) — the plain
-/// stone art has no selected/unselected variant of its own.
+/// Every popup's own button — a solid gold-gradient pill, matching
+/// [NotificationTablet]'s gold rim and the sub-menu redesign's own
+/// GoldArrowButton/SubmenuGoldButton family, replacing the earlier
+/// stone-button art. [child] text stays dark (see app_theme.dart's
+/// AppColors.textOnStone doc) since this surface is still light gold
+/// even though the tablet behind it is now navy. [selected] draws a
+/// bright ring on top (for [_LevelPickerDialog]'s own highlighted-level
+/// row use, the only place more than one of these appears at once
+/// needing one picked out from the rest).
 class StoneButton extends StatelessWidget {
   final VoidCallback? onTap;
   final Widget child;
@@ -65,8 +71,6 @@ class StoneButton extends StatelessWidget {
   final double height;
   final bool selected;
   const StoneButton({super.key, required this.onTap, required this.child, this.width = double.infinity, this.height = 46, this.selected = false});
-
-  static const _centerSlice = Rect.fromLTRB(15, 17, 63, 41);
 
   @override
   Widget build(BuildContext context) {
@@ -76,9 +80,10 @@ class StoneButton extends StatelessWidget {
         width: width,
         height: height,
         decoration: BoxDecoration(
-          image: const DecorationImage(image: AssetImage('assets/images/button.png'), centerSlice: _centerSlice, fit: BoxFit.fill),
-          borderRadius: selected ? BorderRadius.circular(14) : null,
-          border: selected ? Border.all(color: AppColors.sunsetOrange, width: 2.5) : null,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: selected ? Colors.white : _goldEdge, width: selected ? 3 : 2),
+          gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [_goldTop, _goldBottom]),
+          boxShadow: [BoxShadow(color: _goldEdge, offset: const Offset(0, 3))],
         ),
         child: Center(child: child),
       ),

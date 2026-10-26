@@ -76,7 +76,35 @@ class LeagueController extends Notifier<LeagueState> {
   /// Whether this player has ever completed the nickname setup screen —
   /// checked locally first (no network needed for the common case of a
   /// returning player), matches [LeagueLocalService]'s own trade-off.
-  Future<bool> hasLocalNickname() async => (await loadNickname())?.isNotEmpty ?? false;
+  ///
+  /// Falls back to Firestore when the local cache is empty but the
+  /// player is signed in — being Google-linked (see Settings' own
+  /// "backed up" check, [AuthService.isLinkedToGoogle]) and having a
+  /// local nickname cached are two completely independent facts. A
+  /// player who links Google from Settings without ever having opened
+  /// Rankings first (e.g. restoring an existing account on a fresh
+  /// install) already has a `players/{uid}` profile server-side, but
+  /// nothing ever wrote `league_nickname` locally — without this
+  /// fallback they'd be routed to the nickname-setup screen despite
+  /// already being fully set up, and it would loop forever since
+  /// setup's own "Sign in with Google" button has nothing left to do.
+  Future<bool> hasNickname() async {
+    final local = await loadNickname();
+    if (local != null && local.isNotEmpty) return true;
+    final uid = authService.uid;
+    if (uid == null) return false;
+    try {
+      final snap = await ref.read(leagueRepositoryProvider).getPlayer(uid);
+      final remoteNickname = snap.data()?['nickname'] as String?;
+      if (remoteNickname != null && remoteNickname.isNotEmpty) {
+        await saveNickname(remoteNickname);
+        return true;
+      }
+    } catch (_) {
+      // Offline/error — fall through, same as "not set up yet."
+    }
+    return false;
+  }
 
   /// Loads everything the league screen shows: this player's own
   /// standing, their current room's leaderboard (if they're placed in

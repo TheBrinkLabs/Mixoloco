@@ -5,6 +5,7 @@ const _kHighestTierKey = 'highest_tier_unlocked';
 const _kHighestTierLevel2Key = 'highest_tier_unlocked_level2';
 const _kHighestTierLevel3Key = 'highest_tier_unlocked_level3';
 const _kHighestTierLevel4Key = 'highest_tier_unlocked_level4';
+const _kHighestTierLevel5Key = 'highest_tier_unlocked_level5';
 const _kHighestLevelReachedKey = 'highest_level_reached';
 // The single old flag is kept as the migration source for menu music —
 // existing installs' one saved preference carries over as their menu
@@ -13,12 +14,14 @@ const _kMusicEnabledKey = 'music_enabled';
 const _kMenuMusicEnabledKey = 'menu_music_enabled';
 const _kGameMusicEnabledKey = 'game_music_enabled';
 const _kSfxEnabledKey = 'sfx_enabled';
+const _kAllSoundMutedKey = 'all_sound_muted';
 const _kCocktailModeEnabledKey = 'cocktail_mode_enabled';
 const _kLocaleKey = 'app_locale';
 const _kAdFreeForeverKey = 'ad_free_forever';
 const _kAdFreeOneDayExpiryKey = 'ad_free_one_day_expiry_ms';
 const _kAdFreeSubscriptionCachedKey = 'ad_free_subscription_cached';
 const _kLastProgressSyncAtKey = 'last_progress_sync_at_ms';
+const _kMixedCocktailIdsKey = 'mixed_cocktail_ids';
 
 /// The player's current credit balance — persists across games and app
 /// restarts (unlike score, which resets every run).
@@ -85,6 +88,19 @@ Future<void> saveHighestTierLevel4(int tier) async {
   await prefs.setInt(_kHighestTierLevel4Key, tier);
 }
 
+/// The highest jungle-bar (Level 5) evolution tier ever reached — mirrors
+/// [loadHighestTierLevel4]/[saveHighestTierLevel4], but for
+/// kEvolutionChainLevel5.
+Future<int> loadHighestTierLevel5() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getInt(_kHighestTierLevel5Key) ?? -1;
+}
+
+Future<void> saveHighestTierLevel5(int tier) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(_kHighestTierLevel5Key, tier);
+}
+
 /// The highest bar level ever reached (1 = beach, 2 = rooftop) — once
 /// this reaches 2, every new game starts there directly instead of back
 /// on the beach, and the "Unlocked" display on the home screen shows a
@@ -119,6 +135,23 @@ Future<void> saveLastProgressSyncAt(DateTime time) async {
   await prefs.setInt(_kLastProgressSyncAtKey, time.millisecondsSinceEpoch);
 }
 
+/// Every cocktail recipe id this player has ever completed, across every
+/// game/level ever played — unlike [BoardState.completedCocktailIds]
+/// (which resets on every new game/level, tracking only the current
+/// run's own order-chasing progress), this one only ever grows. Backs
+/// the Guide/Cocktails/Cocktail-detail screens' "ever mixed" tracking —
+/// not touched by Settings' "Reset Progress" (same lifetime-record
+/// treatment as high scores, not the tier/level record it does reset).
+Future<Set<String>> loadMixedCocktailIds() async {
+  final prefs = await SharedPreferences.getInstance();
+  return (prefs.getStringList(_kMixedCocktailIdsKey) ?? const []).toSet();
+}
+
+Future<void> saveMixedCocktailIds(Set<String> ids) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setStringList(_kMixedCocktailIdsKey, ids.toList());
+}
+
 /// Settings' "Reset Progress" — puts the evolution/level record back to
 /// where a brand new install starts, without touching credits (an
 /// explicit, separate decision the player didn't ask to also lose) or
@@ -130,6 +163,7 @@ Future<void> resetTierProgression() async {
   await prefs.remove(_kHighestTierLevel2Key);
   await prefs.remove(_kHighestTierLevel3Key);
   await prefs.remove(_kHighestTierLevel4Key);
+  await prefs.remove(_kHighestTierLevel5Key);
   await prefs.setInt(_kHighestLevelReachedKey, 1);
 }
 
@@ -169,6 +203,21 @@ Future<bool> loadSfxEnabled() async {
 Future<void> saveSfxEnabled(bool enabled) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(_kSfxEnabledKey, enabled);
+}
+
+/// The gameplay screen's top-left mute button — a hard override on top
+/// of [loadMenuMusicEnabled]/[loadGameMusicEnabled]/[loadSfxEnabled]
+/// rather than a replacement for them, so turning it back off (sound
+/// back on) restores whatever those were already set to instead of
+/// forcing everything on. Off by default.
+Future<bool> loadAllSoundMuted() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(_kAllSoundMutedKey) ?? false;
+}
+
+Future<void> saveAllSoundMuted(bool muted) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_kAllSoundMutedKey, muted);
 }
 
 /// Whether cocktails drive progression — on by default (the game's

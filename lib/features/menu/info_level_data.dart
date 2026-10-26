@@ -58,4 +58,12 @@ const kInfoLevels = [
     recipes: kCocktailRecipesLevel4,
     songs: kMusicTracksLevel4,
   ),
+  InfoLevelData(
+    level: 5,
+    name: 'Jungle',
+    backgroundAssetPath: 'assets/images/jungle_background.png',
+    chain: kEvolutionChainLevel5,
+    recipes: kCocktailRecipesLevel5,
+    songs: kMusicTracksLevel5,
+  ),
 ];

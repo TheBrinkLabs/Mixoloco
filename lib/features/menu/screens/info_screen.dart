@@ -2,148 +2,194 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
-import '../../../core/theme/colorful_plank_text.dart';
-import '../../../core/widgets/bar_backdrop.dart';
-import '../../../core/widgets/wood_plank.dart';
-import 'about_screen.dart';
+import '../../../core/widgets/submenu_kit.dart';
+import '../../../data/models/cocktail_recipe.dart';
+import '../../../data/models/ingredient.dart';
+import '../../../data/services/progression_service.dart';
+import '../../game/providers/game_state_provider.dart';
+import '../info_level_data.dart';
 import 'cocktails_screen.dart';
+import 'how_to_play_screen.dart';
 import 'ingredients_screen.dart';
 import 'songs_screen.dart';
 
-/// The Info hub — its own pushed screen (same family as Settings/Best
-/// Scores) listing the four reference sub-pages rather than cramming
-/// them directly onto the main menu.
+/// The Guide hub — a 2×2 tile grid (Ingredients/Cocktails/Songs/How to
+/// Play) listing the reference sub-pages, each with a live subline
+/// computed from real save data rather than the handoff's placeholder
+/// counts. About is no longer on this screen (design_handoff_main_menu_v3
+/// moved it into Settings; Guide's old "About" row from the previous
+/// pass goes with it — About is still reachable from Settings).
 class InfoScreen extends ConsumerWidget {
   const InfoScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
-    final screenSize = MediaQuery.sizeOf(context);
-    const sideMargin = 28.0;
-    final plankWidth = screenSize.width - sideMargin * 2;
-    final plankHeight = plankWidth / kMenuBoard3Aspect;
+    final board = ref.watch(gameStateProvider);
 
-    return Scaffold(
-      body: BarBackdrop(
-        showTable: false,
-        showHeaderBoard: false,
-        child: Stack(
-          children: [
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    WoodTitlePlank(
-                      title: tr(locale, 'info'),
-                      icon: Icons.menu_book_rounded,
-                      iconAsset: 'assets/images/info.png',
-                      width: plankWidth,
-                      height: plankHeight,
-                      assetPath: 'assets/images/menu_board_3.png',
-                      iconScale: 1.2,
-                    ),
-                    _InfoRow(
-                      icon: Icons.local_bar_rounded,
-                      iconAsset: 'assets/images/ingredient_cherry.png',
-                      label: tr(locale, 'ingredients'),
-                      width: plankWidth,
-                      height: plankHeight,
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IngredientsScreen())),
-                    ),
-                    _InfoRow(
-                      icon: Icons.wine_bar_rounded,
-                      iconAsset: 'assets/images/mohito.png',
-                      label: tr(locale, 'cocktails'),
-                      width: plankWidth,
-                      height: plankHeight,
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CocktailsScreen())),
-                    ),
-                    _InfoRow(
-                      icon: Icons.music_note_rounded,
-                      iconAsset: 'assets/images/play.png',
-                      label: tr(locale, 'songs'),
-                      width: plankWidth,
-                      height: plankHeight,
-                      iconScale: 1.25,
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SongsScreen())),
-                    ),
-                    _InfoRow(
-                      icon: Icons.info_rounded,
-                      iconAsset: 'assets/images/about.png',
-                      label: tr(locale, 'about'),
-                      width: plankWidth,
-                      height: plankHeight,
-                      iconScale: 1.25,
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutScreen())),
-                    ),
-                  ],
-                ),
-              ),
+    int bucketFor(int level) => highestTierBucketForLevel(
+      level,
+      l1: board.highestTierUnlocked,
+      l2: board.highestTierUnlockedLevel2,
+      l3: board.highestTierUnlockedLevel3,
+      l4: board.highestTierUnlockedLevel4,
+      l5: board.highestTierUnlockedLevel5,
+    );
+
+    var ingredientsCollected = 0, ingredientsTotal = 0;
+    var cocktailsTotal = 0;
+    var songsUnlocked = 0;
+    for (final level in kInfoLevels) {
+      final bucket = bucketFor(level.level);
+      ingredientsCollected += (bucket + 1).clamp(0, level.chain.length);
+      ingredientsTotal += level.chain.length;
+      cocktailsTotal += level.recipes.length;
+      if (bucket >= 0) songsUnlocked += level.songs.length;
+    }
+
+    return SubmenuScaffold(
+      title: tr(locale, 'guide'),
+      panelTop: 146,
+      ribbonTop: 122,
+      child: FutureBuilder<Set<String>>(
+        future: loadMixedCocktailIds(),
+        builder: (context, snapshot) {
+          final mixed = snapshot.data?.length ?? 0;
+          return GridView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              mainAxisExtent: 160,
             ),
-            // Painted last so it always sits on top of (and stays
-            // reliably tappable over) the scrollable content above —
-            // per feedback the back button didn't always register,
-            // and on Songs specifically was visually hidden behind
-            // that screen's own title board.
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
-          ],
-        ),
+            children: [
+              _GuideTile(
+                iconAsset: findIngredientById('lime').assetPath!,
+                label: tr(locale, 'ingredients'),
+                subline: tr(locale, 'guide_ingredients_subline')
+                    .replaceFirst('{x}', '$ingredientsCollected')
+                    .replaceFirst('{y}', '$ingredientsTotal'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IngredientsScreen())),
+              ),
+              _GuideTile(
+                iconAsset: kCocktailRecipes.firstWhere((r) => r.id == 'blue_hawaiian').assetPath,
+                label: tr(locale, 'cocktails'),
+                subline: tr(locale, 'guide_cocktails_subline')
+                    .replaceFirst('{x}', '$mixed')
+                    .replaceFirst('{y}', '$cocktailsTotal'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CocktailsScreen())),
+              ),
+              _GuideTile(
+                iconAsset: 'assets/images/icon_songs.png',
+                label: tr(locale, 'songs'),
+                subline: tr(locale, 'guide_songs_subline').replaceFirst('{x}', '$songsUnlocked'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SongsScreen())),
+              ),
+              _GuideTile(
+                iconAsset: 'assets/images/icon_guide.png',
+                label: tr(locale, 'how_to_play'),
+                subline: tr(locale, 'how_to_play_subline'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HowToPlayScreen())),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-
-  /// Real game art standing in for [icon] when set — same pattern as
-  /// _MenuPlankTile's own iconAsset on the main menu.
-  final String? iconAsset;
+class _GuideTile extends StatefulWidget {
+  final String iconAsset;
   final String label;
-  final double width;
-  final double height;
+  final String subline;
   final VoidCallback onTap;
+  const _GuideTile({required this.iconAsset, required this.label, required this.subline, required this.onTap});
 
-  /// Grows [iconAsset]'s rendered size relative to the standard
-  /// `height * 0.4` — Songs/About per feedback they read smaller/fainter
-  /// than Ingredients/Cocktails' own real-photo icons next to them.
-  final double iconScale;
-  const _InfoRow({
-    required this.icon,
-    this.iconAsset,
-    required this.label,
-    required this.width,
-    required this.height,
-    required this.onTap,
-    this.iconScale = 1.0,
-  });
+  @override
+  State<_GuideTile> createState() => _GuideTileState();
+}
+
+class _GuideTileState extends State<_GuideTile> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: WoodPlank(
-        width: width,
-        height: height,
-        assetPath: 'assets/images/menu_board_3.png',
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-          child: Row(
-            children: [
-              iconAsset != null
-                  ? Image.asset(iconAsset!, width: height * 0.4 * iconScale, height: height * 0.4 * iconScale, fit: BoxFit.contain)
-                  : Icon(icon, size: height * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
-              SizedBox(width: width * 0.03),
-              Expanded(
-                child: ColorfulPlankText(text: label, fontSize: height * 0.22, variant: kPlankTextVariant, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-              ),
-              Icon(Icons.chevron_right_rounded, size: height * 0.3, color: kPlankIconColor),
-            ],
-          ),
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.95 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Container(
+                  height: 118,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: SubmenuColors.gold, width: 3),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.0, 0.7, 1.0],
+                      colors: [Color(0xFF3480BD), Color(0xFF225A8C), Color(0xFF1B4B77)],
+                    ),
+                    boxShadow: [BoxShadow(color: SubmenuColors.ring, offset: const Offset(0, 6))],
+                  ),
+                ),
+                Positioned(
+                  bottom: 18,
+                  child: Image.asset(
+                    widget.iconAsset,
+                    width: 100,
+                    height: 94,
+                    fit: BoxFit.contain,
+                    // See GlassVisual's matching comment.
+                    cacheWidth: (100 * MediaQuery.devicePixelRatioOf(context)).round(),
+                  ),
+                ),
+                Transform.translate(
+                  offset: const Offset(0, 15),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(12, 3, 12, 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: SubmenuColors.goldEdge, width: 2),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [SubmenuColors.goldTop, SubmenuColors.goldBottom],
+                      ),
+                    ),
+                    child: OutlinedLabel(
+                      text: widget.label.toUpperCase(),
+                      fontSize: 15,
+                      fill: Colors.white,
+                      stroke: SubmenuColors.goldEdge,
+                      strokeWidth: 3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              widget.subline,
+              textAlign: TextAlign.center,
+              style: submenuNunito(size: 12, weight: FontWeight.w800, color: SubmenuColors.textSecondary),
+            ),
+          ],
         ),
       ),
     );

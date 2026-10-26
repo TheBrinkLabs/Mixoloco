@@ -23,15 +23,173 @@ const kTableNearFraction = 1.0;
 const kTableScale = 1.26;
 
 /// The scene photo for [level] — beach (1), rooftop (2), safari (3),
-/// piazza (4 and, until further levels get their own art, anything
-/// beyond it too). Shared by GameScreen (the live table) and
+/// piazza (4), jungle (5 and, until further levels get their own art,
+/// anything beyond it too). Shared by GameScreen (the live table) and
 /// LevelUpOverlay (the between-levels "ready" screen), so both always
 /// agree on which photo a given level shows.
 String backgroundAssetPathForLevel(int level) {
+  if (level >= 5) return 'assets/images/jungle_background.png';
   if (level >= 4) return 'assets/images/piazza_background.png';
   if (level >= 3) return 'assets/images/safari_background.png';
   if (level >= 2) return 'assets/images/rooftop_background.png';
   return 'assets/images/beach_background.png';
+}
+
+/// Six colour treatments for the table art, per the gameplay redesign
+/// handoff (design_handoff_game_screen/README.md, "Recolour per level")
+/// — the table's own geometry/measurements never change, only how it's
+/// tinted at paint time (see [colorFilterForTableFinish]).
+enum TableFinish {
+  natural,
+  sunBleached,
+  driftwood,
+  darkTeak,
+  turquoisePaint,
+  coralPaint,
+}
+
+/// Which [TableFinish] level [level] uses. Level 1 (beach) keeps the
+/// table's own natural photo colour; a placeholder one-finish-per-level
+/// mapping beyond that until later levels get their own bespoke choice —
+/// easy to retune without touching the tinting math itself.
+TableFinish tableFinishForLevel(int level) {
+  if (level >= 5) return TableFinish.driftwood;
+  if (level >= 4) return TableFinish.coralPaint;
+  if (level >= 3) return TableFinish.turquoisePaint;
+  if (level >= 2) return TableFinish.darkTeak;
+  return TableFinish.natural;
+}
+
+/// [ColorFilter.matrix] values for each [TableFinish], approximating the
+/// CSS `saturate()`/`brightness()`/`sepia()`/`hue-rotate()` filter chains
+/// the README specifies, composed via the standard SVG/CSS filter-matrix
+/// formulas (one matrix multiplication per step in each chain, computed
+/// once here rather than re-derived at runtime). "Slight sepia" is taken
+/// as a 30% blend toward full sepia.
+const _tableFinishMatrices = <TableFinish, List<double>>{
+  // saturate(0.55), brightness(1.18)
+  TableFinish.sunBleached: [
+    0.762103,
+    0.379665,
+    0.038232,
+    0,
+    0,
+    0.113103,
+    1.028665,
+    0.038232,
+    0,
+    0,
+    0.113103,
+    0.379665,
+    0.687232,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+  // saturate(0.25), sepia(0.3), brightness(1.08)
+  TableFinish.driftwood: [
+    0.411528,
+    0.702446,
+    0.079771,
+    0,
+    0,
+    0.211305,
+    0.858987,
+    0.075480,
+    0,
+    0,
+    0.191299,
+    0.611495,
+    0.256828,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+  // saturate(1.25), sepia(0.3), brightness(0.62)
+  TableFinish.darkTeak: [
+    0.597378,
+    0.056297,
+    0.031608,
+    0,
+    0,
+    0.046116,
+    0.584425,
+    0.027220,
+    0,
+    0,
+    0.030849,
+    0.015418,
+    0.562008,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+  // sepia(1), hue-rotate(140deg), saturate(1.5)
+  TableFinish.turquoisePaint: [
+    0.228725,
+    0.452357,
+    0.110346,
+    0,
+    0,
+    0.384355,
+    0.753438,
+    0.184872,
+    0,
+    0,
+    0.407017,
+    0.801451,
+    0.195872,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+  // sepia(1), hue-rotate(-28deg), saturate(2.2)
+  TableFinish.coralPaint: [
+    0.514421,
+    1.004864,
+    0.247213,
+    0,
+    0,
+    0.316357,
+    0.622880,
+    0.152371,
+    0,
+    0,
+    0.237416,
+    0.462938,
+    0.114258,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+};
+
+/// Null for [TableFinish.natural] (no filter — paint the table art as-is)
+/// rather than an identity matrix, so the common case skips wrapping the
+/// image in a [ColorFiltered] at all.
+ColorFilter? colorFilterForTableFinish(TableFinish finish) {
+  final matrix = _tableFinishMatrices[finish];
+  return matrix == null ? null : ColorFilter.matrix(matrix);
 }
 
 /// The tropical sunset beach-bar scene behind the menu/game screens — a
@@ -54,34 +212,30 @@ class BarBackdrop extends StatelessWidget {
   /// still wants it, so this defaults to showing it.
   final bool showTable;
 
-  /// The top-of-screen sign with the logo/HUD row on it — gameplay and
-  /// the main menu both want it, but a full wood-plank list screen (Best
-  /// Scores, Settings) already opens with its own title plank right at
-  /// the top, so a second, emptier board above that just reads as dead
-  /// space — those screens turn this off.
-  final bool showHeaderBoard;
-
   /// Which scene photo sits behind everything — the beach bar by
   /// default; GameScreen swaps this to the rooftop bar once a run
   /// reaches level 2 (every cocktail plus the jug completed).
   final String backgroundAssetPath;
 
-  /// Swaps the table art and header board for their Level 2
-  /// counterparts (bar_table.png, and two menu_board_2.png planks in
-  /// place of the single header_board.png) — see _TableGeometry and
-  /// _HeaderBoard. Every screen defaults to false (the beach bar);
-  /// GameScreen is the only caller that ever passes true, and only once
-  /// board.level >= 2.
+  /// Swaps the table art for its Level 2 counterpart (bar_table.png) —
+  /// see _TableGeometry. Every screen defaults to false (the beach
+  /// bar); GameScreen is the only caller that ever passes true, and
+  /// only once board.level >= 2.
   final bool rooftop;
+
+  /// Tints the table art per [TableFinish] — see
+  /// colorFilterForTableFinish. Defaults to natural (no tint); the table's
+  /// own geometry/measurements are never affected by this.
+  final TableFinish tableFinish;
 
   const BarBackdrop({
     super.key,
     this.child,
     this.shakeTrigger,
     this.showTable = true,
-    this.showHeaderBoard = true,
     this.backgroundAssetPath = 'assets/images/beach_background.png',
     this.rooftop = false,
+    this.tableFinish = TableFinish.natural,
   });
 
   @override
@@ -93,9 +247,19 @@ class BarBackdrop extends StatelessWidget {
           backgroundAssetPath,
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
+          // Source art is shot taller than any phone's aspect ratio (so
+          // BoxFit.cover always has width-constrained slack to crop off
+          // vertically) — decoding at full resolution wastes several
+          // times the pixels this ever actually renders. See
+          // GlassVisual's matching comment.
+          cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round(),
         ),
-        if (showHeaderBoard) _HeaderBoard(rooftop: rooftop),
-        if (showTable) _TableImage(shakeTrigger: shakeTrigger, rooftop: rooftop),
+        if (showTable)
+          _TableImage(
+            shakeTrigger: shakeTrigger,
+            rooftop: rooftop,
+            finish: tableFinish,
+          ),
         if (child != null) child!,
       ],
     );
@@ -113,24 +277,13 @@ const kHeaderBoardTopInset = 3.0;
 /// board's own aspect ratio doesn't need to hardcode it independently.
 const kHeaderBoardAspect = 1130 / 574;
 
-/// menu_board.png, cropped tight to its own opaque content — shared by
-/// the in-game Cocktail Menu overlay (one plank per recipe row).
+/// menu_board.png's own aspect ratio — the wooden-plank graphic itself
+/// was removed once the in-game Cocktail Menu overlay's rows were
+/// rebuilt on the gold-rimmed blue tile style (see game_screen.dart's
+/// _MenuListRow), but that row's height math still derives from this
+/// same ratio for its own proportions, same reasoning headerBoardRect
+/// keeps [kHeaderBoardAspect] around after header_board.png's removal.
 const kMenuBoardAspect = 1967 / 459;
-
-/// menu_board_3.png, cropped with *zero* margin (not the usual ~6%) so
-/// stacked/adjacent boards can sit flush with no visible seam between
-/// them — a mossier, more detailed alternative to menu_board.png, used
-/// on Settings and Best Scores.
-const kMenuBoard3Aspect = 1045 / 281;
-
-/// menu_board_white.png, cropped the same zero-margin way as
-/// menu_board_3.png — a whitewashed-plank alternative being trialled on
-/// just the main menu's five option tiles for now. The source photo
-/// this second version was replaced with was shot in portrait (a tall
-/// vertical plank); cropped tight then rotated 90 degrees to the same
-/// landscape orientation every other board asset uses, rather than
-/// handling the rotation in code.
-const kMenuBoardWhiteAspect = 1247 / 399;
 
 /// empty_tab.png — the in-game progress-tabs row's background tile, and
 /// the home screen's Credits/Level/Unlocked tab row. Cropped tight (zero
@@ -142,43 +295,17 @@ const kMenuBoardWhiteAspect = 1247 / 399;
 /// padding instead (see _HudTab).
 const kEmptyTabAspect = 1051 / 1022;
 
-/// The on-screen rect the header board image occupies — top-anchored,
-/// full width, height from its own aspect ratio (see [kHeaderBoardAspect])
-/// — shared so HUD elements can be positioned precisely on top of it
-/// instead of guessing independently of [_HeaderBoard]'s own layout.
+/// The on-screen rect the header board image *would* occupy — top-
+/// anchored, full width, height from its own aspect ratio (see
+/// [kHeaderBoardAspect]). The header board graphic itself was removed
+/// (nothing passes `showHeaderBoard: true` anymore, every screen opens
+/// with its own title instead), but GameScreen still anchors its HUD
+/// row against this same rect, so the math stays as pure positioning
+/// reference rather than being inlined per caller.
 Rect headerBoardRect(Size screenSize) {
   final width = screenSize.width;
   final height = width / kHeaderBoardAspect;
   return Rect.fromLTWH(0, kHeaderBoardTopInset, width, height);
-}
-
-/// A weathered wood-plank sign spanning the top of the screen, sitting
-/// just shy of the true top edge (a thin sliver of the beach photo still
-/// shows through above it) — a themed backdrop for the logo/HUD row that
-/// screens layer on top of it. Sized off its own aspect ratio at full
-/// screen width, so it never stretches.
-///
-/// [rooftop] swaps the asset for header_board_2.png (Level 2) — cropped
-/// to nearly the same aspect ratio as header_board.png (1.966 vs 1.969),
-/// so it renders the same way (BoxFit.fitWidth, own aspect) with no
-/// further adjustment needed.
-class _HeaderBoard extends StatelessWidget {
-  final bool rooftop;
-  const _HeaderBoard({required this.rooftop});
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: kHeaderBoardTopInset,
-      left: 0,
-      right: 0,
-      child: Image(
-        image: AssetImage(rooftop ? 'assets/images/header_board_2.png' : 'assets/images/header_board.png'),
-        fit: BoxFit.fitWidth,
-        alignment: Alignment.topCenter,
-      ),
-    );
-  }
 }
 
 /// Per-table-asset measurements — everything [_TableImage] and the
@@ -231,7 +358,8 @@ const _barTableGeometry = _TableGeometry(
   surfaceNearFraction: 0.878,
 );
 
-_TableGeometry _tableGeometryFor(bool rooftop) => rooftop ? _barTableGeometry : _beachTableGeometry;
+_TableGeometry _tableGeometryFor(bool rooftop) =>
+    rooftop ? _barTableGeometry : _beachTableGeometry;
 
 /// The real bar-table asset, scaled to the screen's full width (aspect
 /// preserved, not stretched) and positioned so the base visible near the
@@ -241,7 +369,12 @@ _TableGeometry _tableGeometryFor(bool rooftop) => rooftop ? _barTableGeometry : 
 class _TableImage extends StatefulWidget {
   final Listenable? shakeTrigger;
   final bool rooftop;
-  const _TableImage({this.shakeTrigger, required this.rooftop});
+  final TableFinish finish;
+  const _TableImage({
+    this.shakeTrigger,
+    required this.rooftop,
+    this.finish = TableFinish.natural,
+  });
 
   @override
   State<_TableImage> createState() => _TableImageState();
@@ -251,8 +384,12 @@ class _TableImage extends StatefulWidget {
 /// Shaker Maker's own duration (MixolocoGame._shakeDuration) so the table
 /// looks like it's actually shaking rather than just the glasses on it.
 /// Bumped 50% longer (1400ms -> 2100ms) alongside the physics shake.
-class _TableImageState extends State<_TableImage> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 2100));
+class _TableImageState extends State<_TableImage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2100),
+  );
 
   @override
   void initState() {
@@ -300,10 +437,36 @@ class _TableImageState extends State<_TableImage> with SingleTickerProviderState
       height: displayHeight,
       child: AnimatedBuilder(
         animation: _controller,
-        builder: (context, child) => Transform.translate(offset: _shakeOffset(_controller.value), child: child),
-        child: Image.asset(geometry.assetPath, fit: BoxFit.fill),
+        builder: (context, child) => Transform.translate(
+          offset: _shakeOffset(_controller.value),
+          child: child,
+        ),
+        child: _tintedTable(geometry.assetPath, widget.finish, displayWidth),
       ),
     );
+  }
+
+  Widget _tintedTable(String assetPath, TableFinish finish, double displayWidth) {
+    final image = Image.asset(
+      assetPath,
+      fit: BoxFit.fill,
+      // See BarBackdrop's matching comment — this table only ever
+      // renders at displayWidth, well under the source art's own size.
+      cacheWidth: (displayWidth * MediaQuery.devicePixelRatioOf(context)).round(),
+    );
+    final filter = colorFilterForTableFinish(finish);
+    if (filter == null) return image;
+    // The tinted table sits directly beneath the live Flame game canvas,
+    // which repaints every physics frame — without a boundary here,
+    // ColorFiltered's own (comparatively costly on a mid-range GPU)
+    // matrix pass can get swept into that same repaint every frame even
+    // though the table art/tint itself never actually changes outside
+    // the brief shake animation above. Isolating it as its own
+    // compositor layer lets that layer be cached and reused frame to
+    // frame — the shake's Transform.translate (applied by the caller,
+    // outside this widget) repositions the cached layer cheaply rather
+    // than needing the tint reapplied.
+    return RepaintBoundary(child: ColorFiltered(colorFilter: filter, child: image));
   }
 }
 
@@ -371,19 +534,31 @@ double _imageYFractionToScreenFraction(
 /// widgets (the ingredient showcase, gameplay pieces) can stay safely
 /// within the table's actual surface instead of guessing independently.
 /// [rooftop] picks bar_table.png's own measurements over beach_table.png's.
-double tableTopFraction(double screenWidth, double screenHeight, {bool rooftop = false}) =>
-    _imageYFractionToScreenFraction(
-      rooftop ? _barTableTopFraction : _beachTableTopFraction,
-      screenWidth,
-      screenHeight,
-      _tableGeometryFor(rooftop),
-    );
+double tableTopFraction(
+  double screenWidth,
+  double screenHeight, {
+  bool rooftop = false,
+}) => _imageYFractionToScreenFraction(
+  rooftop ? _barTableTopFraction : _beachTableTopFraction,
+  screenWidth,
+  screenHeight,
+  _tableGeometryFor(rooftop),
+);
 
 /// Screen-fraction where the tabletop's playing surface ends and the
 /// front apron begins — the true near edge gameplay should stop at,
 /// unlike [kTableNearFraction] which reaches past the apron to the
 /// bottom of the whole table graphic.
-double tableSurfaceNearFraction(double screenWidth, double screenHeight, {bool rooftop = false}) {
+double tableSurfaceNearFraction(
+  double screenWidth,
+  double screenHeight, {
+  bool rooftop = false,
+}) {
   final geometry = _tableGeometryFor(rooftop);
-  return _imageYFractionToScreenFraction(geometry.surfaceNearFraction, screenWidth, screenHeight, geometry);
+  return _imageYFractionToScreenFraction(
+    geometry.surfaceNearFraction,
+    screenWidth,
+    screenHeight,
+    geometry,
+  );
 }

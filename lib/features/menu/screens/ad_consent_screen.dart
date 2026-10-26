@@ -5,7 +5,7 @@ import '../../../core/services/locale_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/notification_tablet.dart';
-import '../../../core/widgets/wood_plank.dart';
+import '../../../core/widgets/submenu_kit.dart' show RibbonTitle;
 
 /// Shown exactly once, before the very first MenuScreen — the real
 /// GDPR/CCPA consent choice, not a silent default. [onAnswered] is
@@ -35,12 +35,10 @@ class _AdConsentScreenState extends ConsumerState<AdConsentScreen> {
     final screenSize = MediaQuery.sizeOf(context);
     const sideMargin = 28.0;
     final plankWidth = screenSize.width - sideMargin * 2;
-    final plankHeight = plankWidth / kMenuBoard3Aspect;
 
     return Scaffold(
       body: BarBackdrop(
         showTable: false,
-        showHeaderBoard: false,
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -48,13 +46,7 @@ class _AdConsentScreenState extends ConsumerState<AdConsentScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  WoodTitlePlank(
-                    title: tr(locale, 'ads_consent_title'),
-                    icon: Icons.local_bar_rounded,
-                    width: plankWidth,
-                    height: plankHeight,
-                    assetPath: 'assets/images/menu_board_3.png',
-                  ),
+                  RibbonTitle(text: tr(locale, 'ads_consent_title')),
                   const SizedBox(height: 18),
                   NotificationTablet(
                     width: plankWidth,
@@ -81,7 +73,7 @@ class _AdConsentScreenState extends ConsumerState<AdConsentScreen> {
                       onTap: _submitting ? null : () => _answer(false),
                       width: plankWidth,
                       height: 44,
-                      child: Text(tr(locale, 'no_thanks'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textOnStoneMuted)),
+                      child: Text(tr(locale, 'no_thanks'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black)),
                     ),
                   ),
                 ],

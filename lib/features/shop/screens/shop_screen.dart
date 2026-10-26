@@ -5,16 +5,16 @@ import '../../../core/i18n/strings.dart';
 import '../../../core/services/ad_service.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/services/purchase_service.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colorful_plank_text.dart';
-import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/continue_fallback_video_screen.dart';
-import '../../../core/widgets/wood_plank.dart';
+import '../../../core/widgets/submenu_kit.dart';
 import '../../game/providers/game_state_provider.dart';
+import '../../menu/info_level_data.dart';
 
-/// Shop: the credit-for-ad row, plus the four ad-removal purchases (1
-/// Day/Monthly/Yearly/Forever — see purchase_service.dart). Everything
-/// else on the main menu's Shop tile is still "coming soon".
+/// Shop: the credit-for-ad row, the two credit packs, plus the four
+/// ad-removal purchases (1 Day/Monthly/Yearly/Forever — see
+/// purchase_service.dart) — restyled onto the sub-menu redesign's
+/// grouped-inset-row system (see settings_screen.dart, the first screen
+/// this pattern shipped on) rather than the older BlueTile boards.
 class ShopScreen extends ConsumerStatefulWidget {
   const ShopScreen({super.key});
 
@@ -33,6 +33,8 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
   /// broken-looking blank.
   Map<String, ProductDetails> _products = {};
   AdFreeTier? _purchasingTier;
+  CreditPack? _purchasingPack;
+  bool _purchasingUnlock = false;
 
   @override
   void initState() {
@@ -102,154 +104,202 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
     }
   }
 
+  // Mirrors GetCreditsDialog._buyCreditPack — the credit award itself
+  // arrives separately via GameStateNotifier's global
+  // creditPackPurchaseProvider listener, not awaited here.
+  Future<void> _buyCreditPack(AppLocale locale, CreditPack pack) async {
+    if (_purchasingPack != null) return;
+    final details = _products[kCreditPackProductIds[pack]];
+    if (details == null) {
+      setState(() => _statusMessage = tr(locale, 'purchase_not_available'));
+      return;
+    }
+    setState(() {
+      _purchasingPack = pack;
+      _statusMessage = null;
+    });
+    try {
+      await purchaseService.buy(details);
+    } catch (_) {
+      if (mounted) setState(() => _statusMessage = tr(locale, 'purchase_failed'));
+    } finally {
+      if (mounted) setState(() => _purchasingPack = null);
+    }
+  }
+
+  Future<void> _buyUnlockLevel(AppLocale locale) async {
+    if (_purchasingUnlock) return;
+    final details = _products[kUnlockLevelProductId];
+    if (details == null) {
+      setState(() => _statusMessage = tr(locale, 'purchase_not_available'));
+      return;
+    }
+    setState(() {
+      _purchasingUnlock = true;
+      _statusMessage = null;
+    });
+    try {
+      await purchaseService.buy(details);
+    } catch (_) {
+      if (mounted) setState(() => _statusMessage = tr(locale, 'purchase_failed'));
+    } finally {
+      if (mounted) setState(() => _purchasingUnlock = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final locale = ref.watch(localeProvider);
     final board = ref.watch(gameStateProvider);
     final adFree = ref.watch(adFreeProvider).value ?? false;
-    final screenSize = MediaQuery.sizeOf(context);
-    const sideMargin = 28.0;
-    final plankWidth = screenSize.width - sideMargin * 2;
-    final plankHeight = plankWidth / kMenuBoard3Aspect;
 
-    return Scaffold(
-      body: BarBackdrop(
-        showTable: false,
-        showHeaderBoard: false,
-        child: Stack(
+    return SubmenuScaffold(
+      title: tr(locale, 'shop'),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    WoodTitlePlank(
-                      title: tr(locale, 'shop'),
-                      icon: Icons.storefront_rounded,
-                      width: plankWidth,
-                      height: plankHeight,
-                      assetPath: 'assets/images/menu_board_3.png',
-                    ),
-                    const SizedBox(height: 10),
-                    WoodPlank(
-                      width: plankWidth,
-                      height: plankHeight,
-                      assetPath: 'assets/images/menu_board_3.png',
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: plankWidth * 0.06),
-                        child: Row(
-                          children: [
-                            Icon(Icons.smart_display_rounded, size: plankHeight * 0.3, color: kPlankIconColor, shadows: kPlankIconShadows),
-                            SizedBox(width: plankWidth * 0.03),
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: ColorfulPlankText(
-                                  text: '${tr(locale, 'shop_watch_ad_title')} $kShopAdCreditReward',
-                                  fontSize: plankHeight * 0.2,
-                                  variant: kPlankTextVariant,
-                                  font: kPlankTextFont,
-                                  shadowStyle: kPlankShadowStyle,
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: _watching ? null : () => _watchAdForCredits(locale),
-                              child: Opacity(
-                                opacity: _watching ? 0.6 : 1.0,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                  decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(12)),
-                                  child: _watching
-                                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                                      : Text(
-                                          tr(locale, 'shop_watch_ad_button'),
-                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.black),
-                                        ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (_statusMessage != null) ...[
-                      const SizedBox(height: 10),
-                      Text(_statusMessage!, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                    ],
-                    const SizedBox(height: 18),
-                    Text('${tr(locale, 'credits')}: ${board.credits}', style: const TextStyle(color: AppColors.textLight, fontSize: 15, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 24),
-                    // Flush together (no gap) and a little thinner than
-                    // the rest of this screen's boards — per feedback,
-                    // reads as one tight group of "the ad-removal
-                    // options" rather than five separately-spaced boards.
-                    WoodTitlePlank(
-                      title: tr(locale, 'shop_remove_ads_title'),
-                      icon: Icons.block_rounded,
-                      width: plankWidth,
-                      height: plankHeight * 0.85,
-                      assetPath: 'assets/images/menu_board_3.png',
-                    ),
-                    _AdFreeRow(
-                      tier: AdFreeTier.oneDay,
-                      details: _products[kAdFreeProductIds[AdFreeTier.oneDay]],
-                      purchasing: _purchasingTier == AdFreeTier.oneDay,
-                      disabled: _purchasingTier != null,
-                      onBuy: () => _buyAdFree(locale, AdFreeTier.oneDay),
-                      width: plankWidth,
-                      height: plankHeight * 0.85,
-                      locale: locale,
-                      fallbackPrice: '£0.20',
-                    ),
-                    _AdFreeRow(
-                      tier: AdFreeTier.monthly,
-                      details: _products[kAdFreeProductIds[AdFreeTier.monthly]],
-                      purchasing: _purchasingTier == AdFreeTier.monthly,
-                      disabled: _purchasingTier != null,
-                      onBuy: () => _buyAdFree(locale, AdFreeTier.monthly),
-                      width: plankWidth,
-                      height: plankHeight * 0.85,
-                      locale: locale,
-                      fallbackPrice: '£1.49',
-                    ),
-                    _AdFreeRow(
-                      tier: AdFreeTier.yearly,
-                      details: _products[kAdFreeProductIds[AdFreeTier.yearly]],
-                      purchasing: _purchasingTier == AdFreeTier.yearly,
-                      disabled: _purchasingTier != null,
-                      onBuy: () => _buyAdFree(locale, AdFreeTier.yearly),
-                      width: plankWidth,
-                      height: plankHeight * 0.85,
-                      locale: locale,
-                      fallbackPrice: '£2.99',
-                    ),
-                    _AdFreeRow(
-                      tier: AdFreeTier.forever,
-                      details: _products[kAdFreeProductIds[AdFreeTier.forever]],
-                      purchasing: _purchasingTier == AdFreeTier.forever,
-                      disabled: _purchasingTier != null,
-                      onBuy: () => _buyAdFree(locale, AdFreeTier.forever),
-                      width: plankWidth,
-                      height: plankHeight * 0.85,
-                      locale: locale,
-                      fallbackPrice: '£3.99',
-                    ),
-                    if (adFree) ...[
-                      const SizedBox(height: 14),
-                      Text(
-                        tr(locale, 'shop_ads_free_forever'),
-                        style: const TextStyle(color: AppColors.mint, fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ],
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+              child: Text(
+                '${tr(locale, 'credits')}: ${board.credits}',
+                style: submenuNunito(size: 13, weight: FontWeight.w900, color: SubmenuColors.gold),
               ),
             ),
-            // Painted last — see info_screen.dart's matching comment; was
-            // visually sitting slightly behind this board's own art.
-            Positioned(left: 12, top: 10, child: PlankBackButton(onTap: () => Navigator.of(context).pop())),
+            GroupHeader(text: tr(locale, 'shop_group_credits')),
+            InsetList(
+              rows: [
+                SubmenuRow(
+                  icon: Icons.smart_display_rounded,
+                  label: tr(locale, 'credits_amount').replaceFirst('{n}', '$kShopAdCreditReward'),
+                  labelFontSize: 14,
+                  trailing: SubmenuGoldButton(
+                    label: tr(locale, 'shop_watch_ad_button'),
+                    loading: _watching,
+                    onTap: _watching ? null : () => _watchAdForCredits(locale),
+                  ),
+                ),
+                _CreditPackRow(
+                  pack: CreditPack.small,
+                  details: _products[kCreditPackProductIds[CreditPack.small]],
+                  purchasing: _purchasingPack == CreditPack.small,
+                  disabled: _purchasingPack != null,
+                  onBuy: () => _buyCreditPack(locale, CreditPack.small),
+                  locale: locale,
+                  fallbackPrice: '49p',
+                ),
+                _CreditPackRow(
+                  pack: CreditPack.large,
+                  details: _products[kCreditPackProductIds[CreditPack.large]],
+                  purchasing: _purchasingPack == CreditPack.large,
+                  disabled: _purchasingPack != null,
+                  onBuy: () => _buyCreditPack(locale, CreditPack.large),
+                  locale: locale,
+                  fallbackPrice: '£2.49',
+                ),
+              ],
+            ),
+            if (board.highestLevelReached < kMaxLevel) ...[
+              GroupHeader(text: tr(locale, 'shop_group_unlock')),
+              InsetList(
+                rows: [
+                  SubmenuRow(
+                    icon: Icons.lock_open_rounded,
+                    label: tr(locale, 'shop_unlock_level_title').replaceFirst(
+                      '{level}',
+                      kInfoLevels[board.highestLevelReached].name,
+                    ),
+                    labelFontSize: 14,
+                    minHeight: 58,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _products[kUnlockLevelProductId]?.price ?? '£1.99',
+                          style: submenuNunito(size: 13, weight: FontWeight.w800, color: SubmenuColors.textSecondary),
+                        ),
+                        const SizedBox(width: 8),
+                        SubmenuGoldButton(
+                          label: tr(locale, 'shop_buy_button'),
+                          loading: _purchasingUnlock,
+                          onTap: () => _buyUnlockLevel(locale),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            GroupHeader(text: tr(locale, 'shop_remove_ads_title')),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+              child: Text(
+                tr(locale, 'shop_remove_ads_subtitle'),
+                style: submenuNunito(size: 12, weight: FontWeight.w700, color: SubmenuColors.textSecondary, height: 1.35),
+              ),
+            ),
+            InsetList(
+              rows: [
+                _AdFreeRow(
+                  tier: AdFreeTier.oneDay,
+                  icon: Icons.today_rounded,
+                  details: _products[kAdFreeProductIds[AdFreeTier.oneDay]],
+                  purchasing: _purchasingTier == AdFreeTier.oneDay,
+                  disabled: _purchasingTier != null,
+                  onBuy: () => _buyAdFree(locale, AdFreeTier.oneDay),
+                  locale: locale,
+                  fallbackPrice: '£0.20',
+                ),
+                _AdFreeRow(
+                  tier: AdFreeTier.monthly,
+                  icon: Icons.calendar_month_rounded,
+                  details: _products[kAdFreeProductIds[AdFreeTier.monthly]],
+                  purchasing: _purchasingTier == AdFreeTier.monthly,
+                  disabled: _purchasingTier != null,
+                  onBuy: () => _buyAdFree(locale, AdFreeTier.monthly),
+                  locale: locale,
+                  fallbackPrice: '£1.49',
+                ),
+                _AdFreeRow(
+                  tier: AdFreeTier.yearly,
+                  icon: Icons.event_rounded,
+                  details: _products[kAdFreeProductIds[AdFreeTier.yearly]],
+                  purchasing: _purchasingTier == AdFreeTier.yearly,
+                  disabled: _purchasingTier != null,
+                  onBuy: () => _buyAdFree(locale, AdFreeTier.yearly),
+                  locale: locale,
+                  fallbackPrice: '£2.99',
+                ),
+                _AdFreeRow(
+                  tier: AdFreeTier.forever,
+                  icon: Icons.all_inclusive_rounded,
+                  details: _products[kAdFreeProductIds[AdFreeTier.forever]],
+                  purchasing: _purchasingTier == AdFreeTier.forever,
+                  disabled: _purchasingTier != null,
+                  onBuy: () => _buyAdFree(locale, AdFreeTier.forever),
+                  locale: locale,
+                  fallbackPrice: '£3.99',
+                ),
+              ],
+            ),
+            if (_statusMessage != null) ...[
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(_statusMessage!, style: submenuNunito(size: 13, weight: FontWeight.w800, color: SubmenuColors.textSecondary)),
+              ),
+            ],
+            if (adFree) ...[
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  tr(locale, 'shop_ads_free_forever'),
+                  style: submenuNunito(size: 13, weight: FontWeight.w900, color: SubmenuColors.greenBright),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -257,30 +307,27 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
   }
 }
 
-/// One ad-removal tier's row — same plank/layout shape as the
-/// watch-an-ad row above it, just with a Buy button and a price pulled
-/// from Play Console via [details] once it's loaded (falling back to
-/// [fallbackPrice], this project's baseline GBP price, while that query
-/// is still in flight or if the product isn't configured yet).
+/// One ad-removal tier's row — price pulled from Play Console via
+/// [details] once it's loaded (falling back to [fallbackPrice], this
+/// project's baseline GBP price, while that query is still in flight or
+/// if the product isn't configured yet).
 class _AdFreeRow extends StatelessWidget {
   final AdFreeTier tier;
+  final IconData icon;
   final ProductDetails? details;
   final bool purchasing;
   final bool disabled;
   final VoidCallback onBuy;
-  final double width;
-  final double height;
   final AppLocale locale;
   final String fallbackPrice;
 
   const _AdFreeRow({
     required this.tier,
+    required this.icon,
     required this.details,
     required this.purchasing,
     required this.disabled,
     required this.onBuy,
-    required this.width,
-    required this.height,
     required this.locale,
     required this.fallbackPrice,
   });
@@ -295,58 +342,66 @@ class _AdFreeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final price = details?.price ?? fallbackPrice;
-    return WoodPlank(
-      width: width,
-      height: height,
-      assetPath: 'assets/images/menu_board_3.png',
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-        child: Row(
-          children: [
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    ColorfulPlankText(
-                      text: tr(locale, _tierLabelKey),
-                      fontSize: height * 0.18,
-                      variant: kPlankTextVariant,
-                      font: kPlankTextFont,
-                      shadowStyle: kPlankShadowStyle,
-                    ),
-                    SizedBox(width: width * 0.02),
-                    // Plain system font, not the decorative plank font —
-                    // "Luckiest Guy" doesn't have a real £/currency glyph
-                    // for every symbol Play Console can hand back, and
-                    // silently substitutes the wrong character (a real
-                    // £ rendered as what looked like a €) rather than
-                    // erroring, so prices specifically stay off it.
-                    Text(
-                      price,
-                      style: TextStyle(fontSize: height * 0.16, fontWeight: FontWeight.w800, color: AppColors.textLight),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            GestureDetector(
-              onTap: disabled ? null : onBuy,
-              child: Opacity(
-                opacity: disabled && !purchasing ? 0.4 : 1.0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(12)),
-                  child: purchasing
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                      : Text(tr(locale, 'shop_buy_button'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.black)),
-                ),
-              ),
-            ),
-          ],
-        ),
+    return SubmenuRow(
+      icon: icon,
+      label: tr(locale, _tierLabelKey),
+      minHeight: 58,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(price, style: submenuNunito(size: 13, weight: FontWeight.w800, color: SubmenuColors.textSecondary)),
+          const SizedBox(width: 8),
+          SubmenuGoldButton(label: tr(locale, 'shop_buy_button'), loading: purchasing, onTap: (disabled && !purchasing) ? null : onBuy),
+        ],
+      ),
+    );
+  }
+}
+
+/// One credit pack's row — same shape as [_AdFreeRow], just for the two
+/// consumable credit packs instead of the ad-removal tiers (see
+/// purchase_service.dart's CreditPack/kCreditPackProductIds). Also
+/// offered from the home screen's credits "+" popup (GetCreditsDialog) —
+/// this is the same purchase reachable from the Shop screen directly.
+class _CreditPackRow extends StatelessWidget {
+  final CreditPack pack;
+  final ProductDetails? details;
+  final bool purchasing;
+  final bool disabled;
+  final VoidCallback onBuy;
+  final AppLocale locale;
+  final String fallbackPrice;
+
+  const _CreditPackRow({
+    required this.pack,
+    required this.details,
+    required this.purchasing,
+    required this.disabled,
+    required this.onBuy,
+    required this.locale,
+    required this.fallbackPrice,
+  });
+
+  String get _amountLabel => tr(locale, 'credits_amount').replaceFirst(
+    '{n}',
+    kCreditPackAmounts[pack] == 1000 ? '1,000' : '10,000',
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final price = details?.price ?? fallbackPrice;
+    return SubmenuRow(
+      icon: Icons.add_circle_rounded,
+      label: _amountLabel,
+      labelFontSize: 14,
+      minHeight: 58,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(price, style: submenuNunito(size: 13, weight: FontWeight.w800, color: SubmenuColors.textSecondary)),
+          const SizedBox(width: 8),
+          SubmenuGoldButton(label: tr(locale, 'shop_buy_button'), loading: purchasing, onTap: (disabled && !purchasing) ? null : onBuy),
+        ],
       ),
     );
   }

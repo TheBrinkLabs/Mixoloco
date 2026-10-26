@@ -1,8 +1,9 @@
-import 'dart:math' show min;
+import 'dart:async' show unawaited;
+import 'dart:math' show cos, max, pi, sin;
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart' show ValueListenable, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/ad_service.dart';
 import '../../../core/services/audio_settings_provider.dart';
@@ -10,32 +11,24 @@ import '../../../core/services/cocktail_mode_provider.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/services/purchase_service.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colorful_plank_text.dart';
+import '../../../core/theme/outlined_label.dart';
 import '../../../core/widgets/ad_break_screen.dart';
 import '../../../core/widgets/banner_ad_widget.dart';
 import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/continue_fallback_video_screen.dart';
-import '../../../core/widgets/game_logo.dart';
 import '../../../core/widgets/glass_visual.dart';
+import '../../../core/widgets/hud_kit.dart';
 import '../../../core/widgets/notification_tablet.dart';
-import '../../../core/widgets/wood_plank.dart';
+import '../../../core/widgets/submenu_kit.dart' show SubmenuColors, RibbonTitle, SubmenuPanel, InsetList, SubmenuRow;
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
-import '../../menu/screens/settings_screen.dart';
-import '../../shop/screens/shop_screen.dart';
+import '../../menu/info_level_data.dart';
+import '../../shop/widgets/get_credits_dialog.dart';
 import '../board_geometry.dart';
 import '../mixoloco_game.dart';
 import '../providers/game_state_provider.dart';
+import 'game_complete_overlay.dart';
 import 'level_up_overlay.dart';
-
-/// cosmopolitan.png/cocktail_shaker.png/alcohol_free.png sit inside a
-/// fixed-size square empty_tab.png tile each (see _ActionButton) rather
-/// than being sized off their own aspect ratio — they're real photo
-/// icons with very different shapes (portrait, near-square, landscape),
-/// which a shared aspect-based sizing couldn't handle well. Unlike the
-/// wood-sign buttons these replaced, none of this art has any text
-/// painted into it, so each button carries its own code-rendered label
-/// (and cost, where one applies) inside the tile too.
 
 /// Core gameplay: drag anywhere on the table to aim the staged glass,
 /// release to drop it — it falls (see MixolocoGame's gravity) toward the
@@ -44,21 +37,6 @@ import 'level_up_overlay.dart';
 /// up; a cocktail order completes when its required ingredients end up
 /// touching in one cluster. A pile that reaches the line near the
 /// staging edge for two drops running ends the run.
-/// The original corner-shortcut icon size (see _HudImageIconButton) was
-/// 46 — Shop is now half that per feedback it read too large.
-const kShopIconSize = 23.0;
-
-/// 20% smaller than the original 46 per feedback.
-const kSettingsIconSize = 36.8;
-
-/// How much further up from statTop the shop/settings corner shortcuts
-/// sit, on top of their own bottom-aligned offset — per feedback they
-/// were hanging off the header board's tapered top corners.
-const kCornerIconUpNudge = 24.0;
-
-/// How much further in from the board's edge margin the shop/settings
-/// corner shortcuts sit — see [kCornerIconUpNudge].
-const kCornerIconInwardNudge = 18.0;
 
 class GameScreen extends ConsumerStatefulWidget {
   const GameScreen({super.key});
@@ -67,7 +45,8 @@ class GameScreen extends ConsumerStatefulWidget {
   ConsumerState<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObserver {
+class _GameScreenState extends ConsumerState<GameScreen>
+    with WidgetsBindingObserver {
   late final MixolocoGame _game;
 
   /// PopScope blocks every pop attempt by default — including the Android
@@ -91,7 +70,17 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // No banner while actually playing — see banner_ad_widget.dart.
-    ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
+    // Deferred a microtask past this build: writing this synchronously
+    // here triggers PersistentBannerAd (mounted above the Navigator) to
+    // rebuild and initialize adFreeProvider for the first time right
+    // inside *this* widget's own still-in-progress mount, which Riverpod
+    // flags as "tried to modify a provider while the widget tree was
+    // building" — pre-existing, reproducible on an unmodified checkout
+    // too, not introduced by the gameplay redesign. The notifier itself
+    // is captured now (safe — it's independent of this widget's ref)
+    // and only its `.state` write is deferred.
+    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
+    Future.microtask(() => bannerNotifier.state = BannerPosition.hidden);
     final notifier = ref.read(gameStateProvider.notifier);
     _game = MixolocoGame(
       onMerge: notifier.registerMerge,
@@ -101,7 +90,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
       onThrowCommitted: notifier.advanceQueue,
       onTierSeen: notifier.registerTierSeen,
       initialItems: ref.read(gameStateProvider).placedItems,
-      sfxEnabled: ref.read(audioSettingsProvider).sfxEnabled,
+      sfxEnabled: ref.read(audioSettingsProvider).effectiveSfxEnabled,
       level: ref.read(gameStateProvider).level,
     );
     // Music now plays through gameplay too (picking up the same playlist
@@ -109,7 +98,9 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     // side of this and _goHome below for handing it back on the way out.
     // Rooftop/safari tracks once Level 2/3, same as the background swap
     // below.
-    ref.read(audioSettingsProvider.notifier).playGameMusic(level: ref.read(gameStateProvider).level);
+    ref
+        .read(audioSettingsProvider.notifier)
+        .playGameMusic(level: ref.read(gameStateProvider).level);
   }
 
   /// Home isn't the only way a run in progress can end — backgrounding
@@ -124,14 +115,28 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
   /// check it's actually the visible route first.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      ref.read(gameStateProvider.notifier).savePlacedItems(_game.capturePlacedItems());
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      // `inactive` fires the instant the app starts losing focus — well
+      // before `paused` — so kicking the save off here instead of
+      // waiting for `paused` gives the (still unawaited, since this
+      // override's signature can't block the OS either way) disk write
+      // the most possible lead time to actually finish before Android
+      // reclaims the process. Harmless to call twice in a row (paused
+      // always follows inactive), since this just re-snapshots the same
+      // table.
+      unawaited(
+        ref
+            .read(gameStateProvider.notifier)
+            .savePlacedItems(_game.capturePlacedItems()),
+      );
     } else if (state == AppLifecycleState.resumed) {
       // The OS can silently stop background playback without the app
       // ever finding out — re-assert it on resume rather than leaving
       // silence until the player happens to navigate somewhere that
       // calls playGameMusic() again.
-      ref.read(audioSettingsProvider.notifier).playGameMusic(level: ref.read(gameStateProvider).level);
+      ref
+          .read(audioSettingsProvider.notifier)
+          .playGameMusic(level: ref.read(gameStateProvider).level);
       // A Monthly/Yearly ad-removal subscription can lapse while the app
       // was backgrounded — re-check on every resume rather than only on
       // a cold start (see PurchaseService's own doc comment on why this
@@ -146,7 +151,11 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     // this depends on reading (canPop being false the rest of the time
     // means this is also the *only* path off this screen, so there's
     // nowhere else this needs to happen).
-    ref.read(gameStateProvider.notifier).savePlacedItems(_game.capturePlacedItems());
+    unawaited(
+      ref
+          .read(gameStateProvider.notifier)
+          .savePlacedItems(_game.capturePlacedItems()),
+    );
     ref.read(audioSettingsProvider.notifier).playMenuMusic();
     setState(() => _allowPop = true);
     Navigator.of(context).pop();
@@ -156,6 +165,24 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     if (ref.read(gameStateProvider.notifier).spendCredits(kCherryBombCost)) {
       _game.cherryBomb();
     }
+  }
+
+  /// Debug-only (see kDebugMode guard at the call site) — opens the
+  /// collision calibration testbed: a bottom sheet listing every unique
+  /// ingredient across all 5 chains, so a physical-vs-visual mismatch
+  /// can be checked and fixed one at a time (see MixolocoGame's
+  /// debugSpawnIngredient/debugShowerProbes/debugClearTable).
+  void _openCollisionTestbed() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF14202E),
+      builder: (context) => _CollisionTestbedSheet(
+        onSpawn: _game.debugSpawnIngredient,
+        onShower: _game.debugShowerProbes,
+        onClear: _game.debugClearTable,
+      ),
+    );
   }
 
   void _useShaker() {
@@ -178,23 +205,33 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     }
   }
 
-  /// Settings/Shop shortcuts pushed straight from the game HUD (top-right
-  /// gear, top-left storefront) — pauses the physics engine for the same
-  /// reason the ad-break/level-up overlays do (nothing should keep
-  /// falling/merging unseen underneath), and resumes once popped. Neither
-  /// screen needs any change of its own to "come back here" — their
-  /// PlankBackButton already just does a plain Navigator.pop(), which
-  /// returns to whichever screen pushed them.
-  Future<void> _openSettings() async {
-    _game.pauseEngine();
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+  /// The top-left mute button — overrides music/SFX regardless of the
+  /// individual Settings toggles, see AudioSettingsNotifier.setAllSoundMuted.
+  Future<void> _toggleAllSoundMuted() async {
+    final next = !ref.read(audioSettingsProvider).allSoundMuted;
+    await ref.read(audioSettingsProvider.notifier).setAllSoundMuted(next);
     if (!mounted) return;
-    _game.resumeEngine();
+    _game.sfxEnabled = ref.read(audioSettingsProvider).effectiveSfxEnabled;
+    if (!next) {
+      // Un-muting doesn't resume anything on its own (see that method's
+      // own doc) — this screen is the one place that needs to.
+      ref
+          .read(audioSettingsProvider.notifier)
+          .playGameMusic(level: ref.read(gameStateProvider).level);
+    }
   }
 
-  Future<void> _openShop() async {
+  /// Credits "+" opens the same quick get-credits popup the main menu's
+  /// HUD uses — this is now the only way into the Shop from this screen
+  /// (see GetCreditsDialog) — paused/resumed the same way _openSettings
+  /// is, since a rewarded ad or purchase flow taking over deserves the
+  /// same "nothing moves underneath" treatment.
+  Future<void> _openGetCredits() async {
     _game.pauseEngine();
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const GetCreditsDialog(),
+    );
     if (!mounted) return;
     _game.resumeEngine();
   }
@@ -202,7 +239,11 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ref.read(bannerPositionProvider.notifier).state = BannerPosition.bottom;
+    // Same deferral as initState's own write above, and for the same
+    // reason — dispose() is on Riverpod's own list of life-cycles a
+    // provider write isn't safe to happen synchronously inside.
+    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
+    Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
     _tableShakeSignal.dispose();
     super.dispose();
   }
@@ -232,7 +273,14 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
       onNotReady: () async {
         if (!mounted) return;
         setState(() => _showingAdPlaceholder = false);
-        final watched = await showContinueFallbackVideo(context, ref.read(localeProvider));
+        final watched = await showContinueFallbackVideo(
+          context,
+          ref.read(localeProvider),
+          // This screen hides the banner for its own entire lifetime
+          // (initState) and only its own dispose should bring it back
+          // — see showContinueFallbackVideo's doc.
+          restoreBannerOnExit: false,
+        );
         if (!mounted) return;
         if (watched) {
           _game.clearMiniShotsAndResume();
@@ -270,6 +318,18 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
       await Future.delayed(const Duration(milliseconds: 50));
       if (!mounted) return;
     }
+    // The final merge of the combo (producing the jug/cocktail) may have
+    // landed on the very frame that unblocked the wait above — that
+    // raises the level past celebratedLevel while this was mid-wait, and
+    // the celebration takes over the ad slot entirely in that case (see
+    // _runLevelUp's doc). Bail without showing or acknowledging
+    // anything; pendingAdBreak stays true and this re-fires on its own
+    // once the celebration's done and _showingAdBreak resets below.
+    final boardNow = ref.read(gameStateProvider);
+    if (boardNow.level > boardNow.celebratedLevel) {
+      _showingAdBreak = false;
+      return;
+    }
     _game.pauseEngine();
     await showAdBreakScreen(context, locale);
     if (!mounted) return;
@@ -280,9 +340,17 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
 
   /// The end-of-level celebration → interstitial sequence (see
   /// level_up_overlay.dart) — same pause/resume treatment as the ad
-  /// break, since this also covers the table for several seconds.
+  /// break, since this also covers the table for several seconds. Also
+  /// waits out any in-flight animation first, same as _runAdBreak —
+  /// without this, a level completed by the final merge producing the
+  /// jug/cocktail (CocktailRevealComponent still mid-flight) would get
+  /// its reveal cut short by switchToLevel() clearing the world under it.
   Future<void> _runLevelUp(AppLocale locale, int level) async {
     if (!mounted) return;
+    while (_game.isAnimating) {
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+    }
     _game.pauseEngine();
     // Both sides of the reset happen now, while the celebration overlay
     // is about to cover the whole screen — by the time it's dismissed,
@@ -325,15 +393,24 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     if (board.level > board.celebratedLevel && !_showingLevelUp) {
       _showingLevelUp = true;
       final targetLevel = board.level;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _runLevelUp(locale, targetLevel));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _runLevelUp(locale, targetLevel),
+      );
     } else if (board.pendingAdBreak && !_showingAdBreak && !_showingLevelUp) {
       _showingAdBreak = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _runAdBreak(locale));
     }
 
-    final showContinueOffer = board.gameOver && !board.continueOfferUsed && !_showingAdPlaceholder;
-    final showGameOver = board.gameOver && board.continueOfferUsed && !_showingAdPlaceholder;
-    final blockInput = board.gameOver || _showCocktailMenu || _showingAdPlaceholder || _showingAdBreak || _showingLevelUp;
+    final showContinueOffer =
+        board.gameOver && !board.continueOfferUsed && !_showingAdPlaceholder;
+    final showGameOver =
+        board.gameOver && board.continueOfferUsed && !_showingAdPlaceholder;
+    final blockInput =
+        board.gameOver ||
+        _showCocktailMenu ||
+        _showingAdPlaceholder ||
+        _showingAdBreak ||
+        _showingLevelUp;
     // IgnorePointer below only stops a *new* gesture from starting — see
     // MixolocoGame.inputBlocked's own doc for why a drag already in
     // flight needs this second, explicit check too.
@@ -350,7 +427,8 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     // of the screen on top of that.
     // 21% up from the board's bottom edge, i.e. 79% down from its top —
     // net nudge is 3% up, then 1% back down per follow-up feedback.
-    final iconRowCenterY = boardRect.top + boardRect.height * 0.79 - upNudge3pc + upNudge1pc;
+    final iconRowCenterY =
+        boardRect.top + boardRect.height * 0.79 - upNudge3pc + upNudge1pc;
     const statLeftInset = 55.0;
     // Each action button is a fixed-size square empty_tab.png tile —
     // cosmopolitan.png/alcohol_free.png/cocktail_shaker.png are real
@@ -372,7 +450,11 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     const actionRowMargin = 28.0;
     final actionRowLeft = actionRowMargin;
     final actionRowRight = boardRect.width - actionRowMargin;
-    final actionTileSize = (actionRowRight - actionRowLeft - actionTileGap * (actionTileCount - 1)) / actionTileCount;
+    final actionTileSize =
+        (actionRowRight -
+            actionRowLeft -
+            actionTileGap * (actionTileCount - 1)) /
+        actionTileCount;
     final statTop = boardRect.top + boardRect.height * 0.29 - 17 - upNudge1pc;
 
     // The 8-tab progress row — 7 cocktails plus the jug — sits in the
@@ -384,7 +466,8 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
     // otherwise — height still gets the full 20% on top of that.
     const progressTabMargin = 10.0;
     const progressTabGap = 3.0;
-    final progressTabWidth = (screenSize.width - progressTabMargin * 2 - progressTabGap * 7) / 8;
+    final progressTabWidth =
+        (screenSize.width - progressTabMargin * 2 - progressTabGap * 7) / 8;
     final progressTabHeight = (progressTabWidth / kEmptyTabAspect) * 1.2;
     // Same gap above the row (to the header board) as between each tab,
     // rather than a bigger one — reads as one consistently-spaced group.
@@ -397,12 +480,12 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
           backgroundAssetPath: backgroundAssetPath,
           shakeTrigger: _tableShakeSignal,
           rooftop: rooftop,
+          tableFinish: tableFinishForLevel(board.level),
           child: Stack(
             children: [
               // Logo + status banner — top center. Tapping the logo goes
-              // home, replacing the old dedicated button. Positioned
-              // (not Align) so it can shift above the natural safe-area
-              // top by the 1%-of-screen nudge.
+              // home. Positioned (not Align) so it can shift above the
+              // natural safe-area top by the 1%-of-screen nudge.
               Positioned(
                 left: 0,
                 right: 0,
@@ -414,7 +497,15 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        GestureDetector(onTap: _goHome, child: const GameLogo(height: 60)),
+                        GestureDetector(
+                          onTap: _goHome,
+                          child: Image.asset(
+                            'assets/images/menu_logo_sticker.png',
+                            height: 44,
+                            // See GlassVisual's matching comment.
+                            cacheHeight: (44 * MediaQuery.devicePixelRatioOf(context)).round(),
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         _GameStatusBanner(board: board, locale: locale),
                       ],
@@ -422,47 +513,62 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
                   ),
                 ),
               ),
-              // Credits/Score sit directly on the header board's own wood
-              // — no chip background — inset enough to clear the board
-              // art's own tapered corners, left and right respectively.
+              // Mute button — very top-left corner, overriding whatever
+              // the individual music/SFX Settings toggles say (see
+              // AudioSettingsNotifier.setAllSoundMuted).
               Positioned(
-                left: statLeftInset,
-                top: statTop,
-                child: _BoardStat(label: tr(locale, 'credits'), value: '${board.credits}'),
+                left: 0,
+                top: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 12, top: 20),
+                    child: _SoundToggleButton(
+                      muted: ref.watch(audioSettingsProvider).allSoundMuted,
+                      onTap: _toggleAllSoundMuted,
+                    ),
+                  ),
+                ),
+              ),
+              // Credits/Score pills — same navy-pill language as the main
+              // menu's HUD (see hud_kit.dart), at the same anchor points
+              // the old plain-text stats used.
+              Positioned(
+                left: statLeftInset - 38,
+                top: statTop - 17,
+                child: _GameCreditsPill(
+                  credits: board.credits,
+                  onBuyCredits: _openGetCredits,
+                ),
               ),
               Positioned(
-                right: statLeftInset,
-                top: statTop,
-                child: _BoardStat(label: tr(locale, 'score_label'), value: '${board.score}'),
-              ),
-              // Shop/Settings shortcuts sit right in the top corners,
-              // their own real icon art (assets/images/shop.png,
-              // settings.png), no circular backing chip. Top-aligned to
-              // each other (not each bottom-aligned to its own size) —
-              // they're different sizes, so matching bottoms left the
-              // smaller Shop icon's top edge reading lower/out of line
-              // with Settings; a shared top is what actually reads as
-              // "level". Inset further in from the edge than the board's
-              // own margin — per feedback that at the plain statTop/6px
-              // placement they hung off the board's tapered top corners
-              // instead of sitting inside them.
-              Positioned(
-                left: 6 + kCornerIconInwardNudge,
-                top: statTop - kSettingsIconSize - kCornerIconUpNudge,
-                child: _HudImageIconButton(assetPath: 'assets/images/shop.png', size: kShopIconSize, onTap: _openShop),
-              ),
-              Positioned(
-                right: 6 + kCornerIconInwardNudge,
-                top: statTop - kSettingsIconSize - kCornerIconUpNudge,
-                child: _HudImageIconButton(assetPath: 'assets/images/settings.png', size: kSettingsIconSize, onTap: _openSettings),
+                right: statLeftInset - 40,
+                top: statTop - 17,
+                child: _GameScorePill(score: board.score),
               ),
               Positioned(
                 left: actionRowLeft,
                 top: iconRowCenterY - actionTileSize / 2,
-                child: _ActionButton(
-                  asset: 'assets/images/ingredient_cherry.png',
+                child: _PowerUpTile(
+                  // Same underlying sweep-and-delete power everywhere
+                  // (see MixolocoGame.cherryBomb), reskinned per level to
+                  // match whatever that level's own tier-0 ingredient
+                  // actually is — Piazza's is blackcurrant, Jungle's is
+                  // a sugar cube, not a cherry.
+                  asset: board.level >= 5
+                      ? 'assets/images/ingredient_sugar_cube.png'
+                      : board.level == 4
+                      ? 'assets/images/ingredient_blackcurrant.png'
+                      : 'assets/images/game/i_cherry.png',
                   size: actionTileSize,
-                  label: tr(locale, 'cherry_bomb_label'),
+                  label: tr(
+                    locale,
+                    board.level >= 5
+                        ? 'sugar_bomb_label'
+                        : board.level == 4
+                        ? 'currant_bomb_label'
+                        : 'cherry_bomb_label',
+                  ),
                   cost: kCherryBombCost,
                   enabled: board.credits >= kCherryBombCost,
                   onTap: _useCherryBomb,
@@ -471,44 +577,48 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
               Positioned(
                 left: actionRowLeft + (actionTileSize + actionTileGap),
                 top: iconRowCenterY - actionTileSize / 2,
-                child: _ActionButton(
-                  asset: 'assets/images/cocktail_shaker.png',
+                child: _PowerUpTile(
+                  asset: 'assets/images/game/p_shaker.png',
                   size: actionTileSize,
                   label: tr(locale, 'shake_label'),
                   cost: kShakerCost,
                   enabled: board.credits >= kShakerCost,
                   onTap: _useShaker,
+                  activeGlow: _game.shakeActive,
                 ),
               ),
               Positioned(
                 left: actionRowLeft + (actionTileSize + actionTileGap) * 2,
                 top: iconRowCenterY - actionTileSize / 2,
-                child: _ActionButton(
-                  asset: 'assets/images/cocktail_shaker.png',
+                child: _PowerUpTile(
+                  asset: 'assets/images/game/p_shaker.png',
                   size: actionTileSize,
                   label: tr(locale, 'mega_shake_label'),
                   cost: kMegaShakeCost,
                   enabled: board.credits >= kMegaShakeCost,
                   onTap: _useMegaShaker,
+                  badgeEmoji: '\u{1F4AA}',
+                  activeGlow: _game.shakeActive,
                 ),
               ),
               Positioned(
                 left: actionRowLeft + (actionTileSize + actionTileGap) * 3,
                 top: iconRowCenterY - actionTileSize / 2,
-                child: _ActionButton(
-                  asset: 'assets/images/alcohol_free.png',
+                child: _PowerUpTile(
+                  asset: 'assets/images/game/i_vodka.png',
                   size: actionTileSize,
                   label: tr(locale, 'mini_shots_label'),
                   cost: kMiniShotsCost,
                   enabled: board.credits >= kMiniShotsCost,
                   onTap: _useMiniShots,
+                  noSign: true,
                 ),
               ),
               Positioned(
                 left: actionRowLeft + (actionTileSize + actionTileGap) * 4,
                 top: iconRowCenterY - actionTileSize / 2,
-                child: _ActionButton(
-                  asset: 'assets/images/cosmopolitan.png',
+                child: _PowerUpTile(
+                  asset: 'assets/images/game/p_cosmopolitan.png',
                   size: actionTileSize,
                   label: tr(locale, 'menu_label'),
                   // Disabled whenever an order (the free starter counts)
@@ -519,6 +629,7 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
                   // back up exactly when there's something to buy for.
                   enabled: board.order == null,
                   onTap: () => setState(() => _showCocktailMenu = true),
+                  blueTile: true,
                 ),
               ),
               // Cocktail Mode off: cocktails can still be made/scored
@@ -552,26 +663,58 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
               Positioned(
                 left: 16,
                 right: 0,
-                top: screenSize.height * tableSurfaceNearFraction(screenSize.width, screenSize.height, rooftop: rooftop),
+                top:
+                    screenSize.height *
+                    tableSurfaceNearFraction(
+                      screenSize.width,
+                      screenSize.height,
+                      rooftop: rooftop,
+                    ),
                 bottom: 0,
-                child: Align(alignment: Alignment.centerLeft, child: _NextCard(next: board.upcoming.first, locale: locale)),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _NextCard(next: board.upcoming.first, locale: locale),
+                ),
               ),
               Positioned(
                 left: 0,
                 right: 16,
-                top: screenSize.height * tableSurfaceNearFraction(screenSize.width, screenSize.height, rooftop: rooftop),
+                top:
+                    screenSize.height *
+                    tableSurfaceNearFraction(
+                      screenSize.width,
+                      screenSize.height,
+                      rooftop: rooftop,
+                    ),
                 bottom: 0,
-                child: Align(alignment: Alignment.centerRight, child: _OrderCard(board: board)),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _OrderCard(board: board),
+                ),
               ),
               if (showContinueOffer)
                 _ContinueOfferOverlay(
                   onWatchAd: _watchAdToContinue,
-                  onEndGame: () => ref.read(gameStateProvider.notifier).declineContinue(),
+                  onEndGame: () =>
+                      ref.read(gameStateProvider.notifier).declineContinue(),
                   locale: locale,
                 ),
-              if (showGameOver) _GameOverOverlay(board: board, onHome: _goHome, locale: locale),
+              if (showGameOver)
+                if (board.gameCompleted)
+                  GameCompleteOverlay(board: board, onHome: _goHome, locale: locale)
+                else
+                  _GameOverOverlay(board: board, onHome: _goHome, locale: locale),
               if (_showingAdPlaceholder) _AdPlaceholderOverlay(locale: locale),
-              if (_showCocktailMenu) _CocktailMenuOverlay(onClose: () => setState(() => _showCocktailMenu = false)),
+              if (_showCocktailMenu)
+                _CocktailMenuOverlay(
+                  onClose: () => setState(() => _showCocktailMenu = false),
+                ),
+              if (kDebugMode)
+                Positioned(
+                  left: 8,
+                  bottom: 8,
+                  child: _DebugCollisionTestbedButton(onTap: _openCollisionTestbed),
+                ),
             ],
           ),
         ),
@@ -580,160 +723,690 @@ class _GameScreenState extends ConsumerState<GameScreen> with WidgetsBindingObse
   }
 }
 
-/// A label + value pair sitting directly on the header board's own wood
-/// grain — no chip/tile behind it, just a text shadow for legibility
-/// against the busy texture (same technique the home-screen menu tiles
-/// use over the beach photo).
-/// Shop/Settings' corner shortcuts — the real icon art directly, no
-/// circular backing chip (its own outline/shading already carries
-/// enough contrast against the backdrop, same as every action-button
-/// icon lower on this same screen), wrapped in SafeArea so it never
-/// sits under a notch/status bar.
-class _HudImageIconButton extends StatelessWidget {
-  final String assetPath;
-  final double size;
-  final VoidCallback onTap;
-  const _HudImageIconButton({required this.assetPath, required this.size, required this.onTap});
+/// One navy HUD pill — same look as the main menu's own HUD row (see
+/// hud_kit.dart), at fixed pixel sizes per the gameplay redesign handoff
+/// rather than the menu's frame-relative scale (this screen's HUD chrome
+/// was already fixed/boardRect-relative sizes, never the menu's 390-wide
+/// frame system, so fixed sizes here stay consistent with everything
+/// else on it).
+class _GamePill extends StatelessWidget {
+  final double leftPad;
+  final double rightPad;
+  final Widget badge;
+  final double badgeSize;
+  final double badgeLeft;
+  final double badgeTop;
+  final Widget content;
+  final Widget? topRight;
 
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      child: GestureDetector(onTap: onTap, child: Image.asset(assetPath, width: size, height: size, fit: BoxFit.contain)),
-    );
-  }
-}
-
-class _BoardStat extends StatelessWidget {
-  final String label;
-  final String value;
-  const _BoardStat({required this.label, required this.value});
-
-  static const _shadow = [Shadow(color: Colors.black87, blurRadius: 6, offset: Offset(0, 1))];
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: const TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w800, shadows: _shadow),
-        ),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 18, color: AppColors.textLight, fontWeight: FontWeight.w800, shadows: _shadow),
-        ),
-      ],
-    );
-  }
-}
-
-/// One of the three action buttons (Menu/Shake/Alcohol-Free) — a square
-/// empty_tab.png tile (the same wood-block art the progress-tabs row and
-/// home-screen HUD row use), with the icon (cosmopolitan.png/
-/// alcohol_free.png/cocktail_shaker.png — plain photo icons, no text
-/// baked in like the wood-sign buttons these replaced) plus a label
-/// (and cost, for the two that spend credits) laid out inside it.
-/// Everything's fit to the tile's own fixed [size]: the icon gets a
-/// fixed share of the height, and the label/cost each get their own
-/// fixed-height slot (the cost slot stays reserved-but-empty on the
-/// Menu tile, which has none) — every tile's text renders at the same
-/// size this way, rather than a tile with only one line of text (Menu)
-/// getting stretched bigger by a FittedBox filling the same space a
-/// two-line tile's text fills.
-class _ActionButton extends StatelessWidget {
-  final String asset;
-  final double size;
-  final String label;
-  final int? cost;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _ActionButton({
-    required this.asset,
-    required this.size,
-    required this.label,
-    this.cost,
-    required this.enabled,
-    required this.onTap,
+  const _GamePill({
+    required this.leftPad,
+    required this.rightPad,
+    required this.badge,
+    required this.badgeSize,
+    required this.badgeLeft,
+    required this.badgeTop,
+    required this.content,
+    this.topRight,
   });
 
-  static const _textShadow = [Shadow(color: Colors.black87, blurRadius: 3, offset: Offset(0, 1))];
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      constraints: BoxConstraints(minWidth: leftPad + rightPad + 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: HudColors.hudBorder, width: 2),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [HudColors.hudNavyTop, HudColors.hudNavyBottom],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.30),
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: 1,
+            left: 10,
+            right: 10,
+            child: Container(
+              height: 2,
+              color: Colors.white.withValues(alpha: 0.22),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.only(left: leftPad, right: rightPad),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(fit: BoxFit.scaleDown, child: content),
+            ),
+          ),
+          Positioned(
+            left: badgeLeft,
+            top: badgeTop,
+            child: SizedBox(width: badgeSize, height: badgeSize, child: badge),
+          ),
+          ?topRight,
+        ],
+      ),
+    );
+  }
+}
+
+/// The credits pill — coin badge, value, and a "+" that's now the only
+/// way into the Shop from this screen (see GameScreen._openGetCredits).
+class _GameCreditsPill extends StatelessWidget {
+  final int credits;
+  final VoidCallback onBuyCredits;
+  const _GameCreditsPill({required this.credits, required this.onBuyCredits});
+
+  static String _formatCredits(int value) {
+    final digits = value.toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+      buffer.write(digits[i]);
+    }
+    return buffer.toString();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(size * 0.14);
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.45,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: borderRadius,
-            // Dialed back 60% (alpha/blur/offset all scaled together)
-            // per feedback that it read too heavy.
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.16), blurRadius: 2, offset: const Offset(0.6, 1))],
+    return _GamePill(
+      leftPad: 38,
+      rightPad: 30,
+      badgeSize: 38,
+      badgeLeft: -4,
+      badgeTop: -4,
+      badge: layeredCircle(
+        size: 38,
+        rings: [
+          HudRing(width: 2, color: HudColors.coinRim),
+          HudRing(width: 4, color: Colors.white.withValues(alpha: 0.35)),
+        ],
+        fill: DecoratedBox(
+          // Blue (was gold, same as the coinTop/Mid/Bottom art it was
+          // sitting behind) and the real coins logo — matches the home
+          // screen's credits pill, the gold coins were hard to make out
+          // against a gold badge.
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              center: Alignment(-0.3, -0.4),
+              radius: 1.0,
+              stops: [0.0, 0.6, 1.0],
+              colors: [
+                HudColors.plateTop,
+                HudColors.plateMid,
+                HudColors.plateBottom,
+              ],
+            ),
           ),
-          child: ClipRRect(
-            borderRadius: borderRadius,
-            child: SizedBox(
-              width: size,
-              height: size,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset('assets/images/empty_tab.png', fit: BoxFit.fill),
-                  Padding(
-                    // Extra top padding (vs. a plain symmetric inset) —
-                    // the icon sat right at the tile's own top edge
-                    // otherwise, reading as if it were falling off; this
-                    // nudges the whole icon+text block down a little,
-                    // taken from the bottom inset instead so the total
-                    // content block stays the same height.
-                    padding: EdgeInsets.fromLTRB(size * 0.08, size * 0.13, size * 0.08, size * 0.03),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(height: size * 0.4, child: Image.asset(asset, fit: BoxFit.contain)),
-                        SizedBox(
-                          height: size * 0.2,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              label,
-                              maxLines: 1,
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textLight, shadows: _textShadow),
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          height: size * 0.18,
-                          child: cost == null
-                              ? null
-                              : FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    '$cost',
-                                    maxLines: 1,
-                                    // White (not the gold used elsewhere
-                                    // for costs) — the gold read too
-                                    // close to the wood tile's own color
-                                    // to stay legible at this size.
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textLight, shadows: _textShadow),
-                                  ),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          // coins.png's own canvas has a lot of transparent padding
+          // around the actual coin graphic (a wide, short canvas with a
+          // roughly-square coin stack centred in it) — BoxFit.contain
+          // against that canvas left the coin stack itself tiny no
+          // matter how big the box got. BoxFit.cover (clipped to the
+          // circle) instead scales up until the canvas's *short* side
+          // fills the box, then crops the excess width symmetrically,
+          // which — since the coin art sits close to the canvas's own
+          // centre — crops away the padding rather than the coins,
+          // actually filling the badge.
+          child: ClipOval(
+            child: Image.asset(
+              'assets/images/coins.png',
+              width: double.infinity,
+              height: double.infinity,
+              fit: BoxFit.cover,
+              // This badge never renders bigger than 38 logical px —
+              // see GlassVisual's matching comment.
+              cacheWidth: (38 * MediaQuery.devicePixelRatioOf(context)).round(),
+            ),
+          ),
+        ),
+      ),
+      content: OutlinedLabel(
+        text: _formatCredits(credits),
+        fontSize: 18,
+        fill: Colors.white,
+        stroke: HudColors.hudBorder,
+        strokeWidth: 3,
+      ),
+      topRight: Positioned(
+        top: 2,
+        right: 2,
+        child: GestureDetector(
+          onTap: onBuyCredits,
+          child: Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: HudColors.plusBorder, width: 2),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [HudColors.plusTop, HudColors.plusBottom],
               ),
+            ),
+            alignment: Alignment.center,
+            child: const OutlinedLabel(
+              text: '+',
+              fontSize: 20,
+              fill: Colors.white,
+              stroke: HudColors.plusBorder,
+              strokeWidth: 3,
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// The score pill — trophy badge, value. Pulses once and counts up its
+/// own digits whenever [score] increases (see _AnimatedScoreLabel) —
+/// purely a rendering reaction to the same `board.score` this screen
+/// already watches, not a change to how/when score itself is awarded.
+class _GameScorePill extends StatelessWidget {
+  final int score;
+  const _GameScorePill({required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    return _GamePill(
+      leftPad: 40,
+      rightPad: 12,
+      badgeSize: 50,
+      badgeLeft: -10,
+      badgeTop: -12,
+      badge: ShadowedAsset(
+        path: 'assets/images/icon_best_scores.png',
+        width: 50,
+        shadows: [
+          SpriteShadow(
+            offset: const Offset(0, 2),
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+          SpriteShadow(
+            offset: const Offset(0, 3),
+            blur: 4,
+            color: Colors.black.withValues(alpha: 0.3),
+          ),
+        ],
+      ),
+      content: _AnimatedScoreLabel(score: score),
+    );
+  }
+}
+
+/// The gameplay screen's top-left mute toggle — same gold-rim-on-blue-plate
+/// language as the main menu's Settings button (see MenuScreen's
+/// _SettingsButton), with a red strike-through bar drawn across the
+/// speaker icon when muted.
+class _SoundToggleButton extends StatelessWidget {
+  final bool muted;
+  final VoidCallback onTap;
+  const _SoundToggleButton({required this.muted, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: layeredCircle(
+        size: 40,
+        shadow: [BoxShadow(color: HudColors.hudBorder, offset: const Offset(0, 3))],
+        rings: [
+          HudRing(width: 2, color: HudColors.hudBorder),
+          HudRing(width: 3, color: HudColors.goldRim),
+        ],
+        fill: DecoratedBox(
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [HudColors.settingsPlateTop, HudColors.hudNavyBottom],
+            ),
+          ),
+          child: Center(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                ShadowedAsset(
+                  path: 'assets/images/sound.png',
+                  width: 24,
+                  shadows: [
+                    SpriteShadow(offset: const Offset(0, 2), blur: 2, color: Colors.black.withValues(alpha: 0.4)),
+                  ],
+                ),
+                if (muted)
+                  Transform.rotate(
+                    angle: -pi / 4,
+                    child: Container(
+                      width: 28,
+                      height: 3.5,
+                      decoration: BoxDecoration(
+                        color: HudColors.badgeRed,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: Colors.white, width: 0.8),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedScoreLabel extends StatefulWidget {
+  final int score;
+  const _AnimatedScoreLabel({required this.score});
+
+  @override
+  State<_AnimatedScoreLabel> createState() => _AnimatedScoreLabelState();
+}
+
+class _AnimatedScoreLabelState extends State<_AnimatedScoreLabel>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 400),
+  );
+  late final Animation<double> _scale = TweenSequence([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.08), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 1.08, end: 1.0), weight: 1),
+  ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+  @override
+  void didUpdateWidget(covariant _AnimatedScoreLabel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.score > oldWidget.score) _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _scale,
+      builder: (context, child) =>
+          Transform.scale(scale: _scale.value, child: child),
+      child: OutlinedLabel(
+        text: '${widget.score}',
+        fontSize: 18,
+        fill: Colors.white,
+        stroke: HudColors.hudBorder,
+        strokeWidth: 3,
+      ),
+    );
+  }
+}
+
+/// One power-up tray tile — cream (blue for Menu) rounded tile with the
+/// icon, a label below it, and (for the two credit-spending ones) a
+/// price chip overlapping its bottom edge. [badge] adds the small "x2"
+/// corner tag (Mega-Shake), [noSign] draws the red "can't do this right
+/// now" ring over the icon (Mini-Shots), [activeGlow] — when provided —
+/// shows a pulsing gold glow while true (Shake/Mega-Shake, driven by
+/// MixolocoGame.shakeActive). Affordability/enabled logic and onTap are
+/// unchanged from before — only how the tile is painted changed.
+class _PowerUpTile extends StatefulWidget {
+  final String asset;
+  final double size;
+  final String label;
+  final int? cost;
+  final bool enabled;
+  final VoidCallback onTap;
+  final String? badgeEmoji;
+  final bool noSign;
+  final bool blueTile;
+  final ValueListenable<bool>? activeGlow;
+
+  const _PowerUpTile({
+    required this.asset,
+    required this.size,
+    required this.label,
+    this.cost,
+    required this.enabled,
+    required this.onTap,
+    this.badgeEmoji,
+    this.noSign = false,
+    this.blueTile = false,
+    this.activeGlow,
+  });
+
+  @override
+  State<_PowerUpTile> createState() => _PowerUpTileState();
+}
+
+class _PowerUpTileState extends State<_PowerUpTile> {
+  bool _pressed = false;
+  void _setPressed(bool value) => setState(() => _pressed = value);
+
+  @override
+  Widget build(BuildContext context) {
+    final glow = widget.activeGlow;
+    final tile = glow == null
+        ? _tile()
+        : ValueListenableBuilder<bool>(
+            valueListenable: glow,
+            builder: (context, active, child) =>
+                _GlowWrap(active: active, size: widget.size, child: child!),
+            child: _tile(),
+          );
+    // GameScreen rebuilds on every board change (a merge, a credit
+    // spend, a score tick) — this tile's own look only ever depends on
+    // its own widget.enabled/blueTile/activeGlow, not on most of what
+    // triggers those rebuilds. A RepaintBoundary isolates its Opacity/
+    // gradient/shadow painting as its own cached compositor layer so an
+    // unrelated board change doesn't force it to re-rasterize, same
+    // reasoning as BarBackdrop's table-tint boundary.
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTapDown: widget.enabled ? (_) => _setPressed(true) : null,
+        onTapCancel: widget.enabled ? () => _setPressed(false) : null,
+        onTapUp: widget.enabled ? (_) => _setPressed(false) : null,
+        onTap: widget.enabled ? widget.onTap : null,
+        child: AnimatedScale(
+          scale: _pressed ? 0.94 : 1.0,
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOut,
+          child: tile,
+        ),
+      ),
+    );
+  }
+
+  Widget _tile() {
+    final s = widget.size;
+    return Opacity(
+      opacity: widget.enabled ? 1.0 : 0.45,
+      child: SizedBox(
+        width: s,
+        height: s,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: s,
+              height: s,
+              padding: EdgeInsets.all(s * 0.1),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(s * 0.28),
+                border: Border.all(color: HudColors.hudBorder, width: 2),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: widget.blueTile
+                      ? const [Color(0xFF9FDCF0), Color(0xFF4FA9D6)]
+                      : const [HudColors.creamTop, HudColors.creamBottom],
+                ),
+                boxShadow: const [
+                  BoxShadow(color: HudColors.hudBorder, offset: Offset(0, 3)),
+                ],
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    top: 0,
+                    left: s * 0.08,
+                    right: s * 0.08,
+                    child: Container(
+                      height: 2,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: s * 0.42,
+                        child: Center(
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              ShadowedAsset(
+                                path: widget.asset,
+                                width: s * 0.42,
+                                shadows: [
+                                  SpriteShadow(
+                                    offset: const Offset(0, 2),
+                                    blur: 2,
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                  ),
+                                ],
+                              ),
+                              if (widget.noSign) _NoSign(size: s * 0.58),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        height: s * 0.22,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: OutlinedLabel(
+                            text: widget.label.toUpperCase(),
+                            fontSize: 11.5,
+                            fill: Colors.white,
+                            stroke: HudColors.labelStroke,
+                            strokeWidth: 3,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (widget.badgeEmoji != null)
+              Positioned(
+                top: -7,
+                right: -7,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4.75,
+                    vertical: 0.95,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6.65),
+                    border: Border.all(
+                      color: const Color(0xFF7A2408),
+                      width: 1.9,
+                    ),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF8F3D), Color(0xFFFF5A22)],
+                    ),
+                  ),
+                  child: Text(widget.badgeEmoji!, style: const TextStyle(fontSize: 12.35, height: 1.1)),
+                ),
+              ),
+            if (widget.cost != null)
+              Positioned(
+                bottom: -9,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _PriceChip(
+                    cost: widget.cost!,
+                    affordable: widget.enabled,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The small gold-coin-and-price pill overlapping a power-up tile's
+/// bottom edge.
+class _PriceChip extends StatelessWidget {
+  final int cost;
+  final bool affordable;
+  const _PriceChip({required this.cost, required this.affordable});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: HudColors.hudNavyBottom,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: HudColors.hudBorder, width: 2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          layeredCircle(
+            size: 12,
+            rings: [HudRing(width: 1, color: HudColors.coinRim)],
+            fill: const DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [HudColors.coinTop, HudColors.coinBottom],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            '$cost',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              // A dulled red (not the plain white every other pill's
+              // numbers use) when this tile can't currently be afforded —
+              // same signal the old in-tile cost text never had a way to
+              // show, since it was always a flat colour regardless.
+              color: affordable ? Colors.white : const Color(0xFFFF9A8A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A pulsing gold halo around a power-up tile while its effect is still
+/// running (Shake/Mega-Shake) — a no-op wrapper (returns [child] as-is)
+/// whenever [active] is false, so idle tiles pay nothing extra.
+class _GlowWrap extends StatefulWidget {
+  final bool active;
+  final double size;
+  final Widget child;
+  const _GlowWrap({
+    required this.active,
+    required this.size,
+    required this.child,
+  });
+
+  @override
+  State<_GlowWrap> createState() => _GlowWrapState();
+}
+
+class _GlowWrapState extends State<_GlowWrap>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.active) return widget.child;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = _controller.value;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.size * 0.28 + 3),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFFD23F).withValues(alpha: 0.4 + 0.3 * t),
+                blurRadius: 6 + 6 * t,
+                spreadRadius: 1 + 2 * t,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+/// The red "can't do this right now" ring drawn over the Mini-Shots
+/// tile's icon.
+class _NoSign extends StatelessWidget {
+  final double size;
+  const _NoSign({required this.size});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: size,
+    height: size,
+    child: CustomPaint(painter: _NoSignPainter()),
+  );
+}
+
+class _NoSignPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.shortestSide / 2;
+    final outerEdge = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.shortestSide * 0.09;
+    canvas.drawCircle(center, radius, outerEdge);
+    final ring = Paint()
+      ..color = const Color(0xFFE3262B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.shortestSide * 0.16;
+    canvas.drawCircle(center, radius * 0.82, ring);
+    final bar = Paint()
+      ..color = const Color(0xFFE3262B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.shortestSide * 0.16
+      ..strokeCap = StrokeCap.round;
+    final angle = 45 * pi / 180;
+    final offset = Offset(radius * 0.7 * cos(angle), radius * 0.7 * sin(angle));
+    canvas.drawLine(center - offset, center + offset, bar);
+  }
+
+  @override
+  bool shouldRepaint(covariant _NoSignPainter oldDelegate) => false;
 }
 
 class _OrderCard extends StatelessWidget {
@@ -745,19 +1418,45 @@ class _OrderCard extends StatelessWidget {
     final order = board.order;
     if (order == null) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      constraints: const BoxConstraints(minWidth: 120),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      // Capped (not just a min) so a long translated cocktail name (e.g.
+      // Italian "Cosmopolitan") can't keep widening this pill into the
+      // Next card docked on the other side of the table — the name
+      // itself shrinks to fit instead, via the FittedBox below. The cap
+      // itself grows with ingredient count (each _OrderIcon costs ~38px)
+      // so a 4-ingredient recipe like Hugo Spritz still fits all its
+      // icons instead of clipping — 150 was only ever sized for 2-3.
+      constraints: BoxConstraints(minWidth: 120, maxWidth: max(150.0, order.ingredientIds.length * 38.0 + 28.0)),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: HudColors.hudBorder, width: 2),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [HudColors.hudNavyTop, HudColors.hudNavyBottom],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            order.name,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textLight),
+          SizedBox(
+            width: 122,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: OutlinedLabel(
+                text: order.name,
+                fontSize: 13,
+                fill: Colors.white,
+                stroke: HudColors.hudBorder,
+                strokeWidth: 2,
+              ),
+            ),
           ),
           const SizedBox(height: 5),
           Row(
@@ -789,7 +1488,12 @@ class _ProgressTabsRow extends StatelessWidget {
   final double tabWidth;
   final double tabHeight;
   final double gap;
-  const _ProgressTabsRow({required this.board, required this.tabWidth, required this.tabHeight, required this.gap});
+  const _ProgressTabsRow({
+    required this.board,
+    required this.tabWidth,
+    required this.tabHeight,
+    required this.gap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -823,7 +1527,12 @@ class _ProgressTab extends StatelessWidget {
   final bool completed;
   final double width;
   final double height;
-  const _ProgressTab({required this.imagePath, required this.completed, required this.width, required this.height});
+  const _ProgressTab({
+    required this.imagePath,
+    required this.completed,
+    required this.width,
+    required this.height,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -831,30 +1540,86 @@ class _ProgressTab extends StatelessWidget {
       width: width,
       height: height,
       child: Stack(
-        fit: StackFit.expand,
         clipBehavior: Clip.none,
         children: [
-          Image.asset('assets/images/empty_tab.png', fit: BoxFit.fill),
-          Padding(
-            // Fully visible while it's still something to aim for; fades
-            // back once it's done and the checkmark takes over as the
-            // main thing to notice. Scaled up from its inset box (rather
-            // than just shrinking the inset) since shrinking alone caps
-            // out short of the desired size before the picture would
-            // fill the whole tab — the small overflow this leaves lands
-            // safely inside the gap between tabs. 1.5x dialed back 25%
-            // (-> 1.125x) per feedback that the pictures read too big.
-            padding: EdgeInsets.all(width * 0.15),
-            child: Opacity(
-              opacity: completed ? 0.4 : 1.0,
-              child: Transform.scale(scale: 1.125, child: Image.asset(imagePath, fit: BoxFit.contain)),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(width * 0.3),
+              border: Border.all(color: HudColors.hudBorder, width: 2),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: completed
+                    ? const [Color(0xFFE8F8DC), Color(0xFFC7ECB0)]
+                    : const [HudColors.creamTop, HudColors.creamBottom],
+              ),
+              boxShadow: const [
+                BoxShadow(color: HudColors.hudBorder, offset: Offset(0, 3)),
+              ],
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  top: 0,
+                  left: width * 0.12,
+                  right: width * 0.12,
+                  child: Container(
+                    height: 2,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
+                // Fully visible while it's still something to aim for;
+                // fades back once it's done and the checkmark badge
+                // takes over as the main thing to notice.
+                Center(
+                  child: Opacity(
+                    opacity: completed ? 0.4 : 1.0,
+                    // Halved from 0.16 — the source cocktail photos used
+                    // to carry a lot of their own transparent padding on
+                    // top of this inset, compounding into icons that
+                    // read as tiny; now that those are cropped tight to
+                    // their own content (see assets/images/*.png's own
+                    // history), a smaller inset here is enough to keep
+                    // the tile's rounded corners clear.
+                    child: Padding(
+                      padding: EdgeInsets.all(width * 0.08),
+                      child: Image.asset(
+                      imagePath,
+                      fit: BoxFit.contain,
+                      // See GlassVisual's matching comment.
+                      cacheWidth: (width * MediaQuery.devicePixelRatioOf(context)).round(),
+                    ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           if (completed)
-            Center(
-              child: Opacity(
-                opacity: 0.62,
-                child: Icon(Icons.check_rounded, size: min(width, height) * 0.85, color: AppColors.mint),
+            Positioned(
+              top: -6,
+              right: -6,
+              child: layeredCircle(
+                size: 20,
+                rings: [HudRing(width: 2, color: HudColors.plusBorder)],
+                fill: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [HudColors.plusTop, HudColors.plusBottom],
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: 12,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
               ),
             ),
         ],
@@ -870,7 +1635,8 @@ class _GameStatusBanner extends StatelessWidget {
   final AppLocale locale;
   const _GameStatusBanner({required this.board, required this.locale});
 
-  String? get _message => board.gameOver ? tr(locale, 'table_full_banner') : null;
+  String? get _message =>
+      board.gameOver ? tr(locale, 'table_full_banner') : null;
 
   @override
   Widget build(BuildContext context) {
@@ -885,7 +1651,9 @@ class _GameStatusBanner extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.coral.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.coral.withValues(alpha: 0.6)),
+                border: Border.all(
+                  color: AppColors.coral.withValues(alpha: 0.6),
+                ),
               ),
               child: Text(
                 message,
@@ -907,7 +1675,8 @@ class _OrderIcon extends StatelessWidget {
   const _OrderIcon({required this.ingredient});
 
   @override
-  Widget build(BuildContext context) => GlassVisual(ingredient: ingredient, size: 32);
+  Widget build(BuildContext context) =>
+      GlassVisual(ingredient: ingredient, size: 32);
 }
 
 /// Just the single next ingredient — the table's front face is a narrow
@@ -920,24 +1689,74 @@ class _NextCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A plain inline Row (text, gap, disc) rather than the handoff's own
+    // "disc overflowing far past the pill's right edge" — that left a
+    // big empty gap between "NEXT" and the disc, which on a real device
+    // pushed the disc far enough right to land behind the Order card
+    // (painted after this in the Stack) whenever one was showing. The
+    // disc (58) is still a few px taller than the pill (52) for a slight
+    // badge-like overflow — Container doesn't clip by default, so that
+    // needs no extra Clip.none plumbing.
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      height: 52,
+      padding: const EdgeInsets.only(left: 18, right: 10),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.28),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: HudColors.hudBorder, width: 2),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [HudColors.hudNavyTop, HudColors.hudNavyBottom],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Text(
-              tr(locale, 'next'),
-              style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.8),
+          OutlinedLabel(
+            text: tr(locale, 'next').toUpperCase(),
+            fontSize: 18,
+            fill: Colors.white,
+            stroke: HudColors.hudBorder,
+            strokeWidth: 3,
+            letterSpacing: 1.1,
+          ),
+          const SizedBox(width: 10),
+          layeredCircle(
+            size: 58,
+            shadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                offset: const Offset(0, 4),
+              ),
+            ],
+            rings: [
+              HudRing(width: 2, color: HudColors.hudBorder),
+              HudRing(
+                width: 3,
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [HudColors.creamTop, HudColors.creamBottom],
+                ),
+              ),
+            ],
+            fill: DecoratedBox(
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [HudColors.creamInnerTop, HudColors.creamInnerBottom],
+                ),
+              ),
+              child: Center(child: GlassVisual(ingredient: next, size: 36)),
             ),
           ),
-          GlassVisual(ingredient: next, size: 44),
         ],
       ),
     );
@@ -952,7 +1771,11 @@ class _ContinueOfferOverlay extends StatelessWidget {
   final VoidCallback onWatchAd;
   final VoidCallback onEndGame;
   final AppLocale locale;
-  const _ContinueOfferOverlay({required this.onWatchAd, required this.onEndGame, required this.locale});
+  const _ContinueOfferOverlay({
+    required this.onWatchAd,
+    required this.onEndGame,
+    required this.locale,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -964,26 +1787,50 @@ class _ContinueOfferOverlay extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(tr(locale, 'table_full_title'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textOnStone)),
+                Text(
+                  tr(locale, 'table_full_title'),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textOnStone,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   tr(locale, 'table_full_body'),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, color: AppColors.textOnStoneMuted),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textOnStoneMuted,
+                  ),
                 ),
                 const SizedBox(height: 18),
                 StoneButton(
                   onTap: onWatchAd,
                   width: 230,
                   height: 50,
-                  child: Text(tr(locale, 'watch_ad_clear'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.black)),
+                  child: Text(
+                    tr(locale, 'watch_ad_clear'),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 StoneButton(
                   onTap: onEndGame,
                   width: 230,
                   height: 46,
-                  child: Text(tr(locale, 'end_game'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textOnStone)),
+                  child: Text(
+                    tr(locale, 'end_game'),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1013,12 +1860,174 @@ class _AdPlaceholderOverlay extends StatelessWidget {
             children: [
               const CircularProgressIndicator(color: AppColors.sunsetGold),
               const SizedBox(height: 16),
-              Text(tr(locale, 'ad_playing'), style: const TextStyle(color: AppColors.textLight, fontSize: 16, fontWeight: FontWeight.w700)),
+              Text(
+                tr(locale, 'ad_playing'),
+                style: const TextStyle(
+                  color: AppColors.textLight,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+/// Debug-only entry point (see kDebugMode guard at its call site) for
+/// the collision calibration testbed — a small, unobtrusive wrench FAB
+/// rather than anything styled to match the real HUD, since this never
+/// ships to a real player.
+class _DebugCollisionTestbedButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _DebugCollisionTestbedButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black.withValues(alpha: 0.6),
+          border: Border.all(color: Colors.redAccent, width: 2),
+        ),
+        child: const Icon(Icons.build_rounded, color: Colors.redAccent, size: 20),
+      ),
+    );
+  }
+}
+
+/// The collision calibration testbed's own panel — spawn any ingredient
+/// from any level, shower small probe balls around it, and compare the
+/// real fixture outline (drawn by IngredientBodyComponent.debugShowFixtures)
+/// against its sprite. Debug-only, intentionally plain styling.
+///
+/// The search box exists purely to make driving this via adb (scripted
+/// taps, no real finger) reliable — scrolling a 46-row list and guessing
+/// a row's pixel offset from a screenshot is exactly the kind of thing
+/// that silently taps the row above or below the intended one. Typing the
+/// id and tapping the single filtered match removes that whole class of
+/// mistake, which matters a lot across a 46-ingredient tuning pass.
+class _CollisionTestbedSheet extends StatefulWidget {
+  final void Function(String ingredientId) onSpawn;
+  final void Function({String probeId, int count}) onShower;
+  final VoidCallback onClear;
+  const _CollisionTestbedSheet({
+    required this.onSpawn,
+    required this.onShower,
+    required this.onClear,
+  });
+
+  @override
+  State<_CollisionTestbedSheet> createState() => _CollisionTestbedSheetState();
+}
+
+class _CollisionTestbedSheetState extends State<_CollisionTestbedSheet> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allEntries = _uniqueIngredientsByFirstLevel();
+    final query = _query.trim().toLowerCase();
+    final entries = query.isEmpty
+        ? allEntries
+        : allEntries
+              .where(
+                (e) =>
+                    e.$1.id.toLowerCase().contains(query) ||
+                    e.$1.label.toLowerCase().contains(query),
+              )
+              .toList();
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Collision Testbed',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => widget.onShower(),
+                    child: const Text('Shower probes'),
+                  ),
+                  TextButton(onPressed: widget.onClear, child: const Text('Clear')),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Search id or name…',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  isDense: true,
+                ),
+                onChanged: (v) => setState(() => _query = v),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                children: [
+                  for (final entry in entries)
+                    ListTile(
+                      dense: true,
+                      title: Text(entry.$1.label, style: const TextStyle(color: Colors.white)),
+                      subtitle: Text(
+                        '${entry.$1.id} · tier ${entry.$1.tier} · ${entry.$2}',
+                        style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                      onTap: () => widget.onSpawn(entry.$1.id),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Every ingredient id across all 5 chains, deduped to wherever it
+  /// first appears (same reuse pattern as findIngredientById itself),
+  /// paired with that first-appearance level's name — so the list reads
+  /// as "every ingredient, once" rather than 65 rows with duplicates.
+  static List<(Ingredient, String)> _uniqueIngredientsByFirstLevel() {
+    final seenIds = <String>{};
+    final result = <(Ingredient, String)>[];
+    for (final level in kInfoLevels) {
+      for (final ingredient in level.chain) {
+        if (seenIds.add(ingredient.id)) {
+          result.add((ingredient, level.name));
+        }
+      }
+    }
+    return result;
   }
 }
 
@@ -1043,7 +2052,9 @@ class _CocktailMenuOverlay extends ConsumerWidget {
     final board = ref.watch(gameStateProvider);
     final locale = ref.watch(localeProvider);
     final screenSize = MediaQuery.sizeOf(context);
-    final panelWidth = screenSize.width * 0.88 > 420 ? 420.0 : screenSize.width * 0.88;
+    final panelWidth = screenSize.width * 0.88 > 420
+        ? 420.0
+        : screenSize.width * 0.88;
     final rowWidth = panelWidth - 24;
     final rowHeight = rowWidth / kMenuBoardAspect;
 
@@ -1061,12 +2072,19 @@ class _CocktailMenuOverlay extends ConsumerWidget {
               onTap: () {},
               child: Container(
                 width: panelWidth,
-                constraints: BoxConstraints(maxHeight: screenSize.height * 0.82),
+                constraints: BoxConstraints(
+                  maxHeight: screenSize.height * 0.82,
+                ),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                  border: Border.all(color: SubmenuColors.gold, width: 3),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [SubmenuColors.panelTop, SubmenuColors.panelBottom],
+                  ),
+                  boxShadow: [BoxShadow(color: SubmenuColors.ring, offset: const Offset(0, 8))],
                 ),
                 // clipBehavior: Clip.none so the close button (positioned
                 // just inside the padded corner, not outside it — see the
@@ -1082,20 +2100,34 @@ class _CocktailMenuOverlay extends ConsumerWidget {
                       // separate floating tiles.
                       child: Column(
                         children: [
-                          WoodTitlePlank(title: tr(locale, 'cocktail_menu'), icon: Icons.local_florist_rounded, width: rowWidth, height: rowHeight),
-                          for (final recipe in cocktailRecipesForLevel(board.level))
-                            _MenuListRow(
-                              recipe: recipe,
-                              width: rowWidth,
-                              height: rowHeight,
-                              affordable: board.credits >= recipe.price,
-                              isActive: board.order?.id == recipe.id,
-                              madeBefore: board.completedCocktailIds.contains(recipe.id),
-                              locale: locale,
-                              onBuy: () {
-                                final bought = ref.read(gameStateProvider.notifier).buyCocktail(recipe);
-                                if (bought) onClose();
-                              },
+                          _MenuTitleTile(
+                            title: tr(locale, 'cocktail_menu'),
+                            icon: Icons.local_florist_rounded,
+                            width: rowWidth,
+                            height: rowHeight,
+                          ),
+                          const SizedBox(height: 8),
+                          for (final recipe in cocktailRecipesForLevel(
+                            board.level,
+                          ))
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _MenuListRow(
+                                recipe: recipe,
+                                width: rowWidth,
+                                height: rowHeight,
+                                affordable: board.credits >= recipe.price,
+                                isActive: board.order?.id == recipe.id,
+                                madeBefore: board.completedCocktailIds
+                                    .contains(recipe.id),
+                                locale: locale,
+                                onBuy: () {
+                                  final bought = ref
+                                      .read(gameStateProvider.notifier)
+                                      .buyCocktail(recipe);
+                                  if (bought) onClose();
+                                },
+                              ),
                             ),
                         ],
                       ),
@@ -1111,10 +2143,21 @@ class _CocktailMenuOverlay extends ConsumerWidget {
                           decoration: BoxDecoration(
                             color: AppColors.surface2,
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 6)],
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.25),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                blurRadius: 6,
+                              ),
+                            ],
                           ),
-                          child: const Icon(Icons.close_rounded, color: AppColors.textLight, size: 18),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            color: AppColors.textLight,
+                            size: 18,
+                          ),
                         ),
                       ),
                     ),
@@ -1129,7 +2172,47 @@ class _CocktailMenuOverlay extends ConsumerWidget {
   }
 }
 
+/// The overlay's own title tile — gold-rimmed blue, matching
+/// [_MenuListRow] below it, replacing the old WoodTitlePlank art.
+class _MenuTitleTile extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final double width;
+  final double height;
+  const _MenuTitleTile({required this.title, required this.icon, required this.width, required this.height});
 
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: SubmenuColors.gold, width: 2),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [SubmenuColors.cardTop, SubmenuColors.cardBottom],
+        ),
+        boxShadow: [BoxShadow(color: SubmenuColors.ring, offset: const Offset(0, 3))],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: SubmenuColors.gold, size: height * 0.4),
+          const SizedBox(width: 10),
+          OutlinedLabel(text: title.toUpperCase(), fontSize: height * 0.34, fill: Colors.white, stroke: SubmenuColors.ring, strokeWidth: 3),
+        ],
+      ),
+    );
+  }
+}
+
+/// One cocktail order's own row — a gold-rimmed blue tile (replacing
+/// the old menu_board.png plank art), same "thick" full-height
+/// proportions this screen's rows always used (the earlier app-wide
+/// blue-tile thinning pass never touched the in-game Cocktail Menu).
 class _MenuListRow extends StatelessWidget {
   final CocktailRecipe recipe;
   final double width;
@@ -1158,85 +2241,87 @@ class _MenuListRow extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Opacity(
         opacity: affordable || isActive ? 1.0 : 0.55,
-        child: SizedBox(
+        child: Container(
           width: width,
           height: height,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset('assets/images/menu_board.png', fit: BoxFit.fill),
-              if (isActive)
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.mint, width: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: isActive ? AppColors.mint : SubmenuColors.gold, width: isActive ? 3 : 2),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [SubmenuColors.cardTop, SubmenuColors.cardBottom],
+            ),
+            boxShadow: [BoxShadow(color: SubmenuColors.ring, offset: const Offset(0, 3))],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset(
+                    recipe.assetPath,
+                    width: height * 0.7,
+                    height: height * 0.7,
+                    fit: BoxFit.contain,
+                    // See GlassVisual's matching comment.
+                    cacheWidth: (height * 0.7 * 2.2 * MediaQuery.devicePixelRatioOf(context)).round(),
+                    // Some Level 3 recipes' art hasn't landed yet —
+                    // see cocktails_screen.dart's matching comment.
+                    errorBuilder: (context, error, stackTrace) => Icon(
+                      Icons.local_bar_rounded,
+                      size: height * 0.5,
+                      color: SubmenuColors.textSecondary,
+                    ),
                   ),
                 ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Image.asset(
-                        recipe.assetPath,
-                        width: height * 0.7,
-                        height: height * 0.7,
-                        fit: BoxFit.contain,
-                        // Some Level 3 recipes' art hasn't landed yet —
-                        // see cocktails_screen.dart's matching comment.
-                        errorBuilder: (context, error, stackTrace) => Icon(Icons.local_bar_rounded, size: height * 0.5, color: AppColors.textMuted),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Flexible(
-                            child: ColorfulPlankText(
-                              text: recipe.name,
-                              fontSize: 15,
-                              variant: kPlankTextVariant,
-                              font: kPlankTextFont,
-                              shadowStyle: kPlankShadowStyle,
-                            ),
-                          ),
-                          // This cocktail has been made at least once, but
-                          // (unlike the progress tabs) it stays fully
-                          // buyable — a quiet tick beside the name rather
-                          // than anything that dims/covers the row.
-                          if (madeBefore) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(color: AppColors.mint, shape: BoxShape.circle),
-                              child: const Icon(Icons.check_rounded, size: 12, color: Colors.white),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (isActive)
-                      Text(
-                        tr(locale, 'active'),
-                        style: GoogleFonts.luckiestGuy(
-                          fontSize: 12,
-                          color: AppColors.mint,
-                          shadows: const [Shadow(color: Colors.black45, blurRadius: 2, offset: Offset(0.6, 1))],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          recipe.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: Colors.white),
                         ),
-                      )
-                    else
-                      ColorfulPlankText(
-                        text: '${recipe.price}',
-                        fontSize: 15,
-                        variant: PlankTextVariant.plainWhite,
-                        font: kPlankTextFont,
-                        shadowStyle: kPlankShadowStyle,
                       ),
-                  ],
+                      // This cocktail has been made at least once, but
+                      // (unlike the progress tabs) it stays fully
+                      // buyable — a quiet tick beside the name rather
+                      // than anything that dims/covers the row.
+                      if (madeBefore) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: AppColors.mint,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check_rounded,
+                            size: 12,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                if (isActive)
+                  Text(
+                    tr(locale, 'active').toUpperCase(),
+                    style: const TextStyle(fontFamily: 'Lilita One', fontSize: 13, color: AppColors.mint),
+                  )
+                else
+                  Text(
+                    '${recipe.price}',
+                    style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: SubmenuColors.gold),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1247,45 +2332,49 @@ class _MenuListRow extends StatelessWidget {
 /// Deliberately light dim — per feedback the table/board behind should
 /// stay "quite visible" rather than the old opaque-feeling card overlay,
 /// since the whole point is the player can still see how the game ended.
-/// Redesigned per feedback into a proper stat plaque (score, level,
-/// cocktails made, and this run's own highest evolution reached — see
-/// BoardState.runHighestTier), a "NEW BEST SCORE!" callout when
-/// [BoardState.isNewHighScore] is set, and a single way out: Main Menu.
-/// There's no more Play Again here — restarting in place read as
-/// skipping past what just happened; the plaque's whole point is to let
-/// that sink in before the player decides what's next from the menu.
-/// The "GAME OVER" banner art has its own text baked in, so it needs a
-/// per-language version rather than reading through [tr] — a plain photo
-/// with lettering painted on, same reasoning header_board.png's own art
-/// needed localizing for (if it ever gets text added). Every supported
-/// locale has its own variant now; a future new language would fall
-/// back to the English original here until one lands for it too.
-String _gameOverAssetPathFor(AppLocale locale) => switch (locale) {
-  AppLocale.es => 'assets/images/game_over_esp.png',
-  AppLocale.de => 'assets/images/game_over_ger.png',
-  AppLocale.it => 'assets/images/game_over_ita.png',
-  AppLocale.ja => 'assets/images/game_over_jap.png',
-  AppLocale.ko => 'assets/images/game_over_kor.png',
-  AppLocale.fr => 'assets/images/game_over_fre.png',
-  AppLocale.nl => 'assets/images/game_over_dut.png',
-  AppLocale.pt => 'assets/images/game_over_por.png',
-  AppLocale.en => 'assets/images/game_over.png',
-};
-
+/// A single gold-rimmed navy plaque (score, level, cocktails made, and
+/// this run's own highest evolution reached — see
+/// BoardState.runHighestTier) in the same ribbon-title/inset-row shape
+/// as Settings, replacing the old per-locale "GAME OVER" banner photos
+/// and wood-plank stat rows — this screen reads [tr] for its header
+/// text now instead of needing a baked-text image per language. The
+/// ribbon sits overlapping the panel's own top edge, same as
+/// SubmenuScaffold's screens, rather than floating above it with a gap.
+/// A "NEW BEST SCORE!" callout fills the space between the ribbon and
+/// the stat rows when [BoardState.isNewHighScore] is set; Main Menu —
+/// the single way out, there's no more Play Again here, restarting in
+/// place read as skipping past what just happened — lives inside the
+/// same panel, right under the stats, rather than as its own separate
+/// button below it.
 class _GameOverOverlay extends StatelessWidget {
   final BoardState board;
   final VoidCallback onHome;
   final AppLocale locale;
-  const _GameOverOverlay({required this.board, required this.onHome, required this.locale});
+  const _GameOverOverlay({
+    required this.board,
+    required this.onHome,
+    required this.locale,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    const sideMargin = 36.0;
-    final rowWidth = screenWidth - sideMargin * 2;
-    final rowHeight = (rowWidth / kMenuBoard3Aspect) / 2;
+    final screenSize = MediaQuery.sizeOf(context);
+    final screenWidth = screenSize.width;
+    const sideMargin = 28.0;
+    final panelWidth = screenWidth - sideMargin * 2;
     final chain = evolutionChainForLevel(board.level);
-    final maxEvoIngredient = chain[board.runHighestTier.clamp(0, chain.length - 1)];
+    final maxEvoIngredient =
+        chain[board.runHighestTier.clamp(0, chain.length - 1)];
+    const valueStyle = TextStyle(fontFamily: 'Lilita One', fontSize: 18, color: SubmenuColors.gold);
+    // The live HUD (credits/score pills, the 5 action tiles, the 8-tab
+    // progress row) still shows through this overlay's partial dim —
+    // same math GameScreen.build uses to place that row itself, reused
+    // here so the plaque starts clear of it rather than overlapping, no
+    // matter the screen size.
+    final boardRect = headerBoardRect(screenSize);
+    final progressTabWidth = (screenWidth - 20 - 21) / 8;
+    final progressTabHeight = (progressTabWidth / kEmptyTabAspect) * 1.2;
+    final topClearance = boardRect.top + boardRect.height + 3 + progressTabHeight + 14;
 
     return Positioned.fill(
       child: Container(
@@ -1293,118 +2382,88 @@ class _GameOverOverlay extends StatelessWidget {
         child: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 16),
-              // No dedicated "game complete" banner art yet — reuses the
-              // same plank-text treatment as the "NEW BEST SCORE!" line
-              // below rather than the game_over.png image, which reads
-              // specifically as a loss.
-              if (board.gameCompleted)
-                ColorfulPlankText(
-                  text: tr(locale, 'game_complete_title'),
-                  fontSize: rowHeight * 0.6,
-                  variant: PlankTextVariant.sunsetGradient,
-                  font: kPlankTextFont,
-                  shadowStyle: kPlankShadowStyle,
-                )
-              else
-                Image.asset(_gameOverAssetPathFor(locale), width: screenWidth * 0.68),
-              const SizedBox(height: 10),
-              if (board.isNewHighScore) ...[
-                ColorfulPlankText(
-                  text: tr(locale, 'new_best_score'),
-                  fontSize: rowHeight * 0.5,
-                  variant: PlankTextVariant.sunsetGradient,
-                  font: kPlankTextFont,
-                  shadowStyle: kPlankShadowStyle,
-                ),
-                const SizedBox(height: 10),
-              ],
-              _GameOverStatRow(label: tr(locale, 'score_label'), value: '${board.score}', width: rowWidth, height: rowHeight),
-              _GameOverStatRow(label: tr(locale, 'level'), value: '${board.level}', width: rowWidth, height: rowHeight),
-              _GameOverEvoRow(label: tr(locale, 'max_evo_label'), ingredient: maxEvoIngredient, width: rowWidth, height: rowHeight),
-              _GameOverStatRow(label: tr(locale, 'cocktails_made_label'), value: '${board.cocktailsMade}', width: rowWidth, height: rowHeight),
-              const Spacer(),
-              GestureDetector(
-                onTap: onHome,
-                child: Container(
-                  width: 220,
-                  height: 46,
-                  decoration: BoxDecoration(gradient: AppColors.gradientSunset, borderRadius: BorderRadius.circular(14)),
-                  child: Center(
-                    child: Text(tr(locale, 'main_menu'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.black)),
+              SizedBox(height: topClearance),
+              // The ribbon overlaps the panel's own top edge (which
+              // reserves exactly this much top padding for it — see
+              // SubmenuPanel) instead of sitting above it with a gap,
+              // same "touching" look as every SubmenuScaffold screen's
+              // own title/panel pair — a 24px relative offset between
+              // the two, matching SubmenuScaffold's own ribbonTop/
+              // panelTop spacing.
+              Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.topCenter,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 24),
+                    child: SizedBox(
+                      width: panelWidth,
+                      child: SubmenuPanel(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Reserved space right under the ribbon for
+                            // the "NEW BEST SCORE!" callout — only filled
+                            // when BoardState.isNewHighScore is actually
+                            // set, otherwise the stats start right under
+                            // the ribbon with just the panel's own
+                            // padding.
+                            if (board.isNewHighScore) ...[
+                              OutlinedLabel(
+                                text: tr(locale, 'new_best_score'),
+                                fontSize: 20,
+                                fill: SubmenuColors.gold,
+                                stroke: SubmenuColors.goldEdge,
+                                strokeWidth: 4,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            InsetList(
+                              rows: [
+                                SubmenuRow(
+                                  icon: Icons.star_rounded,
+                                  label: tr(locale, 'score_label'),
+                                  trailing: Text('${board.score}', style: valueStyle),
+                                ),
+                                SubmenuRow(
+                                  icon: Icons.flag_rounded,
+                                  label: tr(locale, 'level'),
+                                  trailing: Text('${board.level}', style: valueStyle),
+                                ),
+                                SubmenuRow(
+                                  icon: Icons.auto_awesome_rounded,
+                                  label: tr(locale, 'max_evo_label'),
+                                  trailing: GlassVisual(ingredient: maxEvoIngredient, size: 34, applyDisplayScale: false),
+                                ),
+                                SubmenuRow(
+                                  icon: Icons.local_bar_rounded,
+                                  label: tr(locale, 'cocktails_made_label'),
+                                  trailing: Text('${board.cocktailsMade}', style: valueStyle),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            StoneButton(
+                              onTap: onHome,
+                              height: 50,
+                              child: Text(
+                                tr(locale, 'main_menu'),
+                                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  RibbonTitle(text: tr(locale, 'game_over')),
+                ],
               ),
               // Clears the table's own front-face Next/Order cards docked
               // at the very bottom (see the Positioned pair above in
               // GameScreen.build) — plain bottom SafeArea padding alone
               // isn't enough since those cards aren't a system inset.
               const SizedBox(height: 110),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// One label/value stat line on the Game Over plaque — same half-height
-/// wood-plank row shape as high_scores_screen.dart's own _ScoreRow.
-class _GameOverStatRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final double width;
-  final double height;
-  const _GameOverStatRow({required this.label, required this.value, required this.width, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 6),
-      child: WoodPlank(
-        width: width,
-        height: height,
-        assetPath: 'assets/images/menu_board_3.png',
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-          child: Row(
-            children: [
-              ColorfulPlankText(text: label, fontSize: height * 0.32, variant: PlankTextVariant.plainWhite, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-              const Spacer(),
-              ColorfulPlankText(text: value, fontSize: height * 0.42, variant: PlankTextVariant.sunsetGradient, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Same shape as [_GameOverStatRow], but the value is this run's highest
-/// evolution reached shown as its real ingredient art (see
-/// BoardState.runHighestTier) rather than plain text.
-class _GameOverEvoRow extends StatelessWidget {
-  final String label;
-  final Ingredient ingredient;
-  final double width;
-  final double height;
-  const _GameOverEvoRow({required this.label, required this.ingredient, required this.width, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 6),
-      child: WoodPlank(
-        width: width,
-        height: height,
-        assetPath: 'assets/images/menu_board_3.png',
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: width * 0.06),
-          child: Row(
-            children: [
-              ColorfulPlankText(text: label, fontSize: height * 0.32, variant: PlankTextVariant.plainWhite, font: kPlankTextFont, shadowStyle: kPlankShadowStyle),
-              const Spacer(),
-              GlassVisual(ingredient: ingredient, size: height * 0.82, applyDisplayScale: false),
             ],
           ),
         ),
