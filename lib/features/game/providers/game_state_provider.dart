@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/cocktail_mode_provider.dart';
 import '../../../core/services/purchase_service.dart';
@@ -323,7 +324,8 @@ class PlacedItem {
   final int tier;
   final double x;
   final double y;
-  const PlacedItem({required this.tier, required this.x, required this.y});
+  final double angle;
+  const PlacedItem({required this.tier, required this.x, required this.y, this.angle = 0});
 }
 
 class GameStateNotifier extends Notifier<BoardState> {
@@ -528,7 +530,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     'continueOfferUsed': s.continueOfferUsed,
     'scoreCreditThresholdsAwarded': s.scoreCreditThresholdsAwarded,
     'placedItems': s.placedItems
-        .map((p) => {'tier': p.tier, 'x': p.x, 'y': p.y})
+        .map((p) => {'tier': p.tier, 'x': p.x, 'y': p.y, 'angle': p.angle})
         .toList(),
     'completedCocktailIds': s.completedCocktailIds.toList(),
     'jugReached': s.jugReached,
@@ -580,9 +582,15 @@ class GameStateNotifier extends Notifier<BoardState> {
         upcoming: (map['upcomingIds'] as List)
             .map((id) => resolveIngredient(id as String))
             .toList(),
+        // An order that isn't on this level's menu can't be made (a
+        // Level 5 run was once handed Level 4's Vodka Lemon starter) —
+        // swap in the level's own starter instead of discarding the save.
         order: orderId == null
             ? null
-            : recipes.firstWhere((r) => r.id == orderId),
+            : recipes.firstWhere(
+                (r) => r.id == orderId,
+                orElse: () => starterCocktailForLevel(level),
+              ),
         cocktailsMade: map['cocktailsMade'] as int,
         score: map['score'] as int,
         gameOver: map['gameOver'] as bool,
@@ -607,6 +615,7 @@ class GameStateNotifier extends Notifier<BoardState> {
                 tier: p['tier'] as int,
                 x: (p['x'] as num).toDouble(),
                 y: (p['y'] as num).toDouble(),
+                angle: (p['angle'] as num?)?.toDouble() ?? 0,
               ),
             )
             .toList(),
@@ -803,6 +812,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     // this cocktail even though the player already saw it ticked off and
     // paid for in-game. Confirmed as the exact shape of a real report.
     _persistMixedCocktail(recipe.id);
+    analyticsService.cocktailMade(cocktailId: recipe.id, level: state.level);
     _addScore(scoreForCocktail(recipe));
     _checkLevelUp();
   }
@@ -878,6 +888,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     final chainLastTier = evolutionChainForLevel(level).last.tier;
     if (!state.jugReached && tier == chainLastTier) {
       state = state.copyWith(jugReached: true);
+      analyticsService.finalItemReached(level: state.level);
       _checkLevelUp();
     }
   }
@@ -902,6 +913,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     if (!cocktailModeEnabled ||
         state.completedCocktailIds.length >= recipeCount) {
       state = state.copyWith(level: state.level + 1);
+      analyticsService.levelUp(state.level);
     }
   }
 
@@ -1049,6 +1061,7 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// through (i.e. there were enough credits).
   bool buyCocktail(CocktailRecipe recipe) {
     if (!spendCredits(recipe.price)) return false;
+    analyticsService.spendCoins(item: 'cocktail_order', amount: recipe.price);
     state = state.copyWith(order: recipe);
     return true;
   }
@@ -1056,6 +1069,7 @@ class GameStateNotifier extends Notifier<BoardState> {
   void registerGameOver() {
     if (state.gameOver) return;
     state = state.copyWith(gameOver: true);
+    analyticsService.gameOver(level: state.level, score: state.score);
     // Only record once the once-per-game continue offer is no longer in
     // play — the first time a run hits the table-full line,
     // continueOfferUsed is still false and GameScreen is about to show
@@ -1087,6 +1101,7 @@ class GameStateNotifier extends Notifier<BoardState> {
       gameCompleted: true,
       continueOfferUsed: true,
     );
+    analyticsService.gameComplete(score: state.score);
     _finalizeScore();
   }
 

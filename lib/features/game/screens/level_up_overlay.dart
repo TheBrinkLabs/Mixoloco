@@ -117,7 +117,9 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
               fit: BoxFit.cover,
               alignment: Alignment.topCenter,
               // See BarBackdrop's matching comment.
-              cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round(),
+              cacheWidth: MediaQuery.sizeOf(context).width > 0
+                  ? (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round()
+                  : null,
             ),
           Container(color: Colors.black.withValues(alpha: _step == _Step.ready ? 0.35 : 0.75)),
           Center(

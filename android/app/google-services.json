@@ -30,6 +30,14 @@
           }
         },
         {
+          "client_id": "727783490936-gnh1hh9i9lrcp2oec9ko9en2rdglq5e0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.brinklabs.mixoloco",
+            "certificate_hash": "80e865395d913076310b5d7aea5049d1bdb8fc3a"
+          }
+        },
+        {
           "client_id": "727783490936-behtcegpukusknibes1p8n4ghm155aeh.apps.googleusercontent.com",
           "client_type": 3
         }

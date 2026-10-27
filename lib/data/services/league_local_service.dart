@@ -1,6 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kNicknameKey = 'league_nickname';
+
+/// Live mirror of the saved nickname, so screens already showing it (the
+/// Settings row) update when a sign-in restores it from the account.
+final nicknameNotifier = ValueNotifier<String?>(null);
 const _kLastClaimedWeekIdKey = 'league_last_claimed_week_id';
 
 /// The player's league nickname, cached locally so the app can tell
@@ -9,12 +14,15 @@ const _kLastClaimedWeekIdKey = 'league_last_claimed_week_id';
 /// once set is players/{uid}.nickname — this is purely a local mirror.
 Future<String?> loadNickname() async {
   final prefs = await SharedPreferences.getInstance();
-  return prefs.getString(_kNicknameKey);
+  final value = prefs.getString(_kNicknameKey);
+  nicknameNotifier.value = value;
+  return value;
 }
 
 Future<void> saveNickname(String nickname) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(_kNicknameKey, nickname);
+  nicknameNotifier.value = nickname;
 }
 
 /// The most recent weekId whose weekHistory credit reward (see

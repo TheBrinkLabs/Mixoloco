@@ -1,8 +1,11 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flame_audio/flame_audio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/services/ad_consent.dart';
+import 'core/services/analytics_service.dart';
 import 'core/services/aluna_availability_service.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/firebase_bootstrap.dart';
@@ -45,7 +48,28 @@ void main() {
 
 Future<void> _initFirebaseAndAuth() async {
   await initFirebase();
+  if (firebaseAvailable) {
+    // Debug builds never report — crashes there are ours, not players'.
+    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
+    // Framework errors (a failed image load, a layout overflow) don't
+    // kill the app — report them as non-fatal so crash-free stats stay
+    // honest; uncaught async errors below are the genuinely fatal ones.
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+    // The consent screen may have answered before Firebase was ready.
+    if (await AdConsentService.hasSeenAdConsent()) {
+      await analyticsService.applyAdConsent(await AdConsentService.isGranted());
+    }
+  }
   await authService.ensureSignedIn();
+  analyticsService.setUserId(authService.uid);
+  if (firebaseAvailable) {
+    final uid = authService.uid;
+    if (uid != null) await FirebaseCrashlytics.instance.setUserIdentifier(uid);
+  }
 }
 
 class MixolocoApp extends StatefulWidget {

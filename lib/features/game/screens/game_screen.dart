@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show ValueListenable, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/strings.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../core/services/ad_service.dart';
 import '../../../core/services/audio_settings_provider.dart';
 import '../../../core/services/cocktail_mode_provider.dart';
@@ -163,6 +164,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   void _useCherryBomb() {
     if (ref.read(gameStateProvider.notifier).spendCredits(kCherryBombCost)) {
+      analyticsService.spendCoins(item: 'bomb', amount: kCherryBombCost);
       _game.cherryBomb();
     }
   }
@@ -187,6 +189,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   void _useShaker() {
     if (ref.read(gameStateProvider.notifier).spendCredits(kShakerCost)) {
+      analyticsService.spendCoins(item: 'shake', amount: kShakerCost);
       _game.shakeTable();
       _tableShakeSignal.value++;
     }
@@ -194,6 +197,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   void _useMegaShaker() {
     if (ref.read(gameStateProvider.notifier).spendCredits(kMegaShakeCost)) {
+      analyticsService.spendCoins(item: 'mega_shake', amount: kMegaShakeCost);
       _game.megaShakeTable();
       _tableShakeSignal.value++;
     }
@@ -201,6 +205,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   void _useMiniShots() {
     if (ref.read(gameStateProvider.notifier).spendCredits(kMiniShotsCost)) {
+      analyticsService.spendCoins(item: 'slam_mini_shots', amount: kMiniShotsCost);
       _game.clearMiniShots();
     }
   }

@@ -397,8 +397,10 @@ List<CocktailRecipe> cocktailRecipesForLevel(int level) => level >= 5
 
 /// The free starter order for a fresh run at [level] — see
 /// [cocktailRecipesForLevel].
-CocktailRecipe starterCocktailForLevel(int level) => level >= 4
-    ? kStarterCocktailLevel4
-    : (level >= 3
-          ? kStarterCocktailLevel3
-          : (level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail));
+CocktailRecipe starterCocktailForLevel(int level) => level >= 5
+    ? kStarterCocktailLevel5
+    : (level >= 4
+          ? kStarterCocktailLevel4
+          : (level >= 3
+                ? kStarterCocktailLevel3
+                : (level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail)));

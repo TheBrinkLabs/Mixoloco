@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../data/repositories/league_repository.dart';
 import '../../data/services/high_scores_service.dart';
+import '../../data/services/league_local_service.dart';
 import '../../data/services/progression_service.dart';
 
 /// Reconciles this player's local lifetime progress (credits, evolution
@@ -152,6 +153,15 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
   // was just pushed — marks the point future syncs compare the
   // server's own updatedAt against.
   await saveLastProgressSyncAt(DateTime.now());
+
+  // The nickname lives on players/{uid}, not in the progress snapshot —
+  // the account's own name wins over whatever this device had (a fresh
+  // install, or an anonymous fallback name). Never creates the player
+  // document here: that would enrol this account in the league.
+  final remoteNickname = (await leagueRepo.getPlayer(uid)).data()?['nickname'] as String?;
+  if (remoteNickname != null && remoteNickname.isNotEmpty && remoteNickname != await loadNickname()) {
+    await saveNickname(remoteNickname);
+  }
 
   return changed ? ProgressSyncOutcome.changed : ProgressSyncOutcome.unchanged;
 }

@@ -1,6 +1,9 @@
+import 'dart:async' show unawaited;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'analytics_service.dart';
 import 'firebase_bootstrap.dart';
 
 /// Wraps Firebase Anonymous Auth (the baseline identity every player gets,
@@ -87,6 +90,18 @@ class AuthService {
   /// much longer than the others since that step waits on a real human
   /// picking an account, not just a network round-trip.
   Future<GoogleLinkResult> linkGoogle() async {
+    final result = await _linkGoogle();
+    // Restoring an older linked account switches uid — keep analytics
+    // and crash reports attributed to the account actually in use.
+    analyticsService.setUserId(uid);
+    final current = uid;
+    if (current != null) {
+      unawaited(FirebaseCrashlytics.instance.setUserIdentifier(current));
+    }
+    return result;
+  }
+
+  Future<GoogleLinkResult> _linkGoogle() async {
     await _ensureGoogleInitialized();
     final account = await GoogleSignIn.instance.authenticate().timeout(_pickerTimeout);
     final idToken = account.authentication.idToken;

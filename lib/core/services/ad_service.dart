@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:unity_levelplay_mediation/unity_levelplay_mediation.dart';
+import 'analytics_service.dart';
 
 /// Rewarded ad "slot" — both share the one underlying ad unit/instance;
 /// this only exists so call sites keep expressing which feature is
@@ -57,7 +58,9 @@ class AdService implements LevelPlayInitListener {
   // requests.
   Future<void> initialize({required bool consentGranted}) async {
     await _applyConsent(consentGranted);
+    await analyticsService.applyAdConsent(consentGranted);
     if (_isLevelPlayInitialized) return;
+    analyticsService.attachToLevelPlay();
     await _initLevelPlay();
   }
 

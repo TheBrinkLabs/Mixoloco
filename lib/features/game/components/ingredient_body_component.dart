@@ -29,6 +29,7 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
     required this.tier,
     required this.ingredient,
     required Vector2 spawnPosition,
+    this.spawnAngle = 0,
     required this.radius,
     Vector2? initialVelocity,
     double? throwTargetFarX,
@@ -79,6 +80,9 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
   /// upright and clear of the table edges, so its outline can be judged
   /// against the sprite without it toppling or sliding to the far wall.
   final bool debugPinned;
+
+  /// Initial rotation — a restored table puts tipped items back as they were.
+  final double spawnAngle;
 
   final int tier;
   final Ingredient ingredient;
@@ -186,6 +190,7 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
   Body createBody() {
     final bodyDef = BodyDef(
       position: _spawnPosition,
+      rotation: Rot.fromAngle(spawnAngle),
       type: debugPinned ? BodyType.static : BodyType.dynamic,
       userData: this,
       linearVelocity: _initialVelocity,
@@ -210,6 +215,163 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
     return b;
   }
 
+  double _shapeMultiplier = 1.0;
+  List<List<Vector2>>? _localPieces;
+
+  /// This body's collision shapes as convex polygons in world space
+  /// (circles as 12-gons) — mirrors [_createShapes] exactly, so overlap
+  /// checks see the same geometry Box2D does.
+  List<List<Vector2>> worldCollisionPieces() {
+    final local = _localPieces ??= _buildLocalPieces(_shapeMultiplier);
+    final t = body.transform;
+    final c = t.rotation.cos, s = t.rotation.sin, p = t.position;
+    return [
+      for (final piece in local)
+        [for (final v in piece) Vector2(p.x + c * v.x - s * v.y, p.y + s * v.x + c * v.y)],
+    ];
+  }
+
+  List<List<Vector2>> _buildLocalPieces(double m) {
+    final r = radius * m;
+    List<Vector2> circle(double cx, double cy, double cr) => [
+          for (var i = 0; i < 12; i++)
+            Vector2(cx + cr * cos(2 * pi * i / 12), cy + cr * sin(2 * pi * i / 12)),
+        ];
+    final pieces = <List<Vector2>>[];
+    final capsule = ingredient.collisionCapsule;
+    final profile = ingredient.collisionProfile;
+    if (capsule != null) {
+      final hl = r * capsule.halfLength, oy = r * capsule.offsetY, cr = r * capsule.radius;
+      pieces.add(_hull([
+        ...circle(0, oy - hl, cr),
+        ...circle(0, oy + hl, cr),
+      ]));
+    } else if (profile == null || profile.isEmpty) {
+      pieces.add(circle(0, 0, r));
+    } else {
+      for (final c in profile) {
+        switch (c) {
+          case CollisionCircle():
+            pieces.add(circle(r * c.offsetX, r * c.offsetY, r * c.radius));
+          case CollisionEllipse():
+            pieces.add([
+              for (var i = 0; i < 8; i++)
+                Vector2(
+                  r * c.offsetX + r * c.radiusX * cos(2 * pi * i / 8),
+                  r * c.offsetY + r * c.radiusY * sin(2 * pi * i / 8),
+                ),
+            ]);
+          case CollisionPolygon():
+            final hull = _hull([for (final p in c.points) Vector2(r * p.$1, r * p.$2)]);
+            if (hull.length >= 3) pieces.add(hull);
+        }
+      }
+    }
+    for (final c in ingredient.extraCircles ?? const <CollisionCircle>[]) {
+      pieces.add(circle(r * c.offsetX, r * c.offsetY, r * c.radius));
+    }
+    return pieces;
+  }
+
+  /// Monotone-chain convex hull, counter-clockwise.
+  static List<Vector2> _hull(List<Vector2> pts) {
+    final p = [...pts]..sort((a, b) => a.x != b.x ? a.x.compareTo(b.x) : a.y.compareTo(b.y));
+    if (p.length < 3) return p;
+    double cross(Vector2 o, Vector2 a, Vector2 b) =>
+        (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    final lower = <Vector2>[], upper = <Vector2>[];
+    for (final v in p) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower.last, v) <= 0) {
+        lower.removeLast();
+      }
+      lower.add(v);
+    }
+    for (final v in p.reversed) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper.last, v) <= 0) {
+        upper.removeLast();
+      }
+      upper.add(v);
+    }
+    return [...lower..removeLast(), ...upper..removeLast()];
+  }
+
+  /// Deepest separating-axis penetration between any piece of [a] and any
+  /// piece of [b] (0 when nothing overlaps).
+  static double penetrationDepth(List<List<Vector2>> a, List<List<Vector2>> b) {
+    var deepest = 0.0;
+    for (final pa in a) {
+      for (final pb in b) {
+        final d = _satDepth(pa, pb);
+        if (d > deepest) deepest = d;
+      }
+    }
+    return deepest;
+  }
+
+  /// Smallest distance between any piece of [a] and any piece of [b];
+  /// 0 when they overlap.
+  static double gapBetween(List<List<Vector2>> a, List<List<Vector2>> b) {
+    var best = double.infinity;
+    for (final pa in a) {
+      for (final pb in b) {
+        if (_satDepth(pa, pb) > 0) return 0;
+        final d = _polygonDistance(pa, pb);
+        if (d < best) best = d;
+      }
+    }
+    return best;
+  }
+
+  static double _polygonDistance(List<Vector2> a, List<Vector2> b) {
+    double pointSeg(Vector2 p, Vector2 s0, Vector2 s1) {
+      final dx = s1.x - s0.x, dy = s1.y - s0.y;
+      final l2 = dx * dx + dy * dy;
+      var t = l2 == 0 ? 0.0 : ((p.x - s0.x) * dx + (p.y - s0.y) * dy) / l2;
+      t = t < 0 ? 0 : (t > 1 ? 1 : t);
+      final ex = s0.x + t * dx - p.x, ey = s0.y + t * dy - p.y;
+      return sqrt(ex * ex + ey * ey);
+    }
+
+    var best = double.infinity;
+    for (final (from, to) in [(a, b), (b, a)]) {
+      for (final p in from) {
+        for (var i = 0; i < to.length; i++) {
+          final d = pointSeg(p, to[i], to[(i + 1) % to.length]);
+          if (d < best) best = d;
+        }
+      }
+    }
+    return best;
+  }
+
+  static double _satDepth(List<Vector2> a, List<Vector2> b) {
+    var minOverlap = double.infinity;
+    for (final poly in [a, b]) {
+      for (var i = 0; i < poly.length; i++) {
+        final e = poly[(i + 1) % poly.length] - poly[i];
+        final len = e.length;
+        if (len < 1e-9) continue;
+        final nx = -e.y / len, ny = e.x / len;
+        var minA = double.infinity, maxA = -double.infinity;
+        var minB = double.infinity, maxB = -double.infinity;
+        for (final v in a) {
+          final d = v.x * nx + v.y * ny;
+          if (d < minA) minA = d;
+          if (d > maxA) maxA = d;
+        }
+        for (final v in b) {
+          final d = v.x * nx + v.y * ny;
+          if (d < minB) minB = d;
+          if (d > maxB) maxB = d;
+        }
+        final o = (maxA < maxB ? maxA : maxB) - (minA > minB ? minA : minB);
+        if (o <= 0) return 0;
+        if (o < minOverlap) minOverlap = o;
+      }
+    }
+    return minOverlap == double.infinity ? 0 : minOverlap;
+  }
+
   /// Creates this body's collision shape(s) at `radius * multiplier`,
   /// appending to [_currentShapes] — a capsule when
   /// [Ingredient.collisionCapsule] is set (a simple cylinder glass), a
@@ -219,6 +381,8 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
   /// [Ingredient.extraCircles] entry for a protruding appendage (tonic's
   /// straw) that isn't part of the glass's own main-body shape.
   void _createShapes(Body b, double multiplier) {
+    _shapeMultiplier = multiplier;
+    _localPieces = null;
     final capsule = ingredient.collisionCapsule;
     final profile = ingredient.collisionProfile;
     if (capsule != null) {

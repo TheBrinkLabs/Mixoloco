@@ -262,23 +262,35 @@ class _NicknameRow extends ConsumerStatefulWidget {
 }
 
 class _NicknameRowState extends ConsumerState<_NicknameRow> {
-  String? _nickname;
+  String? _nickname = nicknameNotifier.value;
+
+  void _onNicknameChanged() {
+    if (mounted) setState(() => _nickname = nicknameNotifier.value);
+  }
 
   @override
   void initState() {
     super.initState();
-    loadNickname().then((value) {
-      if (mounted) setState(() => _nickname = value);
-    });
+    // A Google sign-in on this same screen restores the account's
+    // nickname via syncProgress — follow it rather than reading once.
+    nicknameNotifier.addListener(_onNicknameChanged);
+    loadNickname();
+  }
+
+  @override
+  void dispose() {
+    nicknameNotifier.removeListener(_onNicknameChanged);
+    super.dispose();
   }
 
   Future<void> _edit() async {
-    final controller = TextEditingController(text: _nickname ?? generateFallbackNickname());
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => _NicknameEditDialog(locale: widget.locale, controller: controller),
+      builder: (context) => _NicknameEditDialog(
+        locale: widget.locale,
+        initialText: _nickname ?? generateFallbackNickname(),
+      ),
     );
-    controller.dispose();
     if (result == null || !mounted) return;
 
     try {
@@ -323,18 +335,28 @@ class _NicknameRowState extends ConsumerState<_NicknameRow> {
 /// rebuilding the whole Settings screen underneath it.
 class _NicknameEditDialog extends StatefulWidget {
   final AppLocale locale;
-  final TextEditingController controller;
-  const _NicknameEditDialog({required this.locale, required this.controller});
+  final String initialText;
+  const _NicknameEditDialog({required this.locale, required this.initialText});
 
   @override
   State<_NicknameEditDialog> createState() => _NicknameEditDialogState();
 }
 
 class _NicknameEditDialogState extends State<_NicknameEditDialog> {
+  // Owned here, not by the caller: the dialog's closing animation keeps
+  // rebuilding the TextField after showDialog returns, so the controller
+  // must outlive that — disposing it in the caller crashed the field.
+  late final TextEditingController _controller = TextEditingController(text: widget.initialText);
   String? _error;
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   void _submit() {
-    final value = widget.controller.text.trim();
+    final value = _controller.text.trim();
     if (value.isEmpty) {
       setState(() => _error = tr(widget.locale, 'edit_nickname_empty_error'));
       return;
@@ -357,7 +379,7 @@ class _NicknameEditDialogState extends State<_NicknameEditDialog> {
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: widget.controller,
+              controller: _controller,
               maxLength: 20,
               autofocus: true,
               textAlign: TextAlign.center,

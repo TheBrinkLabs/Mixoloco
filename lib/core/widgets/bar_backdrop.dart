@@ -240,6 +240,9 @@ class BarBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The very first frame can report a zero-width window on Android;
+    // a cacheWidth of 0 is an assertion failure, so decode unscaled then.
+    final decodeWidth = (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round();
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -252,7 +255,7 @@ class BarBackdrop extends StatelessWidget {
           // vertically) — decoding at full resolution wastes several
           // times the pixels this ever actually renders. See
           // GlassVisual's matching comment.
-          cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round(),
+          cacheWidth: decodeWidth > 0 ? decodeWidth : null,
         ),
         if (showTable)
           _TableImage(
@@ -452,7 +455,7 @@ class _TableImageState extends State<_TableImage>
       fit: BoxFit.fill,
       // See BarBackdrop's matching comment — this table only ever
       // renders at displayWidth, well under the source art's own size.
-      cacheWidth: (displayWidth * MediaQuery.devicePixelRatioOf(context)).round(),
+      cacheWidth: displayWidth > 0 ? (displayWidth * MediaQuery.devicePixelRatioOf(context)).round() : null,
     );
     final filter = colorFilterForTableFinish(finish);
     if (filter == null) return image;

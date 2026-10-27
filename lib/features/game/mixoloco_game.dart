@@ -279,6 +279,8 @@ class MixolocoGame extends Forge2DGame {
     final clampedDt = dt > kMaxPhysicsStepSeconds ? kMaxPhysicsStepSeconds : dt;
     super.update(clampedDt);
     _purgeCorruptedBodies();
+    _resolvePops(clampedDt);
+    _unstickContacts(clampedDt);
     _sweepTimer -= clampedDt;
     if (_sweepTimer <= 0) {
       _sweepTimer = _sweepInterval;
@@ -329,15 +331,11 @@ class MixolocoGame extends Forge2DGame {
     }
   }
 
-  /// A safety net alongside beginContact-triggered merging: two same-tier
-  /// items resting near a third item (rather than directly against each
-  /// other) can end up close enough to visually read as touching —
-  /// especially since items are drawn at [kIngredientVisualPad] their
-  /// true physics size to close the touching-items gap — without Box2D
-  /// ever firing a contact event between that specific pair. This sweep
-  /// catches that: same tolerance as the visual padding, so a merge
-  /// fires whenever the art actually looks like it's touching, not only
-  /// when the (smaller) physics circles are exactly touching.
+  /// A safety net alongside beginContact-triggered merging: a same-tier
+  /// pair can come to rest touching without Box2D firing a fresh begin
+  /// event (e.g. one was rejected earlier while still a few mm apart).
+  /// A cheap bounding-radius prefilter here; _tryMerge then requires the
+  /// real shapes to actually be touching.
   ///
   /// A body added to [_liveBodies] this same frame may not be mounted
   /// yet — Flame mounts newly-added components on the *next* tick, not
@@ -376,9 +374,8 @@ class MixolocoGame extends Forge2DGame {
         for (var j = i + 1; j < group.length; j++) {
           final b = group[j];
           if (b.consumed) continue;
-          final threshold =
-              (a.contactRadius + b.contactRadius) * kIngredientVisualPad;
-          if (a.body.position.distanceTo(b.body.position) <= threshold) {
+          final reach = a.contactRadius + b.contactRadius + _mergeTouchTolerance;
+          if (a.body.position.distanceTo(b.body.position) <= reach) {
             _tryMerge(a, b);
             if (a.consumed) break;
           }
@@ -527,7 +524,7 @@ class MixolocoGame extends Forge2DGame {
     if (!_initialItemsSpawned) {
       _initialItemsSpawned = true;
       for (final item in initialItems) {
-        _spawnBody(tier: item.tier, position: Vector2(item.x, item.y));
+        _spawnBody(tier: item.tier, position: Vector2(item.x, item.y), angle: item.angle);
       }
     }
   }
@@ -622,6 +619,7 @@ class MixolocoGame extends Forge2DGame {
     required Vector2 position,
     Vector2? velocity,
     double? throwTargetFarX,
+    double angle = 0,
   }) {
     final ingredient = _chain[tier];
     final radius = _radiusForTier(tier, ingredient);
@@ -642,6 +640,7 @@ class MixolocoGame extends Forge2DGame {
       tier: tier,
       ingredient: ingredient,
       spawnPosition: position + jitter,
+      spawnAngle: angle,
       radius: radius,
       initialVelocity: velocity,
       throwTargetFarX: throwTargetFarX,
@@ -725,8 +724,102 @@ class MixolocoGame extends Forge2DGame {
     }
   }
 
+  /// A merge result spawns at full size where two smaller items were, so
+  /// it can land deep inside a neighbour. Box2D can't untangle that with
+  /// traced profiles: stacked slice pairs resolve along their thin
+  /// vertical axis in opposite directions and cancel, leaving the items
+  /// stuck overlapping. For a short window after each merge, anything
+  /// genuinely penetrating the new item is nudged straight out along the
+  /// line between their centres until it's clear.
+  final Map<IngredientBodyComponent, double> _pops = {};
+  static const _popDuration = 0.6;
+  static const _popSlop = 0.004;
+  static const _popMaxStep = 0.06;
+
+  void _startPop(IngredientBodyComponent body) => _pops[body] = _popDuration;
+
+  /// The same stuck-overlap problem as merge pops can arise from anything
+  /// that puts two items deep inside each other — Mega-Shake regrowing
+  /// everything at once, a fast throw, a restored table — so every
+  /// touching pair (Box2D's own contact list, via _adjacency) is checked a
+  /// few times a second and pushed apart if genuinely interpenetrating.
+  static const _unstickInterval = 0.1;
+  static const _unstickSlop = 0.01;
+  double _unstickTimer = 0;
+
+  void _unstickContacts(double dt) {
+    _unstickTimer -= dt;
+    if (_unstickTimer > 0) return;
+    _unstickTimer = _unstickInterval;
+    final seen = <IngredientBodyComponent>{};
+    for (final entry in _adjacency.entries) {
+      final a = entry.key;
+      if (a.consumed || !a.isMounted) continue;
+      seen.add(a);
+      for (final b in entry.value) {
+        if (seen.contains(b) || b.consumed || !b.isMounted) continue;
+        final depth = IngredientBodyComponent.penetrationDepth(
+          a.worldCollisionPieces(),
+          b.worldCollisionPieces(),
+        );
+        if (depth <= _unstickSlop) continue;
+        _separate(a, b, depth, aShare: 0.5);
+      }
+    }
+  }
+
+  /// Moves [b] away from [a] (and [a] back by its share) along the line
+  /// between their centres, by up to [_popMaxStep] per call.
+  void _separate(
+    IngredientBodyComponent a,
+    IngredientBodyComponent b,
+    double depth, {
+    required double aShare,
+  }) {
+    final aPos = a.body.position, bPos = b.body.position;
+    var dir = bPos - aPos;
+    if (dir.length2 < 1e-8) {
+      final t = _random.nextDouble() * pi * 2;
+      dir = Vector2(cos(t), sin(t));
+    }
+    dir.normalize();
+    final step = depth < _popMaxStep ? depth : _popMaxStep;
+    b.body.setTransform(bPos + dir * (step * (1 - aShare)), b.body.rotation);
+    a.body.setTransform(aPos - dir * (step * aShare), a.body.rotation);
+    a.body.isAwake = true;
+    b.body.isAwake = true;
+  }
+
+  void _resolvePops(double dt) {
+    if (_pops.isEmpty) return;
+    for (final p in List.of(_pops.keys)) {
+      if (!p.isMounted) continue;
+      final remaining = _pops[p]! - dt;
+      if (remaining <= 0 || p.consumed) {
+        _pops.remove(p);
+        continue;
+      }
+      _pops[p] = remaining;
+      final pPieces = p.worldCollisionPieces();
+      final pPos = p.body.position;
+      for (final o in _liveBodies) {
+        if (identical(o, p) || o.consumed || !o.isMounted) continue;
+        final oPos = o.body.position;
+        final reach = p.contactRadius + o.contactRadius;
+        if ((oPos - pPos).length2 > reach * reach) continue;
+        final depth = IngredientBodyComponent.penetrationDepth(
+          pPieces,
+          o.worldCollisionPieces(),
+        );
+        if (depth <= _popSlop) continue;
+        _separate(p, o, depth, aShare: 0.3);
+      }
+    }
+  }
+
   void _removeBody(IngredientBodyComponent c) {
     _liveBodies.remove(c);
+    _pops.remove(c);
     // Only touch c's own recorded neighbors, not every entry in
     // _adjacency — this used to scan the whole map on every single
     // removal (every merge removes two bodies), which is O(bodies on the
@@ -772,9 +865,26 @@ class MixolocoGame extends Forge2DGame {
     _cocktailCheckDirty = true;
   }
 
+  /// How close (metres, ~2-3px on screen) two same-tier items' real
+  /// collision shapes must be to merge. Box2D reports contacts up to its
+  /// ~2cm speculative distance early, and the sweep's bounding-radius
+  /// prefilter is looser still, so both paths are gated on the exact gap.
+  static const _mergeTouchTolerance = 0.01;
+
   void _tryMerge(IngredientBodyComponent a, IngredientBodyComponent b) {
     if (a.consumed || b.consumed) return;
     if (a.tier != b.tier) return;
+    if (!a.isMounted || !b.isMounted) return;
+    final gap = IngredientBodyComponent.gapBetween(
+      a.worldCollisionPieces(),
+      b.worldCollisionPieces(),
+    );
+    if (gap > _mergeTouchTolerance) {
+      // A near miss can still close up as things settle, after which no
+      // new contact event fires — keep the sweep re-checking it.
+      if (gap < _mergeTouchTolerance * 4) _bodiesChangedSinceSweep = true;
+      return;
+    }
     final nextTier = a.tier + 1;
     final chainExhausted = nextTier >= _chain.length;
     // Every level before the last one treats its own capstone tier as a
@@ -816,7 +926,7 @@ class MixolocoGame extends Forge2DGame {
           center: center,
           cocktailAssetPath: _chain[nextTier].assetPath ?? '',
           onComplete: () {
-            _spawnBody(tier: nextTier, position: center);
+            _startPop(_spawnBody(tier: nextTier, position: center));
             _activeAnimations--;
           },
         ),
@@ -835,7 +945,7 @@ class MixolocoGame extends Forge2DGame {
         ingredient: ingredient,
         onSpawnReady: chainExhausted
             ? () {}
-            : () => _spawnBody(tier: nextTier, position: midpoint),
+            : () => _startPop(_spawnBody(tier: nextTier, position: midpoint)),
         onFinished: () => _activeAnimations--,
       ),
     );
@@ -957,7 +1067,7 @@ class MixolocoGame extends Forge2DGame {
   List<PlacedItem> capturePlacedItems() => [
     for (final b in _liveBodies)
       if (!b.consumed && b.isMounted)
-        PlacedItem(tier: b.tier, x: b.body.position.x, y: b.body.position.y),
+        PlacedItem(tier: b.tier, x: b.body.position.x, y: b.body.position.y, angle: b.body.angle),
   ];
 
   /// Wipes the table for a fresh run — everything except the staging
@@ -973,6 +1083,7 @@ class MixolocoGame extends Forge2DGame {
       }
     }
     _liveBodies.clear();
+    _pops.clear();
     _adjacency.clear();
     _gameOverTriggered = false;
     _gameCompleteTriggered = false;

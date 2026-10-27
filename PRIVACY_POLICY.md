@@ -1,6 +1,6 @@
 # Privacy Policy for Mixoloco
 
-**Last updated:** [DATE]
+**Last updated:** 27 October 2026
 
 BrinkLabs ("we," "us," or "our") developed Mixoloco (the "App"), a cocktail-mixing puzzle game for Android. This Privacy Policy explains what information the App collects, how it's used, and the choices you have.
 
@@ -30,6 +30,15 @@ Mixoloco shows ads (banner, occasional full-screen, and rewarded-video ads you c
 
 The first time you open the App, we ask whether you're comfortable with ads being used to give you a more relevant experience. Your choice is saved on your device and applied to how our advertising partners personalize ads for you; it does not disable ads outright, and you can still choose to watch a rewarded ad at any time for bonus credits.
 
+### App usage, performance and crash data
+To understand how the game is played and to find and fix problems, the App uses **Google Firebase Analytics** and **Firebase Crashlytics**. These collect:
+- **Gameplay events**, such as levels reached, cocktails made, power-ups used, games completed or ended, and in-app purchases made.
+- **Ad revenue events** — which ad network showed an ad, the ad format, and the revenue it earned — so we can measure how advertising performs.
+- **Crash reports and diagnostics** — technical details about errors and crashes (such as the error, the app version, and the device model and Android version) along with your anonymous account ID, so we can reproduce and fix them.
+- **Device identifiers** (an app instance ID and, where permitted, your advertising ID) and general device information.
+
+This data is not used to identify you personally. Analytics always runs, but whether it may be used for advertising and ad personalization follows the ad choice you make when you first open the App.
+
 ### What stays on your device only
 Your sound/music settings, ad-consent choice, local high-score cache, and saved game state are stored locally on your device and are never transmitted to us unless you enable Google Backup.
 
@@ -40,6 +49,8 @@ We use the information above to:
 - Operate the weekly league/leaderboard and keep it fair (duplicate-account detection)
 - Process in-app purchases through Google Play
 - Show and personalize advertising, in line with your consent choice
+- Understand how the game is played and measure advertising performance (analytics)
+- Detect, diagnose and fix crashes and bugs
 - Maintain and improve the App
 
 We do not sell your personal information, and we do not use it for any purpose beyond operating and improving Mixoloco.
@@ -51,6 +62,8 @@ Mixoloco uses the following third-party services, each of which may collect info
 | Service | Purpose |
 |---|---|
 | Google Firebase (Authentication, Cloud Firestore) | Account creation, cloud save/sync of progress and league data |
+| Google Firebase Analytics | Gameplay and ad-revenue analytics |
+| Firebase Crashlytics | Crash and error reporting |
 | Google Sign-In | Optional account linking for backup/restore |
 | Google Play Billing | Processing in-app purchases |
 | Unity LevelPlay (mediating Unity Ads, Vungle/Liftoff, Meta Audience Network) | Displaying advertising |
@@ -61,7 +74,7 @@ Mixoloco is not directed at children under 13, and we do not knowingly collect p
 
 ## 5. Data Retention and Deletion
 
-We retain your account and gameplay data for as long as your account is active, so your progress remains available. If you'd like your account and associated data deleted, email us at **[SUPPORT EMAIL]** with your in-game nickname, and we will delete your data within 30 days.
+We retain your account and gameplay data for as long as your account is active, so your progress remains available. Analytics data is kept for up to 14 months, and crash reports for up to 90 days, after which they are automatically deleted. If you'd like your account and associated data deleted, email us at **thebrinklabs1@gmail.com** with the subject line "Delete My Mixoloco Account", and we will delete your data within 30 days.
 
 ## 6. Your Rights
 
@@ -79,4 +92,4 @@ We may update this Privacy Policy from time to time. We'll update the "Last upda
 
 If you have questions about this Privacy Policy, contact us at:
 
-**[SUPPORT EMAIL]**
+**thebrinklabs1@gmail.com**
