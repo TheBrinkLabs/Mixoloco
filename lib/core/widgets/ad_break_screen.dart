@@ -34,7 +34,9 @@ class _AdBreakScreen extends StatefulWidget {
 
 class _AdBreakScreenState extends State<_AdBreakScreen> implements LevelPlayBannerAdViewListener {
   static const _minWatchSeconds = 9;
-  static const _providerTimeout = Duration(seconds: 6);
+  // A cold MREC auction can take several seconds — too short a wait
+  // throws away fills that were about to arrive.
+  static const _providerTimeout = Duration(seconds: 10);
 
   final _mrecKey = GlobalKey<LevelPlayBannerAdViewState>();
 

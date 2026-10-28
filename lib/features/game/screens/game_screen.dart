@@ -4,6 +4,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart' show ValueListenable, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:unity_levelplay_mediation/unity_levelplay_mediation.dart' show LevelPlay;
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/analytics_service.dart';
 import '../../../core/services/ad_service.dart';
@@ -1978,6 +1979,10 @@ class _CollisionTestbedSheetState extends State<_CollisionTestbedSheet> {
                     child: const Text('Shower probes'),
                   ),
                   TextButton(onPressed: widget.onClear, child: const Text('Clear')),
+                  TextButton(
+                    onPressed: LevelPlay.launchTestSuite,
+                    child: const Text('Ads'),
+                  ),
                 ],
               ),
             ),

@@ -31,6 +31,10 @@ class AdService implements LevelPlayInitListener {
 
   bool _isLevelPlayInitialized = false;
 
+  /// Flips true once LevelPlay reports init success — banner/MREC views
+  /// must not call loadAd() before that (it fails with error 625).
+  final levelPlayReady = ValueNotifier<bool>(false);
+
   late final LevelPlayInterstitialAd _levelPlayInterstitialAd;
   bool _levelPlayInterstitialReady = false;
   bool _levelPlayInterstitialLoading = false;
@@ -78,6 +82,12 @@ class AdService implements LevelPlayInitListener {
 
   Future<void> _initLevelPlay() async {
     try {
+      // Debug builds only: lets the LevelPlay Integration Test Suite be
+      // opened (collision testbed sheet) to see which networks are
+      // actually configured per ad unit. Must be set before init.
+      if (kDebugMode) {
+        await LevelPlay.setMetaData({'is_test_suite': ['enable']});
+      }
       final initRequest = LevelPlayInitRequest.builder(_levelPlayAppKey).build();
       // Bounded — callers (the ad-consent screen, main.dart's launch
       // gate) await this before letting the player into the app at all,
@@ -100,6 +110,7 @@ class AdService implements LevelPlayInitListener {
   void onInitSuccess(LevelPlayConfiguration configuration) {
     debugPrint('LevelPlay initialized');
     _isLevelPlayInitialized = true;
+    levelPlayReady.value = true;
     loadLevelPlayInterstitial();
     loadRewardedAd(RewardedAdSlot.continueGame);
   }

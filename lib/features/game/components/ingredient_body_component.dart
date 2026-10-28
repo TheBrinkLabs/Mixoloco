@@ -216,36 +216,35 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
   }
 
   double _shapeMultiplier = 1.0;
-  List<List<Vector2>>? _localPieces;
+  List<CollisionPiece>? _localPieces;
 
-  /// This body's collision shapes as convex polygons in world space
-  /// (circles as 12-gons) — mirrors [_createShapes] exactly, so overlap
-  /// checks see the same geometry Box2D does.
-  List<List<Vector2>> worldCollisionPieces() {
+  /// This body's collision shapes in world space — mirrors
+  /// [_createShapes] exactly, so overlap/gap checks see the same geometry
+  /// Box2D does. Circles stay true circles (a centre plus a radius), not
+  /// polygon approximations: an inscribed polygon's flat sides sit inside
+  /// the real circle, which reads two touching round items as cm apart.
+  List<CollisionPiece> worldCollisionPieces() {
     final local = _localPieces ??= _buildLocalPieces(_shapeMultiplier);
     final t = body.transform;
     final c = t.rotation.cos, s = t.rotation.sin, p = t.position;
     return [
       for (final piece in local)
-        [for (final v in piece) Vector2(p.x + c * v.x - s * v.y, p.y + s * v.x + c * v.y)],
+        CollisionPiece(
+          [for (final v in piece.core) Vector2(p.x + c * v.x - s * v.y, p.y + s * v.x + c * v.y)],
+          piece.radius,
+        ),
     ];
   }
 
-  List<List<Vector2>> _buildLocalPieces(double m) {
+  List<CollisionPiece> _buildLocalPieces(double m) {
     final r = radius * m;
-    List<Vector2> circle(double cx, double cy, double cr) => [
-          for (var i = 0; i < 12; i++)
-            Vector2(cx + cr * cos(2 * pi * i / 12), cy + cr * sin(2 * pi * i / 12)),
-        ];
-    final pieces = <List<Vector2>>[];
+    CollisionPiece circle(double cx, double cy, double cr) => CollisionPiece([Vector2(cx, cy)], cr);
+    final pieces = <CollisionPiece>[];
     final capsule = ingredient.collisionCapsule;
     final profile = ingredient.collisionProfile;
     if (capsule != null) {
-      final hl = r * capsule.halfLength, oy = r * capsule.offsetY, cr = r * capsule.radius;
-      pieces.add(_hull([
-        ...circle(0, oy - hl, cr),
-        ...circle(0, oy + hl, cr),
-      ]));
+      final hl = r * capsule.halfLength, oy = r * capsule.offsetY;
+      pieces.add(CollisionPiece([Vector2(0, oy - hl), Vector2(0, oy + hl)], r * capsule.radius));
     } else if (profile == null || profile.isEmpty) {
       pieces.add(circle(0, 0, r));
     } else {
@@ -254,16 +253,16 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
           case CollisionCircle():
             pieces.add(circle(r * c.offsetX, r * c.offsetY, r * c.radius));
           case CollisionEllipse():
-            pieces.add([
+            pieces.add(CollisionPiece([
               for (var i = 0; i < 8; i++)
                 Vector2(
                   r * c.offsetX + r * c.radiusX * cos(2 * pi * i / 8),
                   r * c.offsetY + r * c.radiusY * sin(2 * pi * i / 8),
                 ),
-            ]);
+            ], 0));
           case CollisionPolygon():
             final hull = _hull([for (final p in c.points) Vector2(r * p.$1, r * p.$2)]);
-            if (hull.length >= 3) pieces.add(hull);
+            if (hull.length >= 3) pieces.add(CollisionPiece(hull, 0));
         }
       }
     }
@@ -295,13 +294,13 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
     return [...lower..removeLast(), ...upper..removeLast()];
   }
 
-  /// Deepest separating-axis penetration between any piece of [a] and any
-  /// piece of [b] (0 when nothing overlaps).
-  static double penetrationDepth(List<List<Vector2>> a, List<List<Vector2>> b) {
+  /// Deepest penetration between any piece of [a] and any piece of [b]
+  /// (0 when nothing overlaps).
+  static double penetrationDepth(List<CollisionPiece> a, List<CollisionPiece> b) {
     var deepest = 0.0;
     for (final pa in a) {
       for (final pb in b) {
-        final d = _satDepth(pa, pb);
+        final d = -_signedGap(pa, pb);
         if (d > deepest) deepest = d;
       }
     }
@@ -310,19 +309,27 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
 
   /// Smallest distance between any piece of [a] and any piece of [b];
   /// 0 when they overlap.
-  static double gapBetween(List<List<Vector2>> a, List<List<Vector2>> b) {
+  static double gapBetween(List<CollisionPiece> a, List<CollisionPiece> b) {
     var best = double.infinity;
     for (final pa in a) {
       for (final pb in b) {
-        if (_satDepth(pa, pb) > 0) return 0;
-        final d = _polygonDistance(pa, pb);
-        if (d < best) best = d;
+        final g = _signedGap(pa, pb);
+        if (g <= 0) return 0;
+        if (g < best) best = g;
       }
     }
     return best;
   }
 
-  static double _polygonDistance(List<Vector2> a, List<Vector2> b) {
+  /// Distance between two pieces' surfaces — negative (the penetration
+  /// depth) when they overlap.
+  static double _signedGap(CollisionPiece a, CollisionPiece b) {
+    final coreOverlap = _satDepth(a.core, b.core);
+    if (coreOverlap > 0) return -(coreOverlap + a.radius + b.radius);
+    return _coreDistance(a.core, b.core) - a.radius - b.radius;
+  }
+
+  static double _coreDistance(List<Vector2> a, List<Vector2> b) {
     double pointSeg(Vector2 p, Vector2 s0, Vector2 s1) {
       final dx = s1.x - s0.x, dy = s1.y - s0.y;
       final l2 = dx * dx + dy * dy;
@@ -344,9 +351,14 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
     return best;
   }
 
+  /// Separating-axis overlap of two convex cores, using only the edges of
+  /// real polygons (3+ points) as axes — so a point core (a circle's
+  /// centre) is tested for lying inside a polygon. 0 if separated, or if
+  /// neither core is a polygon (then the distance test decides).
   static double _satDepth(List<Vector2> a, List<Vector2> b) {
     var minOverlap = double.infinity;
     for (final poly in [a, b]) {
+      if (poly.length < 3) continue;
       for (var i = 0; i < poly.length; i++) {
         final e = poly[(i + 1) % poly.length] - poly[i];
         final len = e.length;
@@ -364,7 +376,11 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
           if (d < minB) minB = d;
           if (d > maxB) maxB = d;
         }
-        final o = (maxA < maxB ? maxA : maxB) - (minA > minB ? minA : minB);
+        // Push-out distance along this axis (not the overlap length,
+        // which is zero for a point core and so misses a circle centre
+        // sitting inside a polygon).
+        final pushA = maxA - minB, pushB = maxB - minA;
+        final o = pushA < pushB ? pushA : pushB;
         if (o <= 0) return 0;
         if (o < minOverlap) minOverlap = o;
       }
@@ -700,4 +716,12 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
       ..strokeWidth = size.shortestSide * 0.014;
     canvas.drawCircle(center, glowRadius, crispPaint);
   }
+}
+
+/// One convex collision piece: a convex [core] (a single point for a
+/// circle, two for a capsule, 3+ for a polygon) grown by [radius].
+class CollisionPiece {
+  const CollisionPiece(this.core, this.radius);
+  final List<Vector2> core;
+  final double radius;
 }

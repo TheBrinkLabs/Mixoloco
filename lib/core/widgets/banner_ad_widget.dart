@@ -92,6 +92,24 @@ class _BannerAdWidgetState extends State<BannerAdWidget> implements LevelPlayBan
   @override
   void initState() {
     super.initState();
+    if (adService.levelPlayReady.value) {
+      _startTimeout();
+    } else {
+      // Asking for an ad before LevelPlay finishes init always fails
+      // (error 625) — show the house banner until it's ready.
+      _state = _BannerState.failed;
+      adService.levelPlayReady.addListener(_onLevelPlayReady);
+    }
+  }
+
+  void _onLevelPlayReady() {
+    if (!adService.levelPlayReady.value || !mounted) return;
+    adService.levelPlayReady.removeListener(_onLevelPlayReady);
+    _retryTimer?.cancel();
+    setState(() {
+      _loadAttempt++;
+      _state = _BannerState.loading;
+    });
     _startTimeout();
   }
 
@@ -124,6 +142,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> implements LevelPlayBan
 
   @override
   void dispose() {
+    adService.levelPlayReady.removeListener(_onLevelPlayReady);
     _timeoutTimer?.cancel();
     _retryTimer?.cancel();
     super.dispose();
@@ -185,15 +204,10 @@ class _BannerAdWidgetState extends State<BannerAdWidget> implements LevelPlayBan
             // Real ad — kept mounted even after falling back (just
             // offstage, and periodically retried via the key bump above),
             // so a later successful load can swap back in automatically
-            // without losing the house banner's own state. Built even
-            // before LevelPlay itself has finished initializing (no early
-            // gate on adService.isLevelPlayInitialized) — same as
-            // ad_break_screen's own provider ad, this relies purely on
-            // _startTimeout's own timer to fall back to the house banner
-            // if the provider never responds, rather than waiting on a
-            // flag that never flips true while real ad credentials are
-            // still the TODO placeholders in ad_service.dart.
-            Offstage(offstage: _state == _BannerState.failed, child: _buildProviderAd()),
+            // without losing the house banner's own state. Only built once
+            // LevelPlay has initialized (see initState).
+            if (adService.levelPlayReady.value)
+              Offstage(offstage: _state == _BannerState.failed, child: _buildProviderAd()),
             // Also kept permanently mounted rather than built/torn down
             // conditionally — providers can flicker between loaded and
             // failed, and conditionally removing this from the tree would
