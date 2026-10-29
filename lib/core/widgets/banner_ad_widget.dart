@@ -32,18 +32,14 @@ class PersistentBannerAd extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final adFree = ref.watch(adFreeProvider).value ?? false;
     final hidden = adFree || ref.watch(bannerPositionProvider) == BannerPosition.hidden;
-    return IgnorePointer(
-      ignoring: hidden,
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Visibility(
-          visible: !hidden,
-          maintainState: true,
-          maintainAnimation: true,
-          maintainSize: false,
-          child: const BannerAdWidget(),
-        ),
-      ),
+    // Fully unmounted while hidden (gameplay), not kept alive offstage:
+    // keeping it meant the house banner's video/animations and LevelPlay's
+    // own refreshing ad view kept running unseen behind the table — wasted
+    // CPU/GPU, and invisible ad refreshes break ad-network policy.
+    if (hidden) return const SizedBox.shrink();
+    return const Align(
+      alignment: Alignment.bottomCenter,
+      child: BannerAdWidget(),
     );
   }
 }

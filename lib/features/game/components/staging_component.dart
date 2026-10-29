@@ -1,6 +1,6 @@
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
-import 'package:flutter/material.dart' show BlurStyle, Canvas, Color, MaskFilter, Paint, PaintingStyle, Path, StrokeCap;
+import 'package:flutter/material.dart' show Canvas, Color, Paint, PaintingStyle, Path, StrokeCap;
 import '../../../core/widgets/bar_backdrop.dart' show kAimConvergenceRatio;
 import '../../../data/models/ingredient.dart';
 import 'ingredient_sprite.dart';
@@ -164,8 +164,7 @@ class StagingComponent extends PositionComponent with DragCallbacks {
       ..color = const Color(0x2A000000)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.03
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.01);
+      ..strokeCap = StrokeCap.round;
     canvas.drawPath(path, paint);
   }
 }

@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flame/components.dart';
-import 'package:flutter/material.dart' show BlurStyle, Canvas, Color, MaskFilter, Paint, PaintingStyle, Path, StrokeCap;
+import 'package:flutter/material.dart' show Canvas, Color, Paint, PaintingStyle, Path, StrokeCap;
 
 /// A line across the table marking where a settled pile ends the game —
 /// see MixolocoGame._checkOverflow / kGameOverLineFraction. Used to be an
@@ -34,16 +34,24 @@ class GameOverLineComponent extends PositionComponent {
     return path;
   }
 
+  static final _glowOuter = Paint()
+    ..color = const Color(0x262A1B12)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 0.09
+    ..strokeCap = StrokeCap.round;
+  static final _glowInner = Paint()
+    ..color = const Color(0x332A1B12)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 0.05
+    ..strokeCap = StrokeCap.round;
+
   @override
   void render(Canvas canvas) {
-    // A soft diffuse scorch glow underneath the mark itself...
-    final glowPaint = Paint()
-      ..color = const Color(0x4D2A1B12)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.05
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.02);
-    canvas.drawPath(_path, glowPaint);
+    // A soft diffuse scorch glow underneath the mark itself — two
+    // widening faint strokes rather than a blur (a blur is a separate
+    // render pass every frame on Impeller).
+    canvas.drawPath(_path, _glowOuter);
+    canvas.drawPath(_path, _glowInner);
 
     // ...and a darker, thinner charred line on top of it.
     final linePaint = Paint()

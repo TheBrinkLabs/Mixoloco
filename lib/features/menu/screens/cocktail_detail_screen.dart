@@ -106,11 +106,31 @@ class _CocktailDetailScreenState extends ConsumerState<CocktailDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Text(
-              '${index + 1} of $n · ${entry.level.name}',
-              style: submenuNunito(size: 12, weight: FontWeight.w900, color: SubmenuColors.textSecondary),
-            ),
+          Row(
+            children: [
+              // Balances the share icon so the count stays centred.
+              const SizedBox(width: 40),
+              Expanded(
+                child: Text(
+                  '${index + 1} of $n · ${entry.level.name}',
+                  textAlign: TextAlign.center,
+                  style: submenuNunito(size: 12, weight: FontWeight.w900, color: SubmenuColors.textSecondary),
+                ),
+              ),
+              Semantics(
+                button: true,
+                label: tr(locale, 'share'),
+                child: GestureDetector(
+                  onTap: () => shareText(tr(locale, 'share_cocktail_text').replaceFirst('{cocktail}', entry.recipe.name)),
+                  behavior: HitTestBehavior.opaque,
+                  child: const SizedBox(
+                    width: 40,
+                    height: 32,
+                    child: Icon(Icons.share_rounded, color: Colors.white, size: 22),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           Text(
@@ -125,13 +145,6 @@ class _CocktailDetailScreenState extends ConsumerState<CocktailDetailScreen> {
             children: [
               for (final id in entry.recipe.ingredientIds) _IngredientChip(ingredient: findIngredientById(id)),
             ],
-          ),
-          const SizedBox(height: 10),
-          Center(
-            child: SubmenuGoldButton(
-              label: tr(locale, 'share'),
-              onTap: () => shareText(tr(locale, 'share_cocktail_text').replaceFirst('{cocktail}', entry.recipe.name)),
-            ),
           ),
           const SizedBox(height: 10),
           Expanded(child: _RecipeCard(locale: locale, steps: steps)),

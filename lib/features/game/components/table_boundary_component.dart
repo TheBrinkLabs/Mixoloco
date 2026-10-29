@@ -67,7 +67,11 @@ class TableBoundaryComponent extends BodyComponent<MixolocoGame> {
     // Distance from center a straight taper would put the wall at, at
     // the bulge's depth — then pushed further out by kTableBulgeOutwardFactor.
     final straightDistAtBulge = center * (1 - kTableBulgeDepthFraction) + (farWidth / 2) * kTableBulgeDepthFraction;
-    final bulgeDist = straightDistAtBulge / kTableBulgeOutwardFactor;
+    // Capped at the screen edge: uncapped, the bend sat ~15cm off-screen
+    // (4.15m on a 4m-wide world), leaving a hidden pocket a tipped glass
+    // could slide into and jam there half off the table.
+    final rawBulgeDist = straightDistAtBulge / kTableBulgeOutwardFactor;
+    final bulgeDist = rawBulgeDist > center ? center : rawBulgeDist;
     final bulgeY = worldHeight - (worldHeight - kTableFarInset) * kTableBulgeDepthFraction;
     final bulgeLeft = Vector2(center - bulgeDist, bulgeY);
     final bulgeRight = Vector2(center + bulgeDist, bulgeY);

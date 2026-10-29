@@ -1335,10 +1335,28 @@ class _GlowWrap extends StatefulWidget {
 
 class _GlowWrapState extends State<_GlowWrap>
     with SingleTickerProviderStateMixin {
+  // Only ticks while the glow is showing — an always-repeating
+  // controller kept scheduling frames for the whole game.
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 700),
-  )..repeat(reverse: true);
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _controller.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _GlowWrap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.active && _controller.isAnimating) {
+      _controller.stop();
+    }
+  }
 
   @override
   void dispose() {

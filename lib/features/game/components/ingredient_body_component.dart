@@ -1,16 +1,14 @@
 import 'dart:math' show cos, pi, sin, sqrt;
+import 'dart:ui' as ui;
 import 'package:flame_forge2d/flame_forge2d.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart'
     show
-        BlurStyle,
         Canvas,
         Color,
-        MaskFilter,
         Offset,
         Paint,
         PaintingStyle,
-        Rect,
         Size;
 import '../../../data/models/ingredient.dart';
 import '../mixoloco_game.dart';
@@ -556,6 +554,11 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
     }
 
     _pulseT += dt;
+    _zoneCheckTimer -= dt;
+    if (_zoneCheckTimer <= 0) {
+      _zoneCheckTimer = 0.15;
+      _refreshOutOfZone();
+    }
   }
 
   /// Locks this body's horizontal velocity to the *exact* slope of the
@@ -662,23 +665,26 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
 
   /// A soft dark oval beneath and slightly behind the piece — purely
   /// cosmetic, per the gameplay redesign handoff's ingredient shadow spec.
+  /// Drawn as a radial-gradient unit circle scaled to the oval, not a
+  /// blurred shape: on Impeller every MaskFilter blur is its own render
+  /// pass, which across a full table was dozens of passes every frame.
   void _paintDropShadow(Canvas canvas, Size size) {
-    final offset = Offset(size.shortestSide * 0.05, size.shortestSide * 0.12);
-    final shadowPaint = Paint()
-      ..color = const Color(0xFF281400).withValues(alpha: 0.35)
-      ..maskFilter = MaskFilter.blur(
-        BlurStyle.normal,
-        size.shortestSide * 0.08,
-      );
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: offset,
-        width: size.width * 0.8,
-        height: size.height * 0.35,
-      ),
-      shadowPaint,
-    );
+    final rx = size.width * 0.4 + size.shortestSide * 0.08;
+    final ry = size.height * 0.175 + size.shortestSide * 0.08;
+    canvas.save();
+    canvas.translate(size.shortestSide * 0.05, size.shortestSide * 0.12);
+    canvas.scale(rx, ry);
+    canvas.drawCircle(Offset.zero, 1, _shadowPaint);
+    canvas.restore();
   }
+
+  static final Paint _shadowPaint = Paint()
+    ..shader = ui.Gradient.radial(
+      Offset.zero,
+      1,
+      const [Color(0x59281400), Color(0x59281400), Color(0x00281400)],
+      const [0.0, 0.62, 1.0],
+    );
 
   /// True once this body has crossed the game-over line (see
   /// MixolocoGame._checkOverflow/kGameOverLineFraction) — checked purely
@@ -686,10 +692,15 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
   /// trigger uses, since the glow's job is an early visual warning
   /// ("you're heading for the line"), not a precise readout of whether
   /// this exact body currently counts toward ending the game.
-  bool get _isOutOfZone =>
-      !consumed &&
-      (body.position.y - radius) >
-          game.worldHeight * (1 - kGameOverLineFraction);
+  bool _isOutOfZone = false;
+  double _zoneCheckTimer = 0;
+
+  /// Refreshed a few times a second from update() rather than read in
+  /// render() every frame — each body.position read is a native call.
+  void _refreshOutOfZone() {
+    _isOutOfZone = !consumed &&
+        (body.position.y - radius) > game.worldHeight * (1 - kGameOverLineFraction);
+  }
 
   /// A soft, thin red ring around the item's own circular footprint —
   /// deliberately not shaped to the art's silhouette (which varies a lot
@@ -700,15 +711,22 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
     final center = Offset(size.width / 2, size.height / 2);
     final glowRadius = size.shortestSide / 2;
     final pulse = 0.55 + 0.35 * (0.5 + 0.5 * sin(_pulseT * 3.2));
+    // Soft halo as a gradient ring (transparent → red → transparent)
+    // rather than a blurred stroke — same no-blur reasoning as the shadow.
+    final halo = size.shortestSide * 0.11;
+    final inner = (glowRadius - halo) / (glowRadius + halo);
     final glowPaint = Paint()
-      ..color = Color.fromRGBO(255, 45, 45, pulse)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.shortestSide * 0.05
-      ..maskFilter = MaskFilter.blur(
-        BlurStyle.normal,
-        size.shortestSide * 0.06,
+      ..shader = ui.Gradient.radial(
+        center,
+        glowRadius + halo,
+        [
+          const Color(0x00FF2D2D),
+          Color.fromRGBO(255, 45, 45, pulse * 0.8),
+          const Color(0x00FF2D2D),
+        ],
+        [inner.clamp(0.0, 1.0), (glowRadius / (glowRadius + halo)).clamp(0.0, 1.0), 1.0],
       );
-    canvas.drawCircle(center, glowRadius, glowPaint);
+    canvas.drawCircle(center, glowRadius + halo, glowPaint);
 
     final crispPaint = Paint()
       ..color = Color.fromRGBO(255, 80, 80, pulse * 0.9)

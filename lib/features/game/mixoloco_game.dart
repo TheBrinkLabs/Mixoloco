@@ -278,7 +278,14 @@ class MixolocoGame extends Forge2DGame {
     // few frames" instead.
     final clampedDt = dt > kMaxPhysicsStepSeconds ? kMaxPhysicsStepSeconds : dt;
     super.update(clampedDt);
-    _purgeCorruptedBodies();
+    _elapsed += clampedDt;
+    // A NaN body is rare; a few checks a second catch it long before it
+    // can spread, without a native position read per body every frame.
+    _purgeTimer -= clampedDt;
+    if (_purgeTimer <= 0) {
+      _purgeTimer = 0.25;
+      _purgeCorruptedBodies();
+    }
     _resolvePops(clampedDt);
     _unstickContacts(clampedDt);
     _sweepTimer -= clampedDt;
@@ -353,7 +360,7 @@ class MixolocoGame extends Forge2DGame {
     // is far cheaper than the nested distance comparisons it's gating —
     // real savings on a table that's settled (the common case once a
     // combo's finished playing out) with a lot of bodies on it.
-    if (!_bodiesChangedSinceSweep) {
+    if (!_bodiesChangedSinceSweep && _elapsed > _nearMissRecheckUntil) {
       final anyMoving = _liveBodies.any(
         (b) => !b.consumed && b.isMounted && b.body.linearVelocity.length >= kRestSpeedThreshold,
       );
@@ -733,39 +740,56 @@ class MixolocoGame extends Forge2DGame {
   /// line between their centres until it's clear.
   final Map<IngredientBodyComponent, double> _pops = {};
   static const _popDuration = 0.6;
-  static const _popSlop = 0.004;
+  static const _popSlop = 0.02;
   static const _popMaxStep = 0.06;
 
   void _startPop(IngredientBodyComponent body) => _pops[body] = _popDuration;
 
   /// The same stuck-overlap problem as merge pops can arise from anything
   /// that puts two items deep inside each other — Mega-Shake regrowing
-  /// everything at once, a fast throw, a restored table — so every
-  /// touching pair (Box2D's own contact list, via _adjacency) is checked a
-  /// few times a second and pushed apart if genuinely interpenetrating.
+  /// everything at once, a fast throw, a restored table — so touching
+  /// pairs (Box2D's own contact list, via _adjacency) are checked a few
+  /// times a second. Only *deep*, *persistent* overlap is acted on: a
+  /// heavy pile under this game's strong gravity legitimately squeezes
+  /// items a centimetre or two into each other at rest, and nudging those
+  /// apart just had gravity push them straight back — a constant shimmer
+  /// that also kept the whole pile awake (no Box2D sleeping) and slow.
   static const _unstickInterval = 0.1;
-  static const _unstickSlop = 0.01;
+  static const _unstickMinDepth = 0.04;
+  static const _unstickDepthFraction = 0.15;
+  static const _unstickConfirmChecks = 3;
   double _unstickTimer = 0;
+  final Map<(IngredientBodyComponent, IngredientBodyComponent), int> _deepOverlapStreak = {};
 
   void _unstickContacts(double dt) {
     _unstickTimer -= dt;
     if (_unstickTimer > 0) return;
     _unstickTimer = _unstickInterval;
+    final pieces = <IngredientBodyComponent, List<CollisionPiece>>{};
+    List<CollisionPiece> piecesOf(IngredientBodyComponent c) =>
+        pieces[c] ??= c.worldCollisionPieces();
     final seen = <IngredientBodyComponent>{};
+    final stillDeep = <(IngredientBodyComponent, IngredientBodyComponent)>{};
     for (final entry in _adjacency.entries) {
       final a = entry.key;
       if (a.consumed || !a.isMounted) continue;
       seen.add(a);
       for (final b in entry.value) {
         if (seen.contains(b) || b.consumed || !b.isMounted) continue;
-        final depth = IngredientBodyComponent.penetrationDepth(
-          a.worldCollisionPieces(),
-          b.worldCollisionPieces(),
-        );
-        if (depth <= _unstickSlop) continue;
-        _separate(a, b, depth, aShare: 0.5);
+        final depth = IngredientBodyComponent.penetrationDepth(piecesOf(a), piecesOf(b));
+        final smaller = a.contactRadius < b.contactRadius ? a.contactRadius : b.contactRadius;
+        final threshold = _unstickMinDepth > smaller * _unstickDepthFraction
+            ? _unstickMinDepth
+            : smaller * _unstickDepthFraction;
+        if (depth <= threshold) continue;
+        final key = (a, b);
+        stillDeep.add(key);
+        final streak = (_deepOverlapStreak[key] ?? 0) + 1;
+        _deepOverlapStreak[key] = streak;
+        if (streak >= _unstickConfirmChecks) _separate(a, b, depth, aShare: 0.5);
       }
     }
+    _deepOverlapStreak.removeWhere((k, _) => !stillDeep.contains(k));
   }
 
   /// Moves [b] away from [a] (and [a] back by its share) along the line
@@ -871,6 +895,15 @@ class MixolocoGame extends Forge2DGame {
   /// prefilter is looser still, so both paths are gated on the exact gap.
   static const _mergeTouchTolerance = 0.01;
 
+  /// How long a near miss keeps the merge sweep re-checking a settled
+  /// table — long enough to catch a pair closing the last few mm, but
+  /// not forever (a full table always has a few same-tier pairs a
+  /// couple of cm apart, which kept the sweep running nonstop).
+  static const _nearMissRecheckWindow = 2.0;
+  double _nearMissRecheckUntil = 0;
+  double _elapsed = 0;
+  double _purgeTimer = 0;
+
   void _tryMerge(IngredientBodyComponent a, IngredientBodyComponent b) {
     if (a.consumed || b.consumed) return;
     if (a.tier != b.tier) return;
@@ -882,7 +915,7 @@ class MixolocoGame extends Forge2DGame {
     if (gap > _mergeTouchTolerance) {
       // A near miss can still close up as things settle, after which no
       // new contact event fires — keep the sweep re-checking it.
-      if (gap < _mergeTouchTolerance * 4) _bodiesChangedSinceSweep = true;
+      if (gap < _mergeTouchTolerance * 4) _nearMissRecheckUntil = _elapsed + _nearMissRecheckWindow;
       return;
     }
     final nextTier = a.tier + 1;
@@ -1084,6 +1117,7 @@ class MixolocoGame extends Forge2DGame {
     }
     _liveBodies.clear();
     _pops.clear();
+    _deepOverlapStreak.clear();
     _adjacency.clear();
     _gameOverTriggered = false;
     _gameCompleteTriggered = false;
