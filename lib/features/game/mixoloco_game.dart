@@ -277,7 +277,26 @@ class MixolocoGame extends Forge2DGame {
     // turns "catch up in one giant leap" into "catch up smoothly over a
     // few frames" instead.
     final clampedDt = dt > kMaxPhysicsStepSeconds ? kMaxPhysicsStepSeconds : dt;
-    super.update(clampedDt);
+    // Fixed physics step: Box2D is built for a constant timestep, and a
+    // frame-by-frame dt (1/120 vs 1/60 alternating on a 120Hz phone as
+    // frames drop) is a classic cause of a large pile never settling —
+    // the solver's correction differs every step, so it twitches forever.
+    _stepAccumulator += clampedDt;
+    var steps = 0;
+    while (_stepAccumulator >= _fixedStep && steps < _maxStepsPerFrame) {
+      super.update(_fixedStep);
+      _tick(_fixedStep);
+      _stepAccumulator -= _fixedStep;
+      steps++;
+    }
+    if (steps == _maxStepsPerFrame) _stepAccumulator = 0;
+  }
+
+  static const _fixedStep = 1 / 60;
+  static const _maxStepsPerFrame = 3;
+  double _stepAccumulator = 0;
+
+  void _tick(double clampedDt) {
     _elapsed += clampedDt;
     // A NaN body is rare; a few checks a second catch it long before it
     // can spread, without a native position read per body every frame.
@@ -758,6 +777,9 @@ class MixolocoGame extends Forge2DGame {
   static const _unstickMinDepth = 0.04;
   static const _unstickDepthFraction = 0.15;
   static const _unstickConfirmChecks = 3;
+  /// A pair still deep after this many pushes is crowded, not stuck —
+  /// there's simply no room — so stop pushing (it only jostles the pile).
+  static const _unstickMaxPushes = 5;
   double _unstickTimer = 0;
   final Map<(IngredientBodyComponent, IngredientBodyComponent), int> _deepOverlapStreak = {};
 
@@ -786,7 +808,10 @@ class MixolocoGame extends Forge2DGame {
         stillDeep.add(key);
         final streak = (_deepOverlapStreak[key] ?? 0) + 1;
         _deepOverlapStreak[key] = streak;
-        if (streak >= _unstickConfirmChecks) _separate(a, b, depth, aShare: 0.5);
+        if (streak >= _unstickConfirmChecks &&
+            streak < _unstickConfirmChecks + _unstickMaxPushes) {
+          _separate(a, b, depth, aShare: 0.5);
+        }
       }
     }
     _deepOverlapStreak.removeWhere((k, _) => !stillDeep.contains(k));

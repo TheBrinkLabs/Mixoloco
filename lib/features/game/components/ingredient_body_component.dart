@@ -194,6 +194,10 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
       linearVelocity: _initialVelocity,
       angularDamping: 2.5,
       linearDamping: 0.1,
+      // Box2D's 0.05 m/s default suits small objects; these are 0.3-1m
+      // across, and in a big pile the solver's normal residual motion
+      // stayed above it, so the pile never slept and kept twitching.
+      sleepThreshold: 0.15,
       // A drop can build up real speed crossing the whole table under
       // constant gravity before it hits anything — without continuous
       // collision detection a fast small circle can tunnel straight
