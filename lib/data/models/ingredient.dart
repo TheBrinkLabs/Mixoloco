@@ -3289,10 +3289,103 @@ const kEvolutionChainLevel5 = [
     ],
   ),
   Ingredient(
+    id: 'lime',
+    label: 'Lime Juice',
+    color: Color(0xFF9ACD32),
+    tier: 1,
+    shape: GlassShape.jug,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/game/i_lime.png',
+    displayScale: 1.119,
+    // Round citrus slice — same story as cherry (see its comment): a
+    // plain circle undersized it, but a multi-shape polygon is the
+    // wrong fix for something that's supposed to read as round (caught
+    // worse-not-better on-device). A single CollisionCircle sized to
+    // the average of the measured width/height extremes off
+    // i_lime.png's own alpha silhouette instead.
+    collisionProfile: [
+      CollisionCircle(offsetY: 0.0, radius: 1.416),
+    ],
+  ),
+  Ingredient(
+    id: 'guaro',
+    label: 'Guaro',
+    color: Color(0xFFEAF6FA),
+    tier: 2,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_guaro.png',
+    displayScale: 0.951,
+    displayScaleX: 1.313,
+    isAlcoholic: true,
+    isMiniShot: true,
+    // Traced from the sprite PNG's alpha silhouette through
+    // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    collisionProfile: [
+      CollisionPolygon(
+        points: [
+          (-0.305, -1.082), (0.301, -1.082),
+          (-1.081, -0.934), (1.075, -0.934),
+          (-0.783, 0.908), (0.795, 0.908),
+          (-0.172, 1.074), (0.267, 1.074),
+        ],
+        cornerRadius: 0.0,
+      ),
+    ],
+  ),
+  Ingredient(
+    id: 'rum',
+    label: 'Rum',
+    color: Color(0xFFC48A3E),
+    tier: 3,
+    shape: GlassShape.martini,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_rum.png',
+    displayScale: 1.046,
+    sizeMultiplier: 0.9684,
+    isAlcoholic: true,
+    // Traced from the sprite PNG's alpha silhouette through
+    // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    collisionProfile: [
+      CollisionPolygon(
+        points: [
+          (-0.157, -1.189), (0.140, -1.189),
+          (-0.675, -1.085), (0.673, -1.085),
+          (-0.718, -1.000), (0.716, -1.000),
+          (-0.480, 0.490), (0.478, 0.490),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.480, 0.490), (0.478, 0.490),
+          (-0.491, 0.660), (0.491, 0.660),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.491, 0.660), (0.491, 0.660),
+          (-0.600, 0.891), (0.598, 0.891),
+          (-0.605, 0.974), (0.604, 0.974),
+          (-0.551, 1.055), (0.549, 1.055),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.551, 1.055), (0.549, 1.055),
+          (0.035, 1.179), (0.105, 1.179),
+        ],
+        cornerRadius: 0.0,
+      ),
+    ],
+  ),
+  Ingredient(
     id: 'hot_sauce',
     label: 'Hot Sauce',
     color: Color(0xFFD1392B),
-    tier: 1,
+    tier: 4,
     shape: GlassShape.jug,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_hot_sauce.png',
@@ -3336,36 +3429,10 @@ const kEvolutionChainLevel5 = [
     ],
   ),
   Ingredient(
-    id: 'guaro',
-    label: 'Guaro',
-    color: Color(0xFFEAF6FA),
-    tier: 2,
-    shape: GlassShape.tumbler,
-    debris: DebrisType.glass,
-    assetPath: 'assets/images/ingredient_guaro.png',
-    displayScale: 0.951,
-    displayScaleX: 1.313,
-    isAlcoholic: true,
-    isMiniShot: true,
-    // Traced from the sprite PNG's alpha silhouette through
-    // paintIngredient's transform (scratchpad gen_png), on-device approved.
-    collisionProfile: [
-      CollisionPolygon(
-        points: [
-          (-0.305, -1.082), (0.301, -1.082),
-          (-1.081, -0.934), (1.075, -0.934),
-          (-0.783, 0.908), (0.795, 0.908),
-          (-0.172, 1.074), (0.267, 1.074),
-        ],
-        cornerRadius: 0.0,
-      ),
-    ],
-  ),
-  Ingredient(
     id: 'tomato_juice',
     label: 'Tomato Juice',
     color: Color(0xFFE0442E),
-    tier: 3,
+    tier: 5,
     shape: GlassShape.jug,
     debris: DebrisType.glass,
     assetPath: 'assets/images/ingredient_tomato_juice.png',
@@ -3413,65 +3480,6 @@ const kEvolutionChainLevel5 = [
           (-0.926, 0.615), (0.945, 0.615),
           (-0.823, 0.770), (0.805, 0.770),
           (-0.203, 0.940), (0.175, 0.940),
-        ],
-        cornerRadius: 0.0,
-      ),
-    ],
-  ),
-  Ingredient(
-    id: 'lime',
-    label: 'Lime Juice',
-    color: Color(0xFF9ACD32),
-    tier: 4,
-    shape: GlassShape.jug,
-    debris: DebrisType.peel,
-    assetPath: 'assets/images/game/i_lime.png',
-    displayScale: 1.119,
-    // Round citrus slice — same story as cherry (see its comment): a
-    // plain circle undersized it, but a multi-shape polygon is the
-    // wrong fix for something that's supposed to read as round (caught
-    // worse-not-better on-device). A single CollisionCircle sized to
-    // the average of the measured width/height extremes off
-    // i_lime.png's own alpha silhouette instead.
-    collisionProfile: [
-      CollisionCircle(offsetY: 0.0, radius: 1.416),
-    ],
-  ),
-  Ingredient(
-    id: 'soda',
-    label: 'Soda Water',
-    color: Color(0xFFE8F6F6),
-    tier: 5,
-    shape: GlassShape.mug,
-    debris: DebrisType.glass,
-    assetPath: 'assets/images/ingredient_soda.png',
-    displayScale: 1.103,
-    sizeMultiplier: 1.10,
-    // Traced from the sprite PNG's alpha silhouette through
-    // paintIngredient's transform (scratchpad gen_png), on-device approved.
-    collisionProfile: [
-      CollisionPolygon(
-        points: [
-          (-0.109, -1.258), (0.103, -1.258),
-          (-0.425, -1.205), (0.424, -1.205),
-          (-0.457, -1.101), (0.457, -1.101),
-          (-0.457, -1.022), (0.454, -1.022),
-        ],
-        cornerRadius: 0.0,
-      ),
-      CollisionPolygon(
-        points: [
-          (-0.457, -1.022), (0.454, -1.022),
-          (-0.405, 1.087), (0.395, 1.087),
-          (-0.383, 1.144), (0.372, 1.144),
-          (-0.321, 1.197), (0.310, 1.197),
-        ],
-        cornerRadius: 0.0,
-      ),
-      CollisionPolygon(
-        points: [
-          (-0.321, 1.197), (0.310, 1.197),
-          (-0.067, 1.257), (0.065, 1.257),
         ],
         cornerRadius: 0.0,
       ),
@@ -3529,10 +3537,50 @@ const kEvolutionChainLevel5 = [
     ],
   ),
   Ingredient(
+    id: 'soda',
+    label: 'Soda Water',
+    color: Color(0xFFE8F6F6),
+    tier: 7,
+    shape: GlassShape.mug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_soda.png',
+    displayScale: 1.103,
+    sizeMultiplier: 1.10,
+    // Traced from the sprite PNG's alpha silhouette through
+    // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    collisionProfile: [
+      CollisionPolygon(
+        points: [
+          (-0.109, -1.258), (0.103, -1.258),
+          (-0.425, -1.205), (0.424, -1.205),
+          (-0.457, -1.101), (0.457, -1.101),
+          (-0.457, -1.022), (0.454, -1.022),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.457, -1.022), (0.454, -1.022),
+          (-0.405, 1.087), (0.395, 1.087),
+          (-0.383, 1.144), (0.372, 1.144),
+          (-0.321, 1.197), (0.310, 1.197),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.321, 1.197), (0.310, 1.197),
+          (-0.067, 1.257), (0.065, 1.257),
+        ],
+        cornerRadius: 0.0,
+      ),
+    ],
+  ),
+  Ingredient(
     id: 'grapefruit',
     label: 'Grapefruit',
     color: Color(0xFFF08060),
-    tier: 7,
+    tier: 8,
     shape: GlassShape.tumbler,
     debris: DebrisType.peel,
     assetPath: 'assets/images/ingredient_grapefruit.png',
@@ -3551,7 +3599,7 @@ const kEvolutionChainLevel5 = [
     id: 'banana',
     label: 'Banana',
     color: Color(0xFFF2D43C),
-    tier: 8,
+    tier: 9,
     shape: GlassShape.tumbler,
     debris: DebrisType.peel,
     assetPath: 'assets/images/ingredient_banana.png',
@@ -3609,10 +3657,24 @@ const kEvolutionChainLevel5 = [
     ],
   ),
   Ingredient(
+    id: 'coconut',
+    label: 'Coconut',
+    color: Color(0xFF9C6B3E),
+    tier: 10,
+    shape: GlassShape.tumbler,
+    debris: DebrisType.peel,
+    assetPath: 'assets/images/ingredient_coconut.png',
+    displayScale: 1.075,
+    // Round fruit: one circle fitted to the on-screen sprite (approved).
+    collisionProfile: [
+      CollisionCircle(offsetY: 0.07, radius: 1.231),
+    ],
+  ),
+  Ingredient(
     id: 'pineapple_fruit',
     label: 'Pineapple',
     color: Color(0xFFF7C948),
-    tier: 9,
+    tier: 11,
     shape: GlassShape.tumbler,
     debris: DebrisType.peel,
     assetPath: 'assets/images/ingredient_pineapple_fruit.png',
@@ -3744,68 +3806,6 @@ const kEvolutionChainLevel5 = [
           (-0.466, 1.083), (0.417, 1.083),
           (-0.380, 1.146), (0.363, 1.146),
           (-0.071, 1.236), (0.055, 1.236),
-        ],
-        cornerRadius: 0.0,
-      ),
-    ],
-  ),
-  Ingredient(
-    id: 'coconut',
-    label: 'Coconut',
-    color: Color(0xFF9C6B3E),
-    tier: 10,
-    shape: GlassShape.tumbler,
-    debris: DebrisType.peel,
-    assetPath: 'assets/images/ingredient_coconut.png',
-    displayScale: 1.075,
-    // Round fruit: one circle fitted to the on-screen sprite (approved).
-    collisionProfile: [
-      CollisionCircle(offsetY: 0.07, radius: 1.231),
-    ],
-  ),
-  Ingredient(
-    id: 'rum',
-    label: 'Rum',
-    color: Color(0xFFC48A3E),
-    tier: 11,
-    shape: GlassShape.martini,
-    debris: DebrisType.glass,
-    assetPath: 'assets/images/ingredient_rum.png',
-    displayScale: 1.046,
-    sizeMultiplier: 0.9684,
-    isAlcoholic: true,
-    // Traced from the sprite PNG's alpha silhouette through
-    // paintIngredient's transform (scratchpad gen_png), on-device approved.
-    collisionProfile: [
-      CollisionPolygon(
-        points: [
-          (-0.157, -1.189), (0.140, -1.189),
-          (-0.675, -1.085), (0.673, -1.085),
-          (-0.718, -1.000), (0.716, -1.000),
-          (-0.480, 0.490), (0.478, 0.490),
-        ],
-        cornerRadius: 0.0,
-      ),
-      CollisionPolygon(
-        points: [
-          (-0.480, 0.490), (0.478, 0.490),
-          (-0.491, 0.660), (0.491, 0.660),
-        ],
-        cornerRadius: 0.0,
-      ),
-      CollisionPolygon(
-        points: [
-          (-0.491, 0.660), (0.491, 0.660),
-          (-0.600, 0.891), (0.598, 0.891),
-          (-0.605, 0.974), (0.604, 0.974),
-          (-0.551, 1.055), (0.549, 1.055),
-        ],
-        cornerRadius: 0.0,
-      ),
-      CollisionPolygon(
-        points: [
-          (-0.551, 1.055), (0.549, 1.055),
-          (0.035, 1.179), (0.105, 1.179),
         ],
         cornerRadius: 0.0,
       ),

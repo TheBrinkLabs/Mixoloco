@@ -46,6 +46,7 @@ class AdService implements LevelPlayInitListener {
   bool _rewardEarned = false; // set in onAdRewarded, read in onAdClosed
   VoidCallback? _pendingRewardOnReward;
   VoidCallback? _pendingRewardOnDismissedWithoutReward;
+  VoidCallback? _pendingRewardOnNotReady;
 
   AdService() {
     _levelPlayInterstitialAd = LevelPlayInterstitialAd(adUnitId: _levelPlayInterstitialAdUnitId);
@@ -196,7 +197,28 @@ class AdService implements LevelPlayInitListener {
   }
 
   void showRewardedAd(RewardedAdSlot slot, {required VoidCallback onReward, VoidCallback? onDismissedWithoutReward, VoidCallback? onNotReady}) {
-    if (!_rewardedReady) {
+    _showRewardedAd(slot, onReward, onDismissedWithoutReward, onNotReady);
+  }
+
+  Future<void> _showRewardedAd(
+    RewardedAdSlot slot,
+    VoidCallback onReward,
+    VoidCallback? onDismissedWithoutReward,
+    VoidCallback? onNotReady,
+  ) async {
+    // A loaded ad can expire while it waits (a long game) — ask the SDK
+    // rather than trusting our own flag, so an expired ad goes down the
+    // not-ready path (fallback video) instead of failing on show.
+    var ready = _rewardedReady;
+    if (ready) {
+      try {
+        ready = await _levelPlayRewardedAd.isAdReady();
+      } catch (_) {
+        ready = false;
+      }
+    }
+    if (!ready) {
+      _rewardedReady = false;
       onNotReady?.call();
       loadRewardedAd(slot);
       return;
@@ -205,6 +227,7 @@ class AdService implements LevelPlayInitListener {
     _rewardEarned = false;
     _pendingRewardOnReward = onReward;
     _pendingRewardOnDismissedWithoutReward = onDismissedWithoutReward;
+    _pendingRewardOnNotReady = onNotReady;
     _levelPlayRewardedAd.showAd(placementName: 'Default');
   }
 
@@ -223,9 +246,14 @@ class AdService implements LevelPlayInitListener {
   void _onRewardedDisplayFailed(LevelPlayAdError error) {
     debugPrint('LevelPlay rewarded ad failed to display: $error');
     _rewardedReady = false;
-    _pendingRewardOnDismissedWithoutReward?.call();
+    // The player never saw an ad, so this isn't "closed without reward" —
+    // treat it like no ad being available (e.g. the continue offer's
+    // fallback video) rather than ending their game.
+    final fallback = _pendingRewardOnNotReady ?? _pendingRewardOnDismissedWithoutReward;
     _pendingRewardOnReward = null;
     _pendingRewardOnDismissedWithoutReward = null;
+    _pendingRewardOnNotReady = null;
+    fallback?.call();
     loadRewardedAd(RewardedAdSlot.continueGame);
   }
 
@@ -241,6 +269,7 @@ class AdService implements LevelPlayInitListener {
     }
     _pendingRewardOnReward = null;
     _pendingRewardOnDismissedWithoutReward = null;
+    _pendingRewardOnNotReady = null;
     loadRewardedAd(RewardedAdSlot.continueGame);
   }
 

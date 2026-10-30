@@ -35,18 +35,28 @@ const kStarterCocktailId = 'screwdriver';
 
 const kCocktailRecipes = [
   CocktailRecipe(
+    // Replaced Vodka Tonic when Tonic Water left the evolution chain —
+    // same slot, same price; rum+cherry+lime, the true Daiquiri citrus,
+    // rather than vodka+cherry+lemon.
+    id: 'cherry_daiquiri',
+    name: 'Cherry Daiquiri',
+    ingredientIds: ['rum', 'cherry', 'lime'],
+    assetPath: 'assets/images/game/c_cherry_daiquiri.png',
+    price: 200,
+  ),
+  CocktailRecipe(
     id: 'mojito',
     name: 'Mojito',
     ingredientIds: ['rum', 'lime', 'soda', 'mint'],
     assetPath: 'assets/images/mohito.png',
-    price: 200,
+    price: 250,
   ),
   CocktailRecipe(
     id: 'screwdriver',
     name: 'Screwdriver',
     ingredientIds: ['vodka', 'orange'],
     assetPath: 'assets/images/game/c_screwdriver.png',
-    price: 250,
+    price: 300,
   ),
   CocktailRecipe(
     // Lemon added alongside lime — a real rum punch is usually a mix of
@@ -56,16 +66,6 @@ const kCocktailRecipes = [
     name: 'Rum Punch',
     ingredientIds: ['rum', 'lime', 'orange', 'lemon'],
     assetPath: 'assets/images/rum_punch.png',
-    price: 300,
-  ),
-  CocktailRecipe(
-    // Replaced Vodka Tonic when Tonic Water left the evolution chain —
-    // same slot, same price; rum+cherry+lime, the true Daiquiri citrus,
-    // rather than vodka+cherry+lemon.
-    id: 'cherry_daiquiri',
-    name: 'Cherry Daiquiri',
-    ingredientIds: ['rum', 'cherry', 'lime'],
-    assetPath: 'assets/images/game/c_cherry_daiquiri.png',
     price: 350,
   ),
   CocktailRecipe(
@@ -115,17 +115,17 @@ const kCocktailRecipesLevel2 = [
     price: 200,
   ),
   CocktailRecipe(
-    id: 'bramble',
-    name: 'Bramble',
-    ingredientIds: ['gin', 'lime', 'blackberry'],
-    assetPath: 'assets/images/bramble.png',
-    price: 250,
-  ),
-  CocktailRecipe(
     id: 'melon_sour',
     name: 'Melon Sour',
     ingredientIds: ['vodka', 'lime', 'melon_liqueur', 'cherry'],
     assetPath: 'assets/images/melon_sour.png',
+    price: 250,
+  ),
+  CocktailRecipe(
+    id: 'bramble',
+    name: 'Bramble',
+    ingredientIds: ['gin', 'lime', 'blackberry'],
+    assetPath: 'assets/images/bramble.png',
     price: 300,
   ),
   CocktailRecipe(
@@ -209,18 +209,25 @@ const kCocktailRecipesLevel3 = [
     price: 300,
   ),
   CocktailRecipe(
+    id: 'mimosa',
+    name: 'Mimosa',
+    ingredientIds: ['prosecco', 'orange_slice'],
+    assetPath: 'assets/images/mimosa.png',
+    price: 350,
+  ),
+  CocktailRecipe(
     id: 'citrus_mule',
     name: 'Citrus Mule',
     ingredientIds: ['vodka', 'ginger_beer', 'lime'],
     assetPath: 'assets/images/game/c_citrus_mule.png',
-    price: 350,
+    price: 400,
   ),
   CocktailRecipe(
     id: 'savanna_gold_mule',
     name: 'Savanna Gold Mule',
     ingredientIds: ['marula_liqueur', 'ginger_beer', 'mango'],
     assetPath: 'assets/images/savanna_gold_mule.png',
-    price: 400,
+    price: 450,
   ),
   CocktailRecipe(
     // Vodka, not ginger beer — per feedback the original had no alcohol
@@ -229,13 +236,6 @@ const kCocktailRecipesLevel3 = [
     name: 'Golden Pineapple',
     ingredientIds: ['pineapple_fruit', 'honey', 'vodka'],
     assetPath: 'assets/images/golden_pineapple.png',
-    price: 450,
-  ),
-  CocktailRecipe(
-    id: 'mimosa',
-    name: 'Mimosa',
-    ingredientIds: ['prosecco', 'orange_slice'],
-    assetPath: 'assets/images/mimosa.png',
     price: 500,
   ),
 ];
@@ -272,32 +272,18 @@ const kCocktailRecipesLevel4 = [
     price: 200,
   ),
   CocktailRecipe(
-    id: 'lemon_fizz',
-    name: 'Lemon Fizz',
-    ingredientIds: ['lemon_liqueur', 'tonic'],
-    assetPath: 'assets/images/lemon_fizz.png',
-    price: 250,
-  ),
-  CocktailRecipe(
-    id: 'strawberry_mule',
-    name: 'Strawberry Mule',
-    ingredientIds: ['vodka', 'ginger_ale', 'strawberry'],
-    assetPath: 'assets/images/strawberry_mule.png',
-    price: 300,
-  ),
-  CocktailRecipe(
-    id: 'emerald_fizz',
-    name: 'Emerald Fizz',
-    ingredientIds: ['irish_cream', 'ginger_ale'],
-    assetPath: 'assets/images/emerald_fizz.png',
-    price: 350,
-  ),
-  CocktailRecipe(
     id: 'kir_royale',
     name: 'Kir Royale',
     ingredientIds: ['blackcurrant', 'prosecco'],
     assetPath: 'assets/images/kir_royale.png',
-    price: 400,
+    price: 250,
+  ),
+  CocktailRecipe(
+    id: 'french_75',
+    name: 'French 75',
+    ingredientIds: ['cognac', 'lemon', 'prosecco'],
+    assetPath: 'assets/images/game/c_french_75.png',
+    price: 300,
   ),
   CocktailRecipe(
     id: 'hugo_spritz',
@@ -307,13 +293,27 @@ const kCocktailRecipesLevel4 = [
     // closest citrus actually available here.
     ingredientIds: ['mint', 'lemon', 'elderflower_liqueur', 'prosecco'],
     assetPath: 'assets/images/game/c_hugo_spritz.png',
+    price: 350,
+  ),
+  CocktailRecipe(
+    id: 'lemon_fizz',
+    name: 'Lemon Fizz',
+    ingredientIds: ['lemon_liqueur', 'tonic'],
+    assetPath: 'assets/images/lemon_fizz.png',
+    price: 400,
+  ),
+  CocktailRecipe(
+    id: 'emerald_fizz',
+    name: 'Emerald Fizz',
+    ingredientIds: ['irish_cream', 'ginger_ale'],
+    assetPath: 'assets/images/emerald_fizz.png',
     price: 450,
   ),
   CocktailRecipe(
-    id: 'french_75',
-    name: 'French 75',
-    ingredientIds: ['cognac', 'lemon', 'prosecco'],
-    assetPath: 'assets/images/game/c_french_75.png',
+    id: 'strawberry_mule',
+    name: 'Strawberry Mule',
+    ingredientIds: ['vodka', 'ginger_ale', 'strawberry'],
+    assetPath: 'assets/images/strawberry_mule.png',
     price: 500,
   ),
 ];
@@ -338,24 +338,24 @@ const kCocktailRecipesLevel5 = [
     price: 200,
   ),
   CocktailRecipe(
-    id: 'cuba_libre',
-    name: 'Cuba Libre',
-    ingredientIds: ['rum', 'cola', 'lime'],
-    assetPath: 'assets/images/cuba_libre.png',
-    price: 250,
-  ),
-  CocktailRecipe(
     id: 'daiquiri',
     name: 'Daiquiri',
     ingredientIds: ['rum', 'lime', 'sugar_cube'],
     assetPath: 'assets/images/daiquiri.png',
+    price: 250,
+  ),
+  CocktailRecipe(
+    id: 'chiliguaro',
+    name: 'Chiliguaro',
+    ingredientIds: ['guaro', 'tomato_juice', 'hot_sauce', 'lime'],
+    assetPath: 'assets/images/chiliguaro.png',
     price: 300,
   ),
   CocktailRecipe(
-    id: 'banana_daiquiri',
-    name: 'Banana Daiquiri',
-    ingredientIds: ['rum', 'banana', 'lime', 'sugar_cube'],
-    assetPath: 'assets/images/banana_daiquiri.png',
+    id: 'cuba_libre',
+    name: 'Cuba Libre',
+    ingredientIds: ['rum', 'cola', 'lime'],
+    assetPath: 'assets/images/cuba_libre.png',
     price: 350,
   ),
   CocktailRecipe(
@@ -366,10 +366,10 @@ const kCocktailRecipesLevel5 = [
     price: 400,
   ),
   CocktailRecipe(
-    id: 'chiliguaro',
-    name: 'Chiliguaro',
-    ingredientIds: ['guaro', 'tomato_juice', 'hot_sauce', 'lime'],
-    assetPath: 'assets/images/chiliguaro.png',
+    id: 'banana_daiquiri',
+    name: 'Banana Daiquiri',
+    ingredientIds: ['rum', 'banana', 'lime', 'sugar_cube'],
+    assetPath: 'assets/images/banana_daiquiri.png',
     price: 450,
   ),
   CocktailRecipe(

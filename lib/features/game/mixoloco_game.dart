@@ -5,7 +5,7 @@ import 'package:flame_audio/flame_audio.dart';
 import 'package:flame_forge2d/flame_forge2d.dart';
 import 'package:flutter/material.dart'
     show Color, Colors, Curves, ValueNotifier;
-import '../../core/widgets/bar_backdrop.dart' show kAimConvergenceRatio;
+import '../../core/widgets/bar_backdrop.dart' show kAimConvergenceRatio, kTableFarToNearWidthRatio;
 import '../../data/models/cocktail_recipe.dart';
 import '../../data/models/ingredient.dart';
 import 'board_geometry.dart';
@@ -304,6 +304,7 @@ class MixolocoGame extends Forge2DGame {
     if (_purgeTimer <= 0) {
       _purgeTimer = 0.25;
       _purgeCorruptedBodies();
+      _rescueEscapedBodies();
     }
     _resolvePops(clampedDt);
     _unstickContacts(clampedDt);
@@ -550,7 +551,8 @@ class MixolocoGame extends Forge2DGame {
     if (!_initialItemsSpawned) {
       _initialItemsSpawned = true;
       for (final item in initialItems) {
-        _spawnBody(tier: item.tier, position: Vector2(item.x, item.y), angle: item.angle);
+        final byId = item.id == null ? -1 : _chain.indexWhere((i) => i.id == item.id);
+        _spawnBody(tier: byId >= 0 ? byId : item.tier, position: Vector2(item.x, item.y), angle: item.angle);
       }
     }
   }
@@ -607,6 +609,8 @@ class MixolocoGame extends Forge2DGame {
   /// any pile behind it; that's not what "the table's full" means, and
   /// _adjacency only records item-to-item contacts, so a wall-only rest
   /// shows up as no neighbors at all.
+  static const _overflowThrowsAllowed = 2;
+
   void _checkOverflow() {
     // The near-edge line only catches a pile that's grown tall enough to
     // reach back toward the staging edge — a wide table lets a lot of
@@ -631,7 +635,11 @@ class MixolocoGame extends Forge2DGame {
           (_adjacency[c]?.isNotEmpty ?? false),
     );
     _overflowStreak = overflowing ? _overflowStreak + 1 : 0;
-    if (_overflowStreak >= 2) {
+    // Runs just before each throw (power-ups never call this, so they
+    // don't count). The first check that sees the overflow is streak 1;
+    // the player then gets two more throws, and the third consecutive
+    // check ends the game. (Was >= 2, which allowed only one.)
+    if (_overflowStreak >= _overflowThrowsAllowed + 1) {
       _gameOverTriggered = true;
       staging.hide();
       onGameOver();
@@ -760,7 +768,6 @@ class MixolocoGame extends Forge2DGame {
   final Map<IngredientBodyComponent, double> _pops = {};
   static const _popDuration = 0.6;
   static const _popSlop = 0.02;
-  static const _popMaxStep = 0.06;
 
   void _startPop(IngredientBodyComponent body) => _pops[body] = _popDuration;
 
@@ -817,8 +824,11 @@ class MixolocoGame extends Forge2DGame {
     _deepOverlapStreak.removeWhere((k, _) => !stillDeep.contains(k));
   }
 
-  /// Moves [b] away from [a] (and [a] back by its share) along the line
-  /// between their centres, by up to [_popMaxStep] per call.
+  /// Pushes [b] away from [a] (and [a] back by its share) along the line
+  /// between their centres — by giving them separating *velocity*, never
+  /// by teleporting: a teleport ignores collisions, so an item pressed
+  /// against the far wall could be moved straight through it and fly off
+  /// the table. With velocity, the solver still stops it at any wall.
   void _separate(
     IngredientBodyComponent a,
     IngredientBodyComponent b,
@@ -832,11 +842,43 @@ class MixolocoGame extends Forge2DGame {
       dir = Vector2(cos(t), sin(t));
     }
     dir.normalize();
-    final step = depth < _popMaxStep ? depth : _popMaxStep;
-    b.body.setTransform(bPos + dir * (step * (1 - aShare)), b.body.rotation);
-    a.body.setTransform(aPos - dir * (step * aShare), a.body.rotation);
-    a.body.isAwake = true;
-    b.body.isAwake = true;
+    final speed = (depth * _separateSpeedPerMetre).clamp(_separateMinSpeed, _separateMaxSpeed);
+    _pushAlong(b.body, dir, speed * (1 - aShare));
+    _pushAlong(a.body, -dir, speed * aShare);
+  }
+
+  static const _separateSpeedPerMetre = 8.0;
+  static const _separateMinSpeed = 0.3;
+  static const _separateMaxSpeed = 2.0;
+
+  /// Raises [body]'s velocity component along [dir] to at least [speed]
+  /// (leaves it alone if it's already moving that way faster).
+  void _pushAlong(Body body, Vector2 dir, double speed) {
+    if (speed <= 0) return;
+    final v = body.linearVelocity;
+    final along = v.dot(dir);
+    if (along >= speed) return;
+    body.linearVelocity = v + dir * (speed - along);
+  }
+
+  /// Last-resort rescue for anything that ends up outside the table
+  /// entirely (a rare solver blow-out): put it back just inside rather
+  /// than letting it sail off into the scenery.
+  void _rescueEscapedBodies() {
+    final farHalf = kWorldWidthMeters * kTableFarToNearWidthRatio / 2;
+    final centerX = kWorldWidthMeters / 2;
+    for (final b in _liveBodies) {
+      if (b.consumed || !b.isMounted) continue;
+      final p = b.body.position;
+      final outside = p.y < kTableFarInset || p.y > _worldHeight || p.x < 0 || p.x > kWorldWidthMeters;
+      if (!outside) continue;
+      final r = b.contactRadius;
+      final y = p.y.clamp(kTableFarInset + r, _worldHeight - r).toDouble();
+      final x = p.x.clamp(centerX - farHalf + r, centerX + farHalf - r).toDouble();
+      b.body.setTransform(Vector2(x, y), b.body.rotation);
+      b.body.linearVelocity = Vector2.zero();
+      b.body.angularVelocity = 0;
+    }
   }
 
   void _resolvePops(double dt) {
@@ -1125,7 +1167,7 @@ class MixolocoGame extends Forge2DGame {
   List<PlacedItem> capturePlacedItems() => [
     for (final b in _liveBodies)
       if (!b.consumed && b.isMounted)
-        PlacedItem(tier: b.tier, x: b.body.position.x, y: b.body.position.y, angle: b.body.angle),
+        PlacedItem(tier: b.tier, x: b.body.position.x, y: b.body.position.y, angle: b.body.angle, id: b.ingredient.id),
   ];
 
   /// Wipes the table for a fresh run — everything except the staging

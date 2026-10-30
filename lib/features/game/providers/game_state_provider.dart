@@ -325,7 +325,10 @@ class PlacedItem {
   final double x;
   final double y;
   final double angle;
-  const PlacedItem({required this.tier, required this.x, required this.y, this.angle = 0});
+  /// The ingredient id, so a restore can find its tier even if the
+  /// chain order changed in an update (null in older saves).
+  final String? id;
+  const PlacedItem({required this.tier, required this.x, required this.y, this.angle = 0, this.id});
 }
 
 class GameStateNotifier extends Notifier<BoardState> {
@@ -530,7 +533,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     'continueOfferUsed': s.continueOfferUsed,
     'scoreCreditThresholdsAwarded': s.scoreCreditThresholdsAwarded,
     'placedItems': s.placedItems
-        .map((p) => {'tier': p.tier, 'x': p.x, 'y': p.y, 'angle': p.angle})
+        .map((p) => {'tier': p.tier, 'x': p.x, 'y': p.y, 'angle': p.angle, 'id': p.id})
         .toList(),
     'completedCocktailIds': s.completedCocktailIds.toList(),
     'jugReached': s.jugReached,
@@ -616,6 +619,7 @@ class GameStateNotifier extends Notifier<BoardState> {
                 x: (p['x'] as num).toDouble(),
                 y: (p['y'] as num).toDouble(),
                 angle: (p['angle'] as num?)?.toDouble() ?? 0,
+                id: p['id'] as String?,
               ),
             )
             .toList(),
