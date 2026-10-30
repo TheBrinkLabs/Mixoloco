@@ -9,7 +9,6 @@ import '../../../core/widgets/hud_kit.dart';
 import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
-import '../../../data/services/progression_service.dart';
 import '../cocktail_instructions.dart';
 import '../info_level_data.dart';
 
@@ -31,11 +30,16 @@ _Entry _entryForId(String id) {
   throw StateError('Unknown recipe id: $id');
 }
 
-List<_Entry> _mixedEntries(Set<String> mixedIds) => [
-  for (final level in kInfoLevels)
-    for (final recipe in level.recipes)
-      if (mixedIds.contains(recipe.id)) _Entry(level, recipe),
-];
+/// Each cocktail once, under the first level that serves it — After Dark
+/// menus reuse some of their day bar's cocktails.
+List<_Entry> _mixedEntries(Set<String> mixedIds) {
+  final seen = <String>{};
+  return [
+    for (final level in kInfoLevels)
+      for (final recipe in level.recipes)
+        if (mixedIds.contains(recipe.id) && seen.add(recipe.id)) _Entry(level, recipe),
+  ];
+}
 
 /// A cocktail's own page — reached by tapping an unlocked cocktail on
 /// [IngredientsScreen]'s "Used In" sheet or [CocktailsScreen]'s grid.
@@ -58,7 +62,7 @@ class _CocktailDetailScreenState extends ConsumerState<CocktailDetailScreen> {
   @override
   void initState() {
     super.initState();
-    loadMixedCocktailIds().then((ids) {
+    guideMixedCocktailIds().then((ids) {
       if (mounted) setState(() => _mixedIds = ids);
     });
   }

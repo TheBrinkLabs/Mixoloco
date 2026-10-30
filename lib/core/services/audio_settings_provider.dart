@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/models/ingredient.dart' show barForLevel, isAfterDarkLevel;
 import '../../data/services/progression_service.dart';
 
 /// Background music tracks, played one after the other on repeat (not
@@ -31,18 +32,26 @@ const kMusicTracksLevel4 = ['Afternoon_in_the_Piazza.mp3', 'Midday_in_the_Piazza
 /// doc for how [musicTracksForLevel] picks between the four.
 const kMusicTracksLevel5 = ['noon_in_the_canopy.mp3', 'Rainforest_Morning_Mist.mp3', 'canopy_ritual.mp3', 'Mixoloco_en_Costa_Rica.mp3'];
 
+/// Each bar's four songs, index 0 = Beach.
+const kBarMusicTracks = [kMusicTracks, kMusicTracksLevel2, kMusicTracksLevel3, kMusicTracksLevel4, kMusicTracksLevel5];
+
+/// The bonus song [level]'s bar unlocks once its "After Dark" level is
+/// reached — the fourth of that bar's tracks.
+String bonusTrackForLevel(int level) => kBarMusicTracks[barForLevel(level) - 1].last;
+
 /// Which playlist plays for [level] — shared by [AudioSettingsNotifier
 /// .playGameMusic] so the beach/rooftop/safari/piazza/jungle choice can't
 /// drift out of sync between call sites. Menu music stays on
 /// [kMusicTracks] regardless of lifetime level reached — the home
 /// screen's own visuals (sign, sand, boards) never change, only the
 /// in-game table does.
+///
+/// Each bar has four songs: its daytime level plays the first three, and
+/// its "After Dark" revisit unlocks the fourth as a bonus track (see
+/// [bonusTrackForLevel]) and plays all four.
 List<String> musicTracksForLevel(int level) {
-  if (level >= 5) return kMusicTracksLevel5;
-  if (level >= 4) return kMusicTracksLevel4;
-  if (level >= 3) return kMusicTracksLevel3;
-  if (level >= 2) return kMusicTracksLevel2;
-  return kMusicTracks;
+  final tracks = kBarMusicTracks[barForLevel(level) - 1];
+  return isAfterDarkLevel(level) ? tracks : tracks.take(3).toList();
 }
 
 class AudioSettings {

@@ -5,10 +5,11 @@ import '../../../core/services/ad_service.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/services/purchase_service.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/bar_backdrop.dart' show backgroundAssetPathForLevel;
+import '../../../core/widgets/bar_backdrop.dart'
+    show FilteredAssetImage, backgroundAssetPathForLevel, backgroundFilterForLevel;
 import '../../../core/widgets/notification_tablet.dart' show StoneButton;
 import '../../../core/widgets/submenu_kit.dart';
-import '../../menu/info_level_data.dart';
+import '../../../data/models/ingredient.dart' show barForLevel, isAfterDarkLevel, kBarNames;
 
 enum _Step { celebrate, ad, ready }
 
@@ -112,14 +113,15 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
           // just still covered) instead of the plain dark scrim the
           // celebrate/ad beats use.
           if (_step == _Step.ready)
-            Image.asset(
-              backgroundAssetPathForLevel(widget.level),
+            FilteredAssetImage(
+              assetPath: backgroundAssetPathForLevel(widget.level),
               fit: BoxFit.cover,
               alignment: Alignment.topCenter,
               // See BarBackdrop's matching comment.
               cacheWidth: MediaQuery.sizeOf(context).width > 0
                   ? (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round()
                   : null,
+              colorFilter: backgroundFilterForLevel(widget.level),
             ),
           Container(color: Colors.black.withValues(alpha: _step == _Step.ready ? 0.35 : 0.75)),
           Center(
@@ -191,7 +193,7 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
   }
 
   Widget _buildReadyMessage() {
-    final levelName = kInfoLevels.firstWhere((l) => l.level == widget.level, orElse: () => kInfoLevels.last).name;
+    final barName = kBarNames[barForLevel(widget.level) - 1];
     return Column(
       key: const ValueKey('ready'),
       mainAxisSize: MainAxisSize.min,
@@ -209,7 +211,15 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
                 style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, letterSpacing: 1.4, color: SubmenuColors.gold),
               ),
               const SizedBox(height: 4),
-              OutlinedLabel(text: levelName.toUpperCase(), fontSize: 44, fill: Colors.white, stroke: SubmenuColors.ring, strokeWidth: 6),
+              OutlinedLabel(text: barName.toUpperCase(), fontSize: 44, fill: Colors.white, stroke: SubmenuColors.ring, strokeWidth: 6),
+              if (isAfterDarkLevel(widget.level))
+                const OutlinedLabel(
+                  text: 'NIGHT',
+                  fontSize: 26,
+                  fill: SubmenuColors.gold,
+                  stroke: SubmenuColors.ring,
+                  strokeWidth: 5,
+                ),
             ],
           ),
         ),

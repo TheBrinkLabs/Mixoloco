@@ -264,7 +264,8 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
             ], 0));
           case CollisionPolygon():
             final hull = _hull([for (final p in c.points) Vector2(r * p.$1, r * p.$2)]);
-            if (hull.length >= 3) pieces.add(CollisionPiece(hull, 0));
+            // The corner radius rounds the polygon outward in Box2D too.
+            if (hull.length >= 3) pieces.add(CollisionPiece(hull, r * c.cornerRadius));
         }
       }
     }

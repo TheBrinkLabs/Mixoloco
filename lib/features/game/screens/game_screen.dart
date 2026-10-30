@@ -378,7 +378,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final locale = ref.watch(localeProvider);
     final cocktailModeEnabled = ref.watch(cocktailModeProvider);
     final screenSize = MediaQuery.sizeOf(context);
-    final rooftop = board.level >= 2;
+    final rooftop = barForLevel(board.level) >= 2;
     // Level 3's own table/header-board art hasn't landed yet (more to
     // come) — reuses the rooftop's for now via [rooftop] above, but the
     // background photo itself is ready (see backgroundAssetPathForLevel),
@@ -487,6 +487,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
           shakeTrigger: _tableShakeSignal,
           rooftop: rooftop,
           tableFinish: tableFinishForLevel(board.level),
+          night: isAfterDarkLevel(board.level),
           child: Stack(
             children: [
               // Logo + status banner — top center. Tapping the logo goes
@@ -561,20 +562,17 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   // match whatever that level's own tier-0 ingredient
                   // actually is — Piazza's is blackcurrant, Jungle's is
                   // a sugar cube, not a cherry.
-                  asset: board.level >= 5
-                      ? 'assets/images/ingredient_sugar_cube.png'
-                      : board.level == 4
-                      ? 'assets/images/ingredient_blackcurrant.png'
-                      : 'assets/images/game/i_cherry.png',
+                  asset: switch (evolutionChainForLevel(board.level).first.id) {
+                    'sugar_cube' => 'assets/images/ingredient_sugar_cube.png',
+                    'blackcurrant' => 'assets/images/ingredient_blackcurrant.png',
+                    _ => 'assets/images/game/i_cherry.png',
+                  },
                   size: actionTileSize,
-                  label: tr(
-                    locale,
-                    board.level >= 5
-                        ? 'sugar_bomb_label'
-                        : board.level == 4
-                        ? 'currant_bomb_label'
-                        : 'cherry_bomb_label',
-                  ),
+                  label: tr(locale, switch (evolutionChainForLevel(board.level).first.id) {
+                    'sugar_cube' => 'sugar_bomb_label',
+                    'blackcurrant' => 'currant_bomb_label',
+                    _ => 'cherry_bomb_label',
+                  }),
                   cost: kCherryBombCost,
                   enabled: board.credits >= kCherryBombCost,
                   onTap: _useCherryBomb,

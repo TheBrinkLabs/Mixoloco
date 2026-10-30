@@ -7,7 +7,6 @@ import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
-import '../../../data/services/progression_service.dart';
 import '../../game/providers/game_state_provider.dart';
 import '../info_level_data.dart';
 import 'cocktail_detail_screen.dart';
@@ -46,15 +45,16 @@ class _CocktailsScreenState extends ConsumerState<CocktailsScreen> {
       panelTop: 100,
       panelBottom: 58,
       backgroundAssetPath: backgroundAssetPathForLevel(kInfoLevels[_levelIndex].level),
+      night: isAfterDarkLevel(kInfoLevels[_levelIndex].level),
       child: FutureBuilder<Set<String>>(
-        future: loadMixedCocktailIds(),
+        future: guideMixedCocktailIds(),
         builder: (context, snapshot) {
           final mixedIds = snapshot.data ?? const <String>{};
           return LevelPager(
             itemCount: kInfoLevels.length,
             initialPage: (board.highestLevelReached - 1).clamp(0, kInfoLevels.length - 1),
             levelName: (i) => kInfoLevels[i].name,
-            levelReached: (i) => kInfoLevels[i].level <= board.highestLevelReached,
+            levelReached: (i) => guideLevelReached(kInfoLevels[i].level, board.highestLevelReached),
             lockedNoun: tr(locale, 'cocktails').toLowerCase(),
             onPageChanged: (i) => setState(() => _levelIndex = i),
             pageBuilder: (context, i) {

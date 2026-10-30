@@ -9,6 +9,36 @@
 /// the ingredients list above these steps, only in the step text
 /// itself.
 const kCocktailInstructions = <String, List<String>>{
+  'mai_tai': [
+    'Fill a shaker with ice.',
+    'Add the rum, lime, and orange juice.',
+    'Shake well and strain over crushed ice.',
+    'Garnish with mint and a cherry.',
+  ],
+  'bramble_royale': [
+    'Shake the gin and lemon juice with ice.',
+    'Strain into a flute.',
+    'Top with prosecco.',
+    'Garnish with blackberries.',
+  ],
+  'marula_espresso': [
+    'Fill a shaker with ice.',
+    'Add the marula liqueur, coffee liqueur, and vodka.',
+    'Shake hard until frothy.',
+    'Strain into a chilled glass.',
+  ],
+  'caffe_corretto': [
+    'Pour the coffee liqueur into a small glass.',
+    'Stir in the sugar.',
+    'Add the grappa.',
+    'Serve straight away.',
+  ],
+  'jungle_fire_margarita': [
+    'Rim a glass with sugar.',
+    'Shake the tequila, lime, and a dash of hot sauce with ice.',
+    'Strain over fresh ice.',
+    'Serve with a lime wedge.',
+  ],
   'mojito': [
     'Muddle the mint and lime in the glass.',
     'Add a dash of simple syrup.',

@@ -2,10 +2,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const _kCreditsKey = 'credits';
 const _kHighestTierKey = 'highest_tier_unlocked';
-const _kHighestTierLevel2Key = 'highest_tier_unlocked_level2';
-const _kHighestTierLevel3Key = 'highest_tier_unlocked_level3';
-const _kHighestTierLevel4Key = 'highest_tier_unlocked_level4';
-const _kHighestTierLevel5Key = 'highest_tier_unlocked_level5';
 const _kHighestLevelReachedKey = 'highest_level_reached';
 // The single old flag is kept as the migration source for menu music —
 // existing installs' one saved preference carries over as their menu
@@ -35,71 +31,28 @@ Future<void> saveCredits(int credits) async {
   await prefs.setInt(_kCreditsKey, credits);
 }
 
-/// The highest evolution tier ever reached (by dropping or merging into
-/// it), across every game ever played — starts at 0 (Peppermint).
-Future<int> loadHighestTier() async {
+/// Storage key for [level]'s lifetime highest-tier record. Level 1 keeps
+/// its original unsuffixed key so existing installs' records carry over.
+String _highestTierKey(int level) =>
+    level <= 1 ? _kHighestTierKey : 'highest_tier_unlocked_level$level';
+
+/// The highest evolution tier ever reached on [level] (by dropping or
+/// merging into it), across every game ever played. Level 1 defaults to 0;
+/// every later level to -1 ("never reached"), so its very first tier still
+/// counts as a new lifetime milestone worth its credit reward.
+Future<int> loadHighestTierForLevel(int level) async {
   final prefs = await SharedPreferences.getInstance();
-  return prefs.getInt(_kHighestTierKey) ?? 0;
+  return prefs.getInt(_highestTierKey(level)) ?? (level <= 1 ? 0 : -1);
 }
 
-Future<void> saveHighestTier(int tier) async {
+Future<void> saveHighestTierForLevel(int level, int tier) async {
   final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt(_kHighestTierKey, tier);
+  await prefs.setInt(_highestTierKey(level), tier);
 }
 
-/// The highest rooftop-bar (Level 2) evolution tier ever reached —
-/// mirrors [loadHighestTier]/[saveHighestTier], but for
-/// kEvolutionChainLevel2. -1 (not 0) is "never reached" here specifically
-/// so the very first Level 2 tier ever seen (Cherry, tier 0) still counts
-/// as a genuinely new lifetime milestone worth its credit reward.
-Future<int> loadHighestTierLevel2() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getInt(_kHighestTierLevel2Key) ?? -1;
-}
-
-Future<void> saveHighestTierLevel2(int tier) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt(_kHighestTierLevel2Key, tier);
-}
-
-/// The highest safari-bar (Level 3) evolution tier ever reached — mirrors
-/// [loadHighestTierLevel2]/[saveHighestTierLevel2], but for
-/// kEvolutionChainLevel3.
-Future<int> loadHighestTierLevel3() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getInt(_kHighestTierLevel3Key) ?? -1;
-}
-
-Future<void> saveHighestTierLevel3(int tier) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt(_kHighestTierLevel3Key, tier);
-}
-
-/// The highest piazza-bar (Level 4) evolution tier ever reached — mirrors
-/// [loadHighestTierLevel3]/[saveHighestTierLevel3], but for
-/// kEvolutionChainLevel4.
-Future<int> loadHighestTierLevel4() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getInt(_kHighestTierLevel4Key) ?? -1;
-}
-
-Future<void> saveHighestTierLevel4(int tier) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt(_kHighestTierLevel4Key, tier);
-}
-
-/// The highest jungle-bar (Level 5) evolution tier ever reached — mirrors
-/// [loadHighestTierLevel4]/[saveHighestTierLevel4], but for
-/// kEvolutionChainLevel5.
-Future<int> loadHighestTierLevel5() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getInt(_kHighestTierLevel5Key) ?? -1;
-}
-
-Future<void> saveHighestTierLevel5(int tier) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt(_kHighestTierLevel5Key, tier);
-}
+/// Every level's record at once, index 0 = Level 1.
+Future<List<int>> loadHighestTiers(int levelCount) async =>
+    [for (var l = 1; l <= levelCount; l++) await loadHighestTierForLevel(l)];
 
 /// The highest bar level ever reached (1 = beach, 2 = rooftop) — once
 /// this reaches 2, every new game starts there directly instead of back
@@ -160,10 +113,9 @@ Future<void> saveMixedCocktailIds(Set<String> ids) async {
 Future<void> resetTierProgression() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt(_kHighestTierKey, 0);
-  await prefs.remove(_kHighestTierLevel2Key);
-  await prefs.remove(_kHighestTierLevel3Key);
-  await prefs.remove(_kHighestTierLevel4Key);
-  await prefs.remove(_kHighestTierLevel5Key);
+  for (var level = 2; level <= 20; level++) {
+    await prefs.remove(_highestTierKey(level));
+  }
   await prefs.setInt(_kHighestLevelReachedKey, 1);
 }
 

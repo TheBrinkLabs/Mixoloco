@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flame_audio/flame_audio.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/strings.dart';
@@ -9,6 +10,7 @@ import '../../../core/services/locale_provider.dart';
 import '../../../core/services/share_service.dart';
 import '../../../core/widgets/bar_backdrop.dart';
 import '../../../core/widgets/submenu_kit.dart';
+import '../../../data/models/ingredient.dart' show isAfterDarkLevel;
 import '../../game/providers/game_state_provider.dart';
 import '../info_level_data.dart';
 
@@ -32,7 +34,7 @@ enum _RepeatMode { off, all, one }
 /// handles whether a level's own page is reachable at all
 /// (`highestLevelReached`); within a reached page, a level's songs are
 /// still shown locked until the player's made at least one merge there
-/// (`highestTierBucketForLevel >= 0`, per the confirmed "whole level
+/// (`highestTierFor(...) >= 0`, per the confirmed "whole level
 /// unlocks together" rule) — see screenshot 08 in the design handoff,
 /// where a reached-but-unplayed level shows its pager and count row
 /// normally but every row is still a `???` silhouette. Playback state
@@ -237,14 +239,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     final locale = ref.watch(localeProvider);
     final board = ref.watch(gameStateProvider);
 
-    int bucketFor(int level) => highestTierBucketForLevel(
-      level,
-      l1: board.highestTierUnlocked,
-      l2: board.highestTierUnlockedLevel2,
-      l3: board.highestTierUnlockedLevel3,
-      l4: board.highestTierUnlockedLevel4,
-      l5: board.highestTierUnlockedLevel5,
-    );
+    int bucketFor(int level) => guideTierFor(board.highestTiers, level);
 
     // Matches SubmenuScaffold's own ribbonTop default (not overridden
     // below) — kept as a local constant so the toggle button can line up
@@ -264,49 +259,59 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
           title: tr(locale, 'songs'),
           panelBottom: 86,
           backgroundAssetPath: backgroundAssetPathForLevel(kInfoLevels[_levelIndex].level),
+          night: isAfterDarkLevel(kInfoLevels[_levelIndex].level),
           child: LevelPager(
             itemCount: kInfoLevels.length,
             initialPage: (board.highestLevelReached - 1).clamp(0, kInfoLevels.length - 1),
             levelName: (i) => kInfoLevels[i].name,
-            levelReached: (i) => kInfoLevels[i].level <= board.highestLevelReached,
+            levelReached: (i) => guideLevelReached(kInfoLevels[i].level, board.highestLevelReached),
             lockedNoun: tr(locale, 'songs').toLowerCase(),
             onPageChanged: (i) => setState(() => _levelIndex = i),
             pageBuilder: (context, i) {
               final level = kInfoLevels[i];
               final unlocked = bucketFor(level.level) >= 0;
-              final unlockedCount = unlocked ? level.songs.length : 0;
-              final playingThisQueue = identical(_playAllQueue, level.songs) && _playingFile != null;
+              // A daytime bar's fourth track stays locked until its After
+              // Dark level is reached, even once the rest of the page is.
+              final bonus = level.bonusSong;
+              final bonusUnlocked = bonus != null && unlocked && guideLevelReached(level.bonusSongLevel!, board.highestLevelReached);
+              final songs = [...level.songs, if (bonusUnlocked) bonus];
+              final totalCount = level.songs.length + (bonus == null ? 0 : 1);
+              final unlockedCount = unlocked ? songs.length : 0;
+              final playingThisQueue = _playingFile != null && listEquals(_playAllQueue, songs);
               return SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CountRow(label: tr(locale, 'unlocked_label'), value: '$unlockedCount / ${level.songs.length}'),
+                    CountRow(label: tr(locale, 'unlocked_label'), value: '$unlockedCount / $totalCount'),
                     const SizedBox(height: 10),
                     if (unlocked) ...[
                       Row(
                         children: [
                           _PlayAllIconButton(
                             playing: playingThisQueue,
-                            onTap: playingThisQueue ? () => _toggle(_playingFile!) : () => _playAll(level.songs),
+                            onTap: playingThisQueue ? () => _toggle(_playingFile!) : () => _playAll(songs),
                           ),
                           const Spacer(),
-                          _ShuffleButton(enabled: _shuffleEnabled, onTap: () => _toggleShuffle(level.songs)),
+                          _ShuffleButton(enabled: _shuffleEnabled, onTap: () => _toggleShuffle(songs)),
                           const SizedBox(width: 8),
                           _RepeatButton(mode: _repeatMode, onTap: _cycleRepeat),
                         ],
                       ),
                       const SizedBox(height: 10),
                     ],
-                    for (final file in level.songs)
+                    for (final file in [...level.songs, ?bonus])
                       Padding(
-                        padding: EdgeInsets.only(bottom: file == level.songs.last ? 0 : 8),
+                        padding: EdgeInsets.only(bottom: file == (bonus ?? level.songs.last) ? 0 : 8),
                         child: _SongRow(
                           file: file,
-                          locked: !unlocked,
+                          locked: !songs.contains(file) || !unlocked,
+                          lockedHint: file == bonus && unlocked && !bonusUnlocked
+                              ? tr(locale, 'unlocks_at_level').replaceFirst('{n}', '${level.bonusSongLevel}')
+                              : null,
                           playing: _playingFile == file,
                           position: _position,
                           duration: _duration,
-                          onTap: unlocked ? () => _toggle(file) : null,
+                          onTap: unlocked && songs.contains(file) ? () => _toggle(file) : null,
                           onShare: () => shareText(tr(locale, 'share_song_text').replaceFirst('{song}', songDisplayName(file))),
                         ),
                       ),
@@ -343,6 +348,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
       body: BarBackdrop(
         showTable: false,
         backgroundAssetPath: backgroundAssetPathForLevel(kInfoLevels[_levelIndex].level),
+        night: isAfterDarkLevel(kInfoLevels[_levelIndex].level),
         child: Stack(
           children: [
             const Positioned.fill(child: SubmenuToneGradient()),
@@ -566,6 +572,9 @@ class _MinimizedPlayerBar extends StatelessWidget {
 class _SongRow extends StatelessWidget {
   final String file;
   final bool locked;
+
+  /// Shown under a locked row's `???` — e.g. when the bonus track unlocks.
+  final String? lockedHint;
   final bool playing;
   final Duration position;
   final Duration? duration;
@@ -574,6 +583,7 @@ class _SongRow extends StatelessWidget {
   const _SongRow({
     required this.file,
     required this.locked,
+    this.lockedHint,
     required this.playing,
     required this.position,
     required this.duration,
@@ -620,6 +630,13 @@ class _SongRow extends StatelessWidget {
                       color: locked ? SubmenuColors.textDisabled : Colors.white,
                     ),
                   ),
+                  if (locked && lockedHint != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      lockedHint!,
+                      style: submenuNunito(size: 12, weight: FontWeight.w800, color: SubmenuColors.textSecondary),
+                    ),
+                  ],
                   if (playing) ...[
                     const SizedBox(height: 6),
                     ClipRRect(

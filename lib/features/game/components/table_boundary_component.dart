@@ -58,36 +58,44 @@ class TableBoundaryComponent extends BodyComponent<MixolocoGame> {
     final bodyDef = BodyDef(position: Vector2.zero());
     final body = world.createBody(bodyDef);
     final shapeDef = ShapeDef(material: SurfaceMaterial(friction: 0.55));
+    for (final (a, b) in tableWallSegments(worldWidth, worldHeight)) {
+      body.createShape(Segment(point1: a, point2: b), shapeDef);
+    }
+    return body;
+  }
+}
 
-    final farWidth = worldWidth * kTableFarToNearWidthRatio;
-    final farLeft = (worldWidth - farWidth) / 2;
-    final farRight = farLeft + farWidth;
-    final center = worldWidth / 2;
+/// The table boundary's wall segments — shared with MixolocoGame's
+/// stuck-in-a-wall rescue so both see the exact same walls.
+List<(Vector2, Vector2)> tableWallSegments(double worldWidth, double worldHeight) {
+  final farWidth = worldWidth * kTableFarToNearWidthRatio;
+  final farLeft = (worldWidth - farWidth) / 2;
+  final farRight = farLeft + farWidth;
+  final center = worldWidth / 2;
 
-    // Distance from center a straight taper would put the wall at, at
-    // the bulge's depth — then pushed further out by kTableBulgeOutwardFactor.
-    final straightDistAtBulge = center * (1 - kTableBulgeDepthFraction) + (farWidth / 2) * kTableBulgeDepthFraction;
-    // Capped at the screen edge: uncapped, the bend sat ~15cm off-screen
-    // (4.15m on a 4m-wide world), leaving a hidden pocket a tipped glass
-    // could slide into and jam there half off the table.
-    final rawBulgeDist = straightDistAtBulge / kTableBulgeOutwardFactor;
-    final bulgeDist = rawBulgeDist > center ? center : rawBulgeDist;
-    final bulgeY = worldHeight - (worldHeight - kTableFarInset) * kTableBulgeDepthFraction;
-    final bulgeLeft = Vector2(center - bulgeDist, bulgeY);
-    final bulgeRight = Vector2(center + bulgeDist, bulgeY);
+  // Distance from center a straight taper would put the wall at, at
+  // the bulge's depth — then pushed further out by kTableBulgeOutwardFactor.
+  final straightDistAtBulge = center * (1 - kTableBulgeDepthFraction) + (farWidth / 2) * kTableBulgeDepthFraction;
+  // Capped at the screen edge: uncapped, the bend sat ~15cm off-screen
+  // (4.15m on a 4m-wide world), leaving a hidden pocket a tipped glass
+  // could slide into and jam there half off the table.
+  final rawBulgeDist = straightDistAtBulge / kTableBulgeOutwardFactor;
+  final bulgeDist = rawBulgeDist > center ? center : rawBulgeDist;
+  final bulgeY = worldHeight - (worldHeight - kTableFarInset) * kTableBulgeDepthFraction;
+  final bulgeLeft = Vector2(center - bulgeDist, bulgeY);
+  final bulgeRight = Vector2(center + bulgeDist, bulgeY);
 
-    body.createShape(Segment(point1: Vector2(farLeft, kTableFarInset), point2: Vector2(farRight, kTableFarInset)), shapeDef);
+  return [
+    (Vector2(farLeft, kTableFarInset), Vector2(farRight, kTableFarInset)),
     // Side walls: near corner -> outward bulge -> far corner, matching
     // the table art's own perspective while giving the near-to-middle
     // region some extra room a single straight taper couldn't.
-    body.createShape(Segment(point1: Vector2(0, worldHeight), point2: bulgeLeft), shapeDef);
-    body.createShape(Segment(point1: bulgeLeft, point2: Vector2(farLeft, kTableFarInset)), shapeDef);
-    body.createShape(Segment(point1: Vector2(worldWidth, worldHeight), point2: bulgeRight), shapeDef);
-    body.createShape(Segment(point1: bulgeRight, point2: Vector2(farRight, kTableFarInset)), shapeDef);
+    (Vector2(0, worldHeight), bulgeLeft),
+    (bulgeLeft, Vector2(farLeft, kTableFarInset)),
+    (Vector2(worldWidth, worldHeight), bulgeRight),
+    (bulgeRight, Vector2(farRight, kTableFarInset)),
     // Near/staging edge — keeps a jostled pile (or a drop aimed right at
     // the edge) from ever leaving the visible play area at the bottom.
-    body.createShape(Segment(point1: Vector2(0, worldHeight), point2: Vector2(worldWidth, worldHeight)), shapeDef);
-
-    return body;
-  }
+    (Vector2(0, worldHeight), Vector2(worldWidth, worldHeight)),
+  ];
 }

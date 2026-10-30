@@ -27,16 +27,12 @@ class LeagueLeaderboardEntry {
   /// run starts on).
   final int level;
 
-  /// This player's lifetime-highest evolution tier reached, same shape
-  /// as [BoardState.highestTierUnlocked]/[highestTierUnlockedLevel2]/
-  /// [highestTierUnlockedLevel3]/[highestLevelReached] — resolve the
+  /// This player's lifetime-highest evolution tier per level, same shape
+  /// as [BoardState.highestTiers]/[highestLevelReached] — resolve the
   /// actual Ingredient to show with [evolutionIngredient] rather than
   /// indexing the chains directly at every call site.
-  final int highestTierUnlocked;
-  final int highestTierUnlockedLevel2;
-  final int highestTierUnlockedLevel3;
-  final int highestTierUnlockedLevel4;
-  final int highestTierUnlockedLevel5;
+  /// Per-level lifetime highest tier, index 0 = Level 1.
+  final List<int> highestTiers;
   final int highestLevelReached;
 
   const LeagueLeaderboardEntry({
@@ -44,11 +40,7 @@ class LeagueLeaderboardEntry {
     required this.nickname,
     required this.score,
     this.level = 1,
-    this.highestTierUnlocked = 0,
-    this.highestTierUnlockedLevel2 = -1,
-    this.highestTierUnlockedLevel3 = -1,
-    this.highestTierUnlockedLevel4 = -1,
-    this.highestTierUnlockedLevel5 = -1,
+    this.highestTiers = const [],
     this.highestLevelReached = 1,
   });
 
@@ -56,19 +48,9 @@ class LeagueLeaderboardEntry {
   /// higher-level-outranks-lower rule the main menu's own Unlocked tab
   /// uses (see menu_screen.dart).
   Ingredient get evolutionIngredient {
-    if (highestLevelReached >= 5) {
-      return kEvolutionChainLevel5[highestTierUnlockedLevel5.clamp(0, kEvolutionChainLevel5.length - 1)];
-    }
-    if (highestLevelReached >= 4) {
-      return kEvolutionChainLevel4[highestTierUnlockedLevel4.clamp(0, kEvolutionChainLevel4.length - 1)];
-    }
-    if (highestLevelReached >= 3) {
-      return kEvolutionChainLevel3[highestTierUnlockedLevel3.clamp(0, kEvolutionChainLevel3.length - 1)];
-    }
-    if (highestLevelReached >= 2) {
-      return kEvolutionChainLevel2[highestTierUnlockedLevel2.clamp(0, kEvolutionChainLevel2.length - 1)];
-    }
-    return kEvolutionChain[highestTierUnlocked.clamp(0, kEvolutionChain.length - 1)];
+    final chain = evolutionChainForLevel(highestLevelReached);
+    final tier = highestTierFor(highestTiers, highestLevelReached);
+    return chain[tier.clamp(0, chain.length - 1)];
   }
 }
 
@@ -80,11 +62,9 @@ class LeagueLeaderboardEntry {
 /// high_scores_service.dart).
 class PlayerProgress {
   final int credits;
-  final int highestTierUnlocked;
-  final int highestTierUnlockedLevel2;
-  final int highestTierUnlockedLevel3;
-  final int highestTierUnlockedLevel4;
-  final int highestTierUnlockedLevel5;
+
+  /// Per-level lifetime highest tier, index 0 = Level 1.
+  final List<int> highestTiers;
   final int highestLevelReached;
   final List<int> highScores;
 
@@ -103,11 +83,7 @@ class PlayerProgress {
 
   const PlayerProgress({
     required this.credits,
-    required this.highestTierUnlocked,
-    required this.highestTierUnlockedLevel2,
-    required this.highestTierUnlockedLevel3,
-    required this.highestTierUnlockedLevel4,
-    this.highestTierUnlockedLevel5 = -1,
+    required this.highestTiers,
     required this.highestLevelReached,
     required this.highScores,
     this.mixedCocktailIds = const [],
@@ -213,8 +189,7 @@ class LeagueRepository {
   /// score earned late one night that only manages to submit the next
   /// morning would get filed under the wrong week entirely.
   ///
-  /// [level]/[highestTierUnlocked]/[highestTierUnlockedLevel2]/
-  /// [highestTierUnlockedLevel3]/[highestLevelReached] are this player's
+  /// [level]/[highestTiers]/[highestLevelReached] are this player's
   /// own progress at submit time — purely informational extras on top of
   /// bestScore (see [LeagueLeaderboardEntry]), not subject to
   /// firestore.rules' bestScore-only validation, so they're free-form
@@ -224,11 +199,7 @@ class LeagueRepository {
     required int score,
     DateTime? playedAt,
     int level = 1,
-    int highestTierUnlocked = 0,
-    int highestTierUnlockedLevel2 = -1,
-    int highestTierUnlockedLevel3 = -1,
-    int highestTierUnlockedLevel4 = -1,
-    int highestTierUnlockedLevel5 = -1,
+    List<int> highestTiers = const [],
     int highestLevelReached = 1,
   }) async {
     final playedAtUtc = (playedAt ?? DateTime.now()).toUtc();
@@ -243,11 +214,7 @@ class LeagueRepository {
         'bestScore': score,
         'weekId': weekId,
         'level': level,
-        'highestTierUnlocked': highestTierUnlocked,
-        'highestTierUnlockedLevel2': highestTierUnlockedLevel2,
-        'highestTierUnlockedLevel3': highestTierUnlockedLevel3,
-        'highestTierUnlockedLevel4': highestTierUnlockedLevel4,
-        'highestTierUnlockedLevel5': highestTierUnlockedLevel5,
+        ...highestTierFields(highestTiers),
         'highestLevelReached': highestLevelReached,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -303,11 +270,7 @@ class LeagueRepository {
         nickname: nickname,
         score: score,
         level: (scoreData?['level'] as int?) ?? 1,
-        highestTierUnlocked: (scoreData?['highestTierUnlocked'] as int?) ?? 0,
-        highestTierUnlockedLevel2: (scoreData?['highestTierUnlockedLevel2'] as int?) ?? -1,
-        highestTierUnlockedLevel3: (scoreData?['highestTierUnlockedLevel3'] as int?) ?? -1,
-        highestTierUnlockedLevel4: (scoreData?['highestTierUnlockedLevel4'] as int?) ?? -1,
-        highestTierUnlockedLevel5: (scoreData?['highestTierUnlockedLevel5'] as int?) ?? -1,
+        highestTiers: readHighestTiers(scoreData),
         highestLevelReached: (scoreData?['highestLevelReached'] as int?) ?? 1,
       );
     }));
@@ -334,11 +297,7 @@ class LeagueRepository {
         .doc('current')
         .set({
           'credits': progress.credits,
-          'highestTierUnlocked': progress.highestTierUnlocked,
-          'highestTierUnlockedLevel2': progress.highestTierUnlockedLevel2,
-          'highestTierUnlockedLevel3': progress.highestTierUnlockedLevel3,
-          'highestTierUnlockedLevel4': progress.highestTierUnlockedLevel4,
-          'highestTierUnlockedLevel5': progress.highestTierUnlockedLevel5,
+          ...highestTierFields(progress.highestTiers),
           'highestLevelReached': progress.highestLevelReached,
           'highScores': progress.highScores,
           'mixedCocktailIds': progress.mixedCocktailIds,
@@ -356,11 +315,7 @@ class LeagueRepository {
     if (data == null) return null;
     return PlayerProgress(
       credits: (data['credits'] as int?) ?? 0,
-      highestTierUnlocked: (data['highestTierUnlocked'] as int?) ?? 0,
-      highestTierUnlockedLevel2: (data['highestTierUnlockedLevel2'] as int?) ?? -1,
-      highestTierUnlockedLevel3: (data['highestTierUnlockedLevel3'] as int?) ?? -1,
-      highestTierUnlockedLevel4: (data['highestTierUnlockedLevel4'] as int?) ?? -1,
-      highestTierUnlockedLevel5: (data['highestTierUnlockedLevel5'] as int?) ?? -1,
+      highestTiers: readHighestTiers(data),
       highestLevelReached: (data['highestLevelReached'] as int?) ?? 1,
       highScores: ((data['highScores'] as List?) ?? const []).cast<int>(),
       mixedCocktailIds: ((data['mixedCocktailIds'] as List?) ?? const []).cast<String>(),
@@ -368,3 +323,27 @@ class LeagueRepository {
     );
   }
 }
+
+/// "Never reached" for [level]: Level 1 starts at tier 0, every later
+/// level at -1 (so its first tier still counts as a new milestone).
+int defaultHighestTier(int level) => level <= 1 ? 0 : -1;
+
+/// [level]'s entry in a per-level tier list (index 0 = Level 1), or its
+/// default if the list is shorter (an older save/snapshot).
+int highestTierFor(List<int> tiers, int level) =>
+    level >= 1 && level <= tiers.length ? tiers[level - 1] : defaultHighestTier(level);
+
+/// Firestore field name for [level]'s record — Level 1 keeps the original
+/// unsuffixed name, so every existing document still reads correctly.
+String highestTierField(int level) =>
+    level <= 1 ? 'highestTierUnlocked' : 'highestTierUnlockedLevel$level';
+
+Map<String, int> highestTierFields(List<int> tiers) => {
+  for (var level = 1; level <= kLevelCount; level++)
+    highestTierField(level): highestTierFor(tiers, level),
+};
+
+List<int> readHighestTiers(Map<String, dynamic>? data) => [
+  for (var level = 1; level <= kLevelCount; level++)
+    (data?[highestTierField(level)] as int?) ?? defaultHighestTier(level),
+];

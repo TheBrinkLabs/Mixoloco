@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/strings.dart';
@@ -148,13 +149,15 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
   Future<void> _startNewGame() async {
     final board = ref.read(gameStateProvider);
     var level = board.highestLevelReached;
-    if (board.highestLevelReached >= 2) {
+    // Debug builds can pick any level, for testing the later ones.
+    final pickable = kDebugMode ? kMaxLevel : board.highestLevelReached;
+    if (pickable >= 2) {
       final locale = ref.read(localeProvider);
       final chosen = await showDialog<int>(
         context: context,
         builder: (_) => _LevelPickerDialog(
           locale: locale,
-          maxLevel: board.highestLevelReached,
+          maxLevel: pickable,
           initialLevel: board.highestLevelReached,
         ),
       );
@@ -172,31 +175,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
   /// static level-1 pineapple) so the badge is right at every level, not
   /// just the first.
   Ingredient _unlockedIngredient(BoardState board) {
-    if (board.highestLevelReached >= 5) {
-      return kEvolutionChainLevel5[board.highestTierUnlockedLevel5.clamp(
-        0,
-        kEvolutionChainLevel5.length - 1,
-      )];
-    }
-    if (board.highestLevelReached >= 4) {
-      return kEvolutionChainLevel4[board.highestTierUnlockedLevel4.clamp(
-        0,
-        kEvolutionChainLevel4.length - 1,
-      )];
-    }
-    if (board.highestLevelReached >= 3) {
-      return kEvolutionChainLevel3[board.highestTierUnlockedLevel3.clamp(
-        0,
-        kEvolutionChainLevel3.length - 1,
-      )];
-    }
-    if (board.highestLevelReached >= 2) {
-      return kEvolutionChainLevel2[board.highestTierUnlockedLevel2.clamp(
-        0,
-        kEvolutionChainLevel2.length - 1,
-      )];
-    }
-    return kEvolutionChain[board.highestTierUnlocked];
+    final chain = evolutionChainForLevel(board.highestLevelReached);
+    final tier = highestTierFor(board.highestTiers, board.highestLevelReached);
+    return chain[tier.clamp(0, chain.length - 1)];
   }
 
   @override
@@ -1556,14 +1537,6 @@ class _LevelPickerDialog extends StatelessWidget {
     required this.initialLevel,
   });
 
-  static String _levelName(int level) => switch (level) {
-    1 => 'Beach',
-    2 => 'Rooftop',
-    3 => 'Safari',
-    4 => 'Piazza',
-    _ => 'Jungle',
-  };
-
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -1582,22 +1555,33 @@ class _LevelPickerDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            for (var level = maxLevel; level >= 1; level--) ...[
-              if (level != maxLevel) const SizedBox(height: 10),
-              StoneButton(
-                onTap: () => Navigator.of(context).pop(level),
-                selected: level == initialLevel,
-                height: 48,
-                child: Text(
-                  '${tr(locale, 'level')} $level — ${_levelName(level)}',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black,
-                  ),
+            // Scrolls once there are more levels than fit — up to ten.
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.55),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var level = maxLevel; level >= 1; level--) ...[
+                      if (level != maxLevel) const SizedBox(height: 10),
+                      StoneButton(
+                        onTap: () => Navigator.of(context).pop(level),
+                        selected: level == initialLevel,
+                        height: 48,
+                        child: Text(
+                          '${tr(locale, 'level')} $level — ${levelName(level)}',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),

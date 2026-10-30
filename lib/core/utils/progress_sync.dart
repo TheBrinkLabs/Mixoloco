@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../data/models/ingredient.dart' show kLevelCount;
 import '../../data/repositories/league_repository.dart';
 import '../../data/services/high_scores_service.dart';
 import '../../data/services/league_local_service.dart';
@@ -77,11 +78,7 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
   final lastSyncAt = await loadLastProgressSyncAt();
 
   final localCredits = await loadCredits();
-  final localTier1 = await loadHighestTier();
-  final localTier2 = await loadHighestTierLevel2();
-  final localTier3 = await loadHighestTierLevel3();
-  final localTier4 = await loadHighestTierLevel4();
-  final localTier5 = await loadHighestTierLevel5();
+  final localTiers = await loadHighestTiers(kLevelCount);
   final localLevel = await loadHighestLevelReached();
   final localScores = await loadHighScores();
   final localMixedCocktails = await loadMixedCocktailIds();
@@ -97,11 +94,12 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
     // fields rather than guessing which side is "right."
     mergedCredits = _max(localCredits, server.credits);
   }
-  final mergedTier1 = server == null ? localTier1 : _max(localTier1, server.highestTierUnlocked);
-  final mergedTier2 = server == null ? localTier2 : _max(localTier2, server.highestTierUnlockedLevel2);
-  final mergedTier3 = server == null ? localTier3 : _max(localTier3, server.highestTierUnlockedLevel3);
-  final mergedTier4 = server == null ? localTier4 : _max(localTier4, server.highestTierUnlockedLevel4);
-  final mergedTier5 = server == null ? localTier5 : _max(localTier5, server.highestTierUnlockedLevel5);
+  final mergedTiers = [
+    for (var level = 1; level <= kLevelCount; level++)
+      server == null
+          ? localTiers[level - 1]
+          : _max(localTiers[level - 1], highestTierFor(server.highestTiers, level)),
+  ];
   final mergedLevel = server == null ? localLevel : _max(localLevel, server.highestLevelReached);
 
   final mergedScores = <int>{...localScores, ...?server?.highScores}.toList()..sort((a, b) => b.compareTo(a));
@@ -114,22 +112,16 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
 
   final changed =
       mergedCredits != localCredits ||
-      mergedTier1 != localTier1 ||
-      mergedTier2 != localTier2 ||
-      mergedTier3 != localTier3 ||
-      mergedTier4 != localTier4 ||
-      mergedTier5 != localTier5 ||
+      !_sameList(mergedTiers, localTiers) ||
       mergedLevel != localLevel ||
       !_sameList(topScores, localScores) ||
       mergedMixedCocktails.length != localMixedCocktails.length;
 
   if (changed) {
     await saveCredits(mergedCredits);
-    await saveHighestTier(mergedTier1);
-    await saveHighestTierLevel2(mergedTier2);
-    await saveHighestTierLevel3(mergedTier3);
-    await saveHighestTierLevel4(mergedTier4);
-    await saveHighestTierLevel5(mergedTier5);
+    for (var level = 1; level <= kLevelCount; level++) {
+      await saveHighestTierForLevel(level, mergedTiers[level - 1]);
+    }
     await saveHighestLevelReached(mergedLevel);
     await saveHighScores(topScores);
     await saveMixedCocktailIds(mergedMixedCocktails);
@@ -139,11 +131,7 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
     uid: uid,
     progress: PlayerProgress(
       credits: mergedCredits,
-      highestTierUnlocked: mergedTier1,
-      highestTierUnlockedLevel2: mergedTier2,
-      highestTierUnlockedLevel3: mergedTier3,
-      highestTierUnlockedLevel4: mergedTier4,
-      highestTierUnlockedLevel5: mergedTier5,
+      highestTiers: mergedTiers,
       highestLevelReached: mergedLevel,
       highScores: topScores,
       mixedCocktailIds: mergedMixedCocktails.toList(),

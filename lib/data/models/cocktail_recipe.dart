@@ -1,3 +1,5 @@
+import 'ingredient.dart' show evolutionChainForLevel, kLevelCount;
+
 /// A cocktail order — the set of ingredient ids that must physically touch
 /// each other on the table (forming one connected cluster of items at
 /// their respective evolution tiers, whatever those tiers currently look
@@ -384,23 +386,127 @@ const kCocktailRecipesLevel5 = [
 CocktailRecipe get kStarterCocktailLevel5 =>
     kCocktailRecipesLevel5.firstWhere((r) => r.id == kStarterCocktailIdLevel5);
 
-/// The cocktail list for [level] — see evolutionChainForLevel (in
-/// ingredient.dart) for the matching evolution-chain split and why a
-/// future Level 6 needs a parallel branch added here too.
-List<CocktailRecipe> cocktailRecipesForLevel(int level) => level >= 5
-    ? kCocktailRecipesLevel5
-    : (level >= 4
-          ? kCocktailRecipesLevel4
-          : level >= 3
-          ? kCocktailRecipesLevel3
-          : (level >= 2 ? kCocktailRecipesLevel2 : kCocktailRecipes));
+/// The five "After Dark" signature cocktails, one per night level.
+/// [price] here is a placeholder — [_nightMenu] assigns the real one.
+const kNightSignatureCocktails = [
+  CocktailRecipe(
+    id: 'mai_tai',
+    name: 'Mai Tai',
+    ingredientIds: ['rum', 'lime', 'orange', 'mint', 'cherry'],
+    assetPath: 'assets/images/mai_tai.png',
+    price: 0,
+  ),
+  CocktailRecipe(
+    id: 'bramble_royale',
+    name: 'Bramble Royale',
+    ingredientIds: ['gin', 'blackberry', 'lemon', 'prosecco'],
+    assetPath: 'assets/images/bramble_royale.png',
+    price: 0,
+  ),
+  CocktailRecipe(
+    id: 'marula_espresso',
+    name: 'Marula Espresso',
+    ingredientIds: ['marula_liqueur', 'coffee_liqueur', 'vodka'],
+    assetPath: 'assets/images/marula_espresso.png',
+    price: 0,
+  ),
+  CocktailRecipe(
+    id: 'caffe_corretto',
+    name: 'Caffè Corretto',
+    ingredientIds: ['grappa', 'coffee_liqueur', 'sugar_cube'],
+    assetPath: 'assets/images/caffe_corretto.png',
+    price: 0,
+  ),
+  CocktailRecipe(
+    id: 'jungle_fire_margarita',
+    name: 'Jungle Fire Margarita',
+    ingredientIds: ['tequila', 'lime', 'hot_sauce', 'sugar_cube'],
+    assetPath: 'assets/images/jungle_fire_margarita.png',
+    price: 0,
+  ),
+];
 
-/// The free starter order for a fresh run at [level] — see
-/// [cocktailRecipesForLevel].
-CocktailRecipe starterCocktailForLevel(int level) => level >= 5
-    ? kStarterCocktailLevel5
-    : (level >= 4
-          ? kStarterCocktailLevel4
-          : (level >= 3
-                ? kStarterCocktailLevel3
-                : (level >= 2 ? kStarterCocktailLevel2 : kStarterCocktail)));
+CocktailRecipe _recipeById(String id) => [
+  ...kCocktailRecipes,
+  ...kCocktailRecipesLevel2,
+  ...kCocktailRecipesLevel3,
+  ...kCocktailRecipesLevel4,
+  ...kCocktailRecipesLevel5,
+  ...kNightSignatureCocktails,
+].firstWhere((r) => r.id == id);
+
+/// A night level's menu: the given recipes ordered by the highest tier
+/// they need in [level]'s chain (ties by total tiers, then fewer
+/// ingredients first) and priced 200..500 in that order — so a dearer
+/// cocktail always needs a higher-evolved ingredient.
+List<CocktailRecipe> _nightMenu(int level, List<String> ids) {
+  final chain = evolutionChainForLevel(level);
+  int tierOf(String id) => chain.indexWhere((i) => i.id == id);
+  (int, int, int) key(CocktailRecipe r) {
+    final tiers = r.ingredientIds.map(tierOf).toList();
+    assert(!tiers.contains(-1), '${r.id} needs an ingredient missing from level $level');
+    return (tiers.reduce((x, y) => x > y ? x : y), tiers.reduce((x, y) => x + y), tiers.length);
+  }
+  final recipes = ids.map(_recipeById).toList()
+    ..sort((x, y) {
+      final kx = key(x), ky = key(y);
+      if (kx.$1 != ky.$1) return kx.$1.compareTo(ky.$1);
+      if (kx.$2 != ky.$2) return kx.$2.compareTo(ky.$2);
+      return kx.$3.compareTo(ky.$3);
+    });
+  return [
+    for (var k = 0; k < recipes.length; k++)
+      CocktailRecipe(
+        id: recipes[k].id,
+        name: recipes[k].name,
+        ingredientIds: recipes[k].ingredientIds,
+        assetPath: recipes[k].assetPath,
+        price: 200 + 50 * k,
+      ),
+  ];
+}
+
+final kCocktailRecipesLevel6 = _nightMenu(6, [
+  'daiquiri', 'cherry_daiquiri', 'mojito', 'cuba_libre', 'blue_hawaiian', 'banana_daiquiri', 'mai_tai',
+]);
+final kCocktailRecipesLevel7 = _nightMenu(7, [
+  'espresso_martini', 'bramble', 'martini', 'gin_and_tonic', 'vermouth_tonic', 'manhattan', 'bramble_royale',
+]);
+final kCocktailRecipesLevel8 = _nightMenu(8, [
+  'dawa', 'marula_sunset', 'gin_and_tonic', 'citrus_mule', 'savanna_gold_mule', 'golden_pineapple', 'marula_espresso',
+]);
+final kCocktailRecipesLevel9 = _nightMenu(9, [
+  'vodka_lemon', 'espresso_martini', 'kir_royale', 'lemon_fizz', 'french_75', 'hugo_spritz', 'caffe_corretto',
+]);
+final kCocktailRecipesLevel10 = _nightMenu(10, [
+  'guaro_sour', 'daiquiri', 'chiliguaro', 'cuba_libre', 'guaro_paloma', 'banana_daiquiri', 'jungle_fire_margarita',
+]);
+
+/// Every level's cocktail list, index 0 = Level 1.
+final List<List<CocktailRecipe>> kCocktailRecipesByLevel = [
+  kCocktailRecipes,
+  kCocktailRecipesLevel2,
+  kCocktailRecipesLevel3,
+  kCocktailRecipesLevel4,
+  kCocktailRecipesLevel5,
+  kCocktailRecipesLevel6,
+  kCocktailRecipesLevel7,
+  kCocktailRecipesLevel8,
+  kCocktailRecipesLevel9,
+  kCocktailRecipesLevel10,
+];
+
+/// The cocktail list for [level] (1-based, clamped to [kLevelCount]).
+List<CocktailRecipe> cocktailRecipesForLevel(int level) =>
+    kCocktailRecipesByLevel[level.clamp(1, kLevelCount) - 1];
+
+/// The free starter order for a fresh run at [level]. Levels 1-5 keep
+/// their hand-picked starters; each night level starts on its cheapest.
+CocktailRecipe starterCocktailForLevel(int level) => switch (level) {
+  <= 1 => kStarterCocktail,
+  2 => kStarterCocktailLevel2,
+  3 => kStarterCocktailLevel3,
+  4 => kStarterCocktailLevel4,
+  5 => kStarterCocktailLevel5,
+  _ => cocktailRecipesForLevel(level).first,
+};

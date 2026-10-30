@@ -217,6 +217,10 @@ class SubmenuScaffold extends StatelessWidget {
   /// level's content is showing, not just which level the player's
   /// lifetime progress has reached.
   final String backgroundAssetPath;
+
+  /// An "After Dark" level's evening grade on that photo — see
+  /// [BarBackdrop.night].
+  final bool night;
   const SubmenuScaffold({
     super.key,
     required this.title,
@@ -226,6 +230,7 @@ class SubmenuScaffold extends StatelessWidget {
     this.panelBottom,
     this.aboveRibbon = const [],
     this.backgroundAssetPath = 'assets/images/beach_background.png',
+    this.night = false,
   });
 
   @override
@@ -239,6 +244,7 @@ class SubmenuScaffold extends StatelessWidget {
       body: BarBackdrop(
         showTable: false,
         backgroundAssetPath: backgroundAssetPath,
+        night: night,
         child: Stack(
           children: [
             const Positioned.fill(child: SubmenuToneGradient()),

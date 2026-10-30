@@ -7,7 +7,6 @@ import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
-import '../../../data/services/progression_service.dart';
 import '../../game/providers/game_state_provider.dart';
 import '../info_level_data.dart';
 import 'cocktail_detail_screen.dart';
@@ -34,14 +33,7 @@ class _IngredientsScreenState extends ConsumerState<IngredientsScreen> {
       _initialized = true;
     }
 
-    int bucketFor(int level) => highestTierBucketForLevel(
-      level,
-      l1: board.highestTierUnlocked,
-      l2: board.highestTierUnlockedLevel2,
-      l3: board.highestTierUnlockedLevel3,
-      l4: board.highestTierUnlockedLevel4,
-      l5: board.highestTierUnlockedLevel5,
-    );
+    int bucketFor(int level) => guideTierFor(board.highestTiers, level);
 
     return SubmenuScaffold(
       title: tr(locale, 'ingredients'),
@@ -49,11 +41,12 @@ class _IngredientsScreenState extends ConsumerState<IngredientsScreen> {
       panelTop: 108,
       panelBottom: 64,
       backgroundAssetPath: backgroundAssetPathForLevel(kInfoLevels[_levelIndex].level),
+      night: isAfterDarkLevel(kInfoLevels[_levelIndex].level),
       child: LevelPager(
         itemCount: kInfoLevels.length,
         initialPage: (board.highestLevelReached - 1).clamp(0, kInfoLevels.length - 1),
         levelName: (i) => kInfoLevels[i].name,
-        levelReached: (i) => kInfoLevels[i].level <= board.highestLevelReached,
+        levelReached: (i) => guideLevelReached(kInfoLevels[i].level, board.highestLevelReached),
         lockedNoun: tr(locale, 'ingredients').toLowerCase(),
         onPageChanged: (i) => setState(() => _levelIndex = i),
         pageBuilder: (context, i) {
@@ -174,12 +167,14 @@ class _IngredientSheet extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 74),
       child: FutureBuilder<Set<String>>(
-        future: loadMixedCocktailIds(),
+        future: guideMixedCocktailIds(),
         builder: (context, snapshot) {
           final mixedIds = snapshot.data ?? const <String>{};
+          // Deduped by id — After Dark menus reuse some day cocktails.
+          final seen = <String>{};
           final usedIn = [
             ...kInfoLevels.expand((l) => l.recipes),
-          ].where((r) => r.ingredientIds.contains(ingredient.id) && mixedIds.contains(r.id)).take(3).toList();
+          ].where((r) => r.ingredientIds.contains(ingredient.id) && mixedIds.contains(r.id) && seen.add(r.id)).take(3).toList();
 
           return Container(
             padding: const EdgeInsets.fromLTRB(22, 20, 20, 20),

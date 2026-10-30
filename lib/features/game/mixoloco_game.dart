@@ -131,9 +131,12 @@ class MixolocoGame extends Forge2DGame {
       radiusForTier(tier, kBaseRadiusMeters) *
       kTableItemScale *
       ingredient.sizeMultiplier *
-      (_level == 2
-          ? _level2SizeMultiplier(tier)
-          : (_level == 3 ? kLevel3SizeMultiplier : 1.0));
+      // By bar, so an After Dark revisit keeps its day level's tuning.
+      switch (barForLevel(_level)) {
+        2 => _level2SizeMultiplier(tier),
+        3 => kLevel3SizeMultiplier,
+        _ => 1.0,
+      };
 
   /// Items to recreate on the table as soon as the world's ready — a
   /// snapshot taken via [capturePlacedItems] the last time this screen
@@ -434,6 +437,8 @@ class MixolocoGame extends Forge2DGame {
       ...kEvolutionChainLevel3,
       ...kEvolutionChainLevel4,
       ...kEvolutionChainLevel5,
+      // After Dark chains reuse the art above, apart from their finales.
+      ...kNightCapstones,
     ]);
     await preloadImageAssets([
       for (final recipe in [
@@ -442,6 +447,7 @@ class MixolocoGame extends Forge2DGame {
         ...kCocktailRecipesLevel3,
         ...kCocktailRecipesLevel4,
         ...kCocktailRecipesLevel5,
+        ...kNightSignatureCocktails,
       ])
         recipe.assetPath,
     ]);
@@ -879,7 +885,56 @@ class MixolocoGame extends Forge2DGame {
       b.body.linearVelocity = Vector2.zero();
       b.body.angularVelocity = 0;
     }
+    _rescueWallEmbeddedBodies();
   }
+
+  /// A body can also end up straddling a wall with its centre still
+  /// inside — the check above misses that, and once a wall segment runs
+  /// through a body gravity can't free it (seen as an item stuck at the
+  /// side wall's bend). Anything embedded deeper than solver slop for two
+  /// checks running gets moved back inside, clear of that wall.
+  void _rescueWallEmbeddedBodies() {
+    final walls = tableWallSegments(kWorldWidthMeters, _worldHeight);
+    final mid = Vector2(kWorldWidthMeters / 2, _worldHeight / 2);
+    final stillEmbedded = <IngredientBodyComponent>{};
+    for (final b in _liveBodies) {
+      if (b.consumed || !b.isMounted) continue;
+      final pieces = b.worldCollisionPieces();
+      for (final (start, end) in walls) {
+        final t = end - start;
+        final len = t.length;
+        if (len < 1e-6) continue;
+        t.scale(1 / len);
+        var n = Vector2(-t.y, t.x);
+        if ((mid - start).dot(n) < 0) n = -n;
+        var depth = 0.0;
+        for (final piece in pieces) {
+          for (final v in piece.core) {
+            final rel = v - start;
+            final along = rel.dot(t);
+            if (along < 0 || along > len) continue;
+            final d = piece.radius - rel.dot(n);
+            if (d > depth) depth = d;
+          }
+        }
+        if (depth < _wallEmbedDepth) continue;
+        stillEmbedded.add(b);
+        final streak = (_wallEmbedStreak[b] ?? 0) + 1;
+        _wallEmbedStreak[b] = streak;
+        if (streak >= 2) {
+          b.body.setTransform(b.body.position + n * (depth + 0.01), b.body.rotation);
+          b.body.linearVelocity = Vector2.zero();
+          b.body.angularVelocity = 0;
+        }
+        break;
+      }
+    }
+    _wallEmbedStreak.removeWhere((k, _) => !stillEmbedded.contains(k));
+  }
+
+  /// Well past the ~0.5cm a resting pile legitimately presses into a wall.
+  static const _wallEmbedDepth = 0.03;
+  final _wallEmbedStreak = <IngredientBodyComponent, int>{};
 
   void _resolvePops(double dt) {
     if (_pops.isEmpty) return;

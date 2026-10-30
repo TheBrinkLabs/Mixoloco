@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import '../../core/services/audio_settings_provider.dart';
+import '../../core/widgets/bar_backdrop.dart' show backgroundAssetPathForLevel;
 import '../../data/models/cocktail_recipe.dart';
 import '../../data/models/ingredient.dart';
+import '../../data/repositories/league_repository.dart' show highestTierFor;
+import '../../data/services/progression_service.dart' show loadMixedCocktailIds;
 
-/// One playable bar's worth of content for the Info menu's Ingredients/
+/// One playable level's worth of content for the Info menu's Ingredients/
 /// Cocktails/Songs screens (see ingredients_screen.dart/
 /// cocktails_screen.dart/songs_screen.dart) — each level gets its own
 /// swipeable page, backed by that level's own photo so it reads as "the
@@ -14,7 +18,16 @@ class InfoLevelData {
   final String backgroundAssetPath;
   final List<Ingredient> chain;
   final List<CocktailRecipe> recipes;
+
+  /// The tracks this level actually plays (see [musicTracksForLevel]).
   final List<String> songs;
+
+  /// A daytime level's bar's fourth track, which only unlocks once its
+  /// "After Dark" level ([bonusSongLevel]) is reached — null on an After
+  /// Dark level itself, where it's already part of [songs].
+  final String? bonusSong;
+  final int? bonusSongLevel;
+
   const InfoLevelData({
     required this.level,
     required this.name,
@@ -22,48 +35,37 @@ class InfoLevelData {
     required this.chain,
     required this.recipes,
     required this.songs,
+    this.bonusSong,
+    this.bonusSongLevel,
   });
 }
 
-const kInfoLevels = [
-  InfoLevelData(
-    level: 1,
-    name: 'Beach',
-    backgroundAssetPath: 'assets/images/beach_background.png',
-    chain: kEvolutionChain,
-    recipes: kCocktailRecipes,
-    songs: kMusicTracks,
-  ),
-  InfoLevelData(
-    level: 2,
-    name: 'Rooftop',
-    backgroundAssetPath: 'assets/images/rooftop_background.png',
-    chain: kEvolutionChainLevel2,
-    recipes: kCocktailRecipesLevel2,
-    songs: kMusicTracksLevel2,
-  ),
-  InfoLevelData(
-    level: 3,
-    name: 'Safari',
-    backgroundAssetPath: 'assets/images/safari_background.png',
-    chain: kEvolutionChainLevel3,
-    recipes: kCocktailRecipesLevel3,
-    songs: kMusicTracksLevel3,
-  ),
-  InfoLevelData(
-    level: 4,
-    name: 'Piazza',
-    backgroundAssetPath: 'assets/images/piazza_background.png',
-    chain: kEvolutionChainLevel4,
-    recipes: kCocktailRecipesLevel4,
-    songs: kMusicTracksLevel4,
-  ),
-  InfoLevelData(
-    level: 5,
-    name: 'Jungle',
-    backgroundAssetPath: 'assets/images/jungle_background.png',
-    chain: kEvolutionChainLevel5,
-    recipes: kCocktailRecipesLevel5,
-    songs: kMusicTracksLevel5,
-  ),
+/// Debug builds show every Guide page fully unlocked, so all the content
+/// can be checked without playing through it. Never true in release.
+const kGuideShowsAll = kDebugMode;
+
+bool guideLevelReached(int level, int highestLevelReached) =>
+    kGuideShowsAll || level <= highestLevelReached;
+
+/// The highest tier the Guide treats as collected on [level].
+int guideTierFor(List<int> highestTiers, int level) =>
+    kGuideShowsAll ? 1 << 20 : highestTierFor(highestTiers, level);
+
+/// The cocktails the Guide treats as mixed.
+Future<Set<String>> guideMixedCocktailIds() async => kGuideShowsAll
+    ? {for (final level in kInfoLevels) for (final recipe in level.recipes) recipe.id}
+    : loadMixedCocktailIds();
+
+final kInfoLevels = [
+  for (var level = 1; level <= kLevelCount; level++)
+    InfoLevelData(
+      level: level,
+      name: levelName(level),
+      backgroundAssetPath: backgroundAssetPathForLevel(level),
+      chain: evolutionChainForLevel(level),
+      recipes: cocktailRecipesForLevel(level),
+      songs: musicTracksForLevel(level),
+      bonusSong: isAfterDarkLevel(level) ? null : bonusTrackForLevel(level),
+      bonusSongLevel: isAfterDarkLevel(level) ? null : level + kBarNames.length,
+    ),
 ];

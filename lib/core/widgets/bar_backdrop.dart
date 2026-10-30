@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../data/models/ingredient.dart' show barForLevel, isAfterDarkLevel;
 
 /// Fraction of screen height where the table's near/wide edge (its base)
 /// sits — shared with callers that need to position their own UI (e.g.
@@ -22,17 +23,54 @@ const kTableNearFraction = 1.0;
 /// screen.
 const kTableScale = 1.26;
 
-/// The scene photo for [level] — beach (1), rooftop (2), safari (3),
-/// piazza (4), jungle (5 and, until further levels get their own art,
-/// anything beyond it too). Shared by GameScreen (the live table) and
-/// LevelUpOverlay (the between-levels "ready" screen), so both always
+/// The scene photo for [level]'s bar — beach, rooftop, safari, piazza,
+/// jungle. An "After Dark" level uses its bar's same photo, graded to
+/// evening by [backgroundFilterForLevel]. Shared by GameScreen (the live
+/// table), LevelUpOverlay and the Guide's per-level pages, so they always
 /// agree on which photo a given level shows.
-String backgroundAssetPathForLevel(int level) {
-  if (level >= 5) return 'assets/images/jungle_background.png';
-  if (level >= 4) return 'assets/images/piazza_background.png';
-  if (level >= 3) return 'assets/images/safari_background.png';
-  if (level >= 2) return 'assets/images/rooftop_background.png';
-  return 'assets/images/beach_background.png';
+String backgroundAssetPathForLevel(int level) => const [
+  'assets/images/beach_background.png',
+  'assets/images/rooftop_background.png',
+  'assets/images/safari_background.png',
+  'assets/images/piazza_background.png',
+  'assets/images/jungle_background.png',
+][barForLevel(level) - 1];
+
+/// The evening colour grade for an "After Dark" level's background, or
+/// null for a daytime one.
+ColorFilter? backgroundFilterForLevel(int level) =>
+    isAfterDarkLevel(level) ? const ColorFilter.matrix(_nightBackgroundMatrix) : null;
+
+/// Darker, cooler, a little desaturated, with a faint blue lift in the
+/// shadows — reads as dusk/night without new art.
+const _nightBackgroundMatrix = <double>[
+  0.40, 0.05, 0.02, 0, 0,
+  0.03, 0.44, 0.06, 0, 0,
+  0.06, 0.09, 0.66, 0, 16,
+  0, 0, 0, 1, 0,
+];
+
+/// The table's own night grade, applied after its [TableFinish] tint —
+/// gentler than the background so the playing surface stays readable.
+const _nightTableMatrix = <double>[
+  0.66, 0.03, 0.02, 0, 0,
+  0.02, 0.68, 0.04, 0, 0,
+  0.03, 0.05, 0.80, 0, 8,
+  0, 0, 0, 1, 0,
+];
+
+/// [first] then [then], as one colour matrix.
+List<double> _composeColorMatrices(List<double> first, List<double> then) {
+  double at(List<double> m, int r, int c) => m[r * 5 + c];
+  return [
+    for (var r = 0; r < 4; r++)
+      for (var c = 0; c < 5; c++)
+        (c < 4 ? 0.0 : at(then, r, 4)) +
+            at(then, r, 0) * at(first, 0, c) +
+            at(then, r, 1) * at(first, 1, c) +
+            at(then, r, 2) * at(first, 2, c) +
+            at(then, r, 3) * at(first, 3, c),
+  ];
 }
 
 /// Six colour treatments for the table art, per the gameplay redesign
@@ -52,13 +90,13 @@ enum TableFinish {
 /// table's own natural photo colour; a placeholder one-finish-per-level
 /// mapping beyond that until later levels get their own bespoke choice —
 /// easy to retune without touching the tinting math itself.
-TableFinish tableFinishForLevel(int level) {
-  if (level >= 5) return TableFinish.driftwood;
-  if (level >= 4) return TableFinish.coralPaint;
-  if (level >= 3) return TableFinish.turquoisePaint;
-  if (level >= 2) return TableFinish.darkTeak;
-  return TableFinish.natural;
-}
+TableFinish tableFinishForLevel(int level) => const [
+  TableFinish.natural,
+  TableFinish.darkTeak,
+  TableFinish.turquoisePaint,
+  TableFinish.coralPaint,
+  TableFinish.driftwood,
+][barForLevel(level) - 1];
 
 /// [ColorFilter.matrix] values for each [TableFinish], approximating the
 /// CSS `saturate()`/`brightness()`/`sepia()`/`hue-rotate()` filter chains
@@ -228,6 +266,10 @@ class BarBackdrop extends StatelessWidget {
   /// own geometry/measurements are never affected by this.
   final TableFinish tableFinish;
 
+  /// "After Dark" grade for the background photo and table — see
+  /// [backgroundFilterForLevel].
+  final bool night;
+
   const BarBackdrop({
     super.key,
     this.child,
@@ -236,6 +278,7 @@ class BarBackdrop extends StatelessWidget {
     this.backgroundAssetPath = 'assets/images/beach_background.png',
     this.rooftop = false,
     this.tableFinish = TableFinish.natural,
+    this.night = false,
   });
 
   @override
@@ -246,22 +289,24 @@ class BarBackdrop extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.asset(
-          backgroundAssetPath,
+        // Source art is shot taller than any phone's aspect ratio (so
+        // BoxFit.cover always has width-constrained slack to crop off
+        // vertically) — decoding at full resolution wastes several times
+        // the pixels this ever actually renders. See GlassVisual's
+        // matching comment.
+        FilteredAssetImage(
+          assetPath: backgroundAssetPath,
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
-          // Source art is shot taller than any phone's aspect ratio (so
-          // BoxFit.cover always has width-constrained slack to crop off
-          // vertically) — decoding at full resolution wastes several
-          // times the pixels this ever actually renders. See
-          // GlassVisual's matching comment.
           cacheWidth: decodeWidth > 0 ? decodeWidth : null,
+          colorFilter: night ? const ColorFilter.matrix(_nightBackgroundMatrix) : null,
         ),
         if (showTable)
           _TableImage(
             shakeTrigger: shakeTrigger,
             rooftop: rooftop,
             finish: tableFinish,
+            night: night,
           ),
         if (child != null) child!,
       ],
@@ -373,10 +418,12 @@ class _TableImage extends StatefulWidget {
   final Listenable? shakeTrigger;
   final bool rooftop;
   final TableFinish finish;
+  final bool night;
   const _TableImage({
     this.shakeTrigger,
     required this.rooftop,
     this.finish = TableFinish.natural,
+    this.night = false,
   });
 
   @override
@@ -450,26 +497,22 @@ class _TableImageState extends State<_TableImage>
   }
 
   Widget _tintedTable(String assetPath, TableFinish finish, double displayWidth) {
-    final image = Image.asset(
-      assetPath,
+    final finishMatrix = _tableFinishMatrices[finish];
+    final matrix = widget.night
+        ? (finishMatrix == null ? _nightTableMatrix : _composeColorMatrices(finishMatrix, _nightTableMatrix))
+        : finishMatrix;
+    // The tint is applied in the image draw itself, not via a
+    // ColorFiltered layer: this sits right under the Flame canvas, which
+    // repaints every frame, and on Impeller (no raster cache) a
+    // ColorFiltered layer re-ran as its own offscreen pass every frame.
+    return FilteredAssetImage(
+      assetPath: assetPath,
       fit: BoxFit.fill,
       // See BarBackdrop's matching comment — this table only ever
       // renders at displayWidth, well under the source art's own size.
       cacheWidth: displayWidth > 0 ? (displayWidth * MediaQuery.devicePixelRatioOf(context)).round() : null,
+      colorFilter: matrix == null ? null : ColorFilter.matrix(matrix),
     );
-    final filter = colorFilterForTableFinish(finish);
-    if (filter == null) return image;
-    // The tinted table sits directly beneath the live Flame game canvas,
-    // which repaints every physics frame — without a boundary here,
-    // ColorFiltered's own (comparatively costly on a mid-range GPU)
-    // matrix pass can get swept into that same repaint every frame even
-    // though the table art/tint itself never actually changes outside
-    // the brief shake animation above. Isolating it as its own
-    // compositor layer lets that layer be cached and reused frame to
-    // frame — the shake's Transform.translate (applied by the caller,
-    // outside this widget) repositions the cached layer cheaply rather
-    // than needing the tint reapplied.
-    return RepaintBoundary(child: ColorFiltered(colorFilter: filter, child: image));
   }
 }
 
@@ -564,4 +607,42 @@ double tableSurfaceNearFraction(
     screenHeight,
     geometry,
   );
+}
+
+/// An asset image drawn with an optional [colorFilter] applied in the
+/// paint call itself (DecorationImage paints through paintImage) — no
+/// ColorFiltered offscreen layer, so it costs nothing extra per frame.
+/// DecorationImage also handles swapping to a new asset (e.g. paging the
+/// Guide between bars) itself.
+class FilteredAssetImage extends StatelessWidget {
+  final String assetPath;
+  final BoxFit fit;
+  final Alignment alignment;
+  final int? cacheWidth;
+  final ColorFilter? colorFilter;
+  const FilteredAssetImage({
+    super.key,
+    required this.assetPath,
+    this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
+    this.cacheWidth,
+    this.colorFilter,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.expand(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: ResizeImage.resizeIfNeeded(cacheWidth, null, AssetImage(assetPath)),
+            fit: fit,
+            alignment: alignment,
+            colorFilter: colorFilter,
+            filterQuality: FilterQuality.medium,
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -280,6 +280,26 @@ class Ingredient {
     this.collisionCapsule,
     this.extraCircles,
   });
+
+  /// This same ingredient at a different position in a chain — used by
+  /// the "After Dark" levels, which reuse existing ingredients.
+  Ingredient withTier(int tier) => Ingredient(
+    id: id,
+    label: label,
+    color: color,
+    tier: tier,
+    shape: shape,
+    debris: debris,
+    assetPath: assetPath,
+    displayScale: displayScale,
+    displayScaleX: displayScaleX,
+    sizeMultiplier: sizeMultiplier,
+    isAlcoholic: isAlcoholic,
+    isMiniShot: isMiniShot,
+    collisionProfile: collisionProfile,
+    collisionCapsule: collisionCapsule,
+    extraCircles: extraCircles,
+  );
 }
 
 /// How much bigger each successive tier is than the last — "15% larger
@@ -376,13 +396,16 @@ const kEvolutionChain = [
     displayScale: 1.045,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    // Rounded by 0.05 so the leaf tips are inside the shape too — they
+    // overhung it by up to ~2cm, so two mints could look touching
+    // without being close enough to merge.
     collisionProfile: [
       CollisionPolygon(
         points: [
           (-0.246, -1.188), (0.239, -1.188),
           (-0.471, -0.884), (0.288, -0.884),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
@@ -391,7 +414,7 @@ const kEvolutionChain = [
           (-0.315, -0.574), (0.732, -0.574),
           (-0.062, -0.435), (0.627, -0.435),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
@@ -399,21 +422,21 @@ const kEvolutionChain = [
           (-0.732, -0.296), (0.459, -0.296),
           (-0.720, -0.056), (0.064, -0.056),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
           (-0.720, -0.056), (0.064, -0.056),
           (-0.753, 0.195), (0.011, 0.195),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
           (-0.753, 0.195), (0.011, 0.195),
           (-0.150, 0.318), (0.438, 0.318),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
@@ -422,14 +445,14 @@ const kEvolutionChain = [
           (-0.198, 0.740), (0.667, 0.740),
           (-0.253, 1.012), (0.662, 1.012),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
           (-0.253, 1.012), (0.662, 1.012),
           (-0.217, 1.183), (-0.203, 1.183),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
     ],
   ),
@@ -2489,8 +2512,11 @@ const kEvolutionChainLevel4 = [
     shape: GlassShape.tumbler,
     debris: DebrisType.peel,
     assetPath: 'assets/images/ingredient_blackcurrant.png',
-    displayScale: 1.119,
-    displayScaleX: 1.299,
+    // Rounder than it used to be (was 1.119 x 1.299): the wider stretch
+    // put the berry's sides ~1cm outside its circle, so two side by side
+    // looked touching while still too far apart to merge.
+    displayScale: 1.17,
+    displayScaleX: 1.16,
     // Round berry cluster — same story as cherry (see its comment): a
     // multi-shape polygon is the wrong tool for something that's
     // supposed to read as round (caught worse-not-better on-device, the
@@ -2521,13 +2547,16 @@ const kEvolutionChainLevel4 = [
     displayScale: 1.045,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    // Rounded by 0.05 so the leaf tips are inside the shape too — they
+    // overhung it by up to ~2cm, so two mints could look touching
+    // without being close enough to merge.
     collisionProfile: [
       CollisionPolygon(
         points: [
           (-0.246, -1.188), (0.239, -1.188),
           (-0.471, -0.884), (0.288, -0.884),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
@@ -2536,7 +2565,7 @@ const kEvolutionChainLevel4 = [
           (-0.315, -0.574), (0.732, -0.574),
           (-0.062, -0.435), (0.627, -0.435),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
@@ -2544,21 +2573,21 @@ const kEvolutionChainLevel4 = [
           (-0.732, -0.296), (0.459, -0.296),
           (-0.720, -0.056), (0.064, -0.056),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
           (-0.720, -0.056), (0.064, -0.056),
           (-0.753, 0.195), (0.011, 0.195),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
           (-0.753, 0.195), (0.011, 0.195),
           (-0.150, 0.318), (0.438, 0.318),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
@@ -2567,14 +2596,14 @@ const kEvolutionChainLevel4 = [
           (-0.198, 0.740), (0.667, 0.740),
           (-0.253, 1.012), (0.662, 1.012),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
       CollisionPolygon(
         points: [
           (-0.253, 1.012), (0.662, 1.012),
           (-0.217, 1.183), (-0.203, 1.183),
         ],
-        cornerRadius: 0.0,
+        cornerRadius: 0.05,
       ),
     ],
   ),
@@ -3896,20 +3925,555 @@ const kEvolutionChainLevel5 = [
   ),
 ];
 
-/// The evolution chain for [level] — 1 is the beach bar, 2 the rooftop,
-/// 3 the safari, 4 the piazza, 5+ the jungle (currently the last one
-/// with real content; a future Level 6 needs its own branch added here,
-/// same as everywhere else this split appears — see
-/// cocktailRecipesForLevel, GameScreen's recipe-list lookups, and
-/// GameStateNotifier's highest-tier bucket selection, which all mirror
-/// this same level->content mapping).
-List<Ingredient> evolutionChainForLevel(int level) => level >= 5
-    ? kEvolutionChainLevel5
-    : (level >= 4
-          ? kEvolutionChainLevel4
-          : (level >= 3
-                ? kEvolutionChainLevel3
-                : (level >= 2 ? kEvolutionChainLevel2 : kEvolutionChain)));
+/// The five "After Dark" final items — each night chain's capstone (see
+/// [_nightChain]). Their `tier` here is a placeholder; [_nightChain]
+/// assigns the real one. Collision profiles are traced from each PNG's
+/// own alpha silhouette, same as every other ingredient.
+const kNightCapstones = [
+  Ingredient(
+    id: 'tiki_punchbowl',
+    label: 'Tiki Punch Bowl',
+    color: Color(0xFFE07A3F),
+    tier: 12,
+    shape: GlassShape.jug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_tiki_punchbowl.png',
+    isAlcoholic: true,
+    // Traced from the sprite PNG's alpha silhouette through
+    // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    collisionProfile: [
+      CollisionPolygon(
+        points: [
+          (-0.012, -1.017), (0.426, -1.017),
+          (-0.824, -0.937), (0.411, -0.937),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.824, -0.937), (0.411, -0.937),
+          (-1.070, -0.613), (0.661, -0.613),
+          (-0.841, -0.580), (0.583, -0.580),
+          (-0.847, -0.500), (0.480, -0.500),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.847, -0.500), (0.480, -0.500),
+          (-0.893, -0.457), (1.150, -0.457),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.893, -0.457), (1.150, -0.457),
+          (-1.027, -0.393), (1.157, -0.393),
+          (-1.070, -0.363), (1.140, -0.363),
+          (-1.117, -0.317), (0.747, -0.317),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.117, -0.317), (0.747, -0.317),
+          (-1.150, -0.257), (0.703, -0.257),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.150, -0.257), (0.703, -0.257),
+          (-1.160, -0.120), (0.717, -0.120),
+          (-1.143, 0.123), (0.703, 0.123),
+          (-1.100, 0.320), (0.660, 0.320),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.100, 0.320), (0.660, 0.320),
+          (-1.020, 0.477), (0.583, 0.477),
+          (-0.943, 0.587), (0.497, 0.587),
+          (-0.827, 0.680), (0.395, 0.680),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.827, 0.680), (0.395, 0.680),
+          (-0.797, 0.793), (0.370, 0.793),
+          (-0.717, 0.883), (0.290, 0.883),
+          (-0.617, 0.940), (0.193, 0.940),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.617, 0.940), (0.193, 0.940),
+          (-0.318, 1.007), (-0.117, 1.007),
+        ],
+        cornerRadius: 0.0,
+      ),
+    ],
+  ),
+  Ingredient(
+    id: 'champagne_tower',
+    label: 'Champagne Tower',
+    color: Color(0xFFF3E3A8),
+    tier: 12,
+    shape: GlassShape.martini,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_champagne_tower.png',
+    isAlcoholic: true,
+    // Traced from the sprite PNG's alpha silhouette through
+    // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    collisionProfile: [
+      CollisionPolygon(
+        points: [
+          (-0.095, -1.134), (0.095, -1.134),
+          (-0.205, -1.053), (0.205, -1.053),
+          (-0.168, -0.955), (0.167, -0.955),
+          (-0.037, -0.853), (0.033, -0.853),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.037, -0.853), (0.033, -0.853),
+          (-0.035, -0.600), (0.031, -0.600),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.035, -0.600), (0.031, -0.600),
+          (-0.188, -0.558), (0.188, -0.558),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.188, -0.558), (0.188, -0.558),
+          (-0.413, -0.527), (0.430, -0.527),
+          (-0.504, -0.390), (0.497, -0.390),
+          (-0.372, -0.281), (0.365, -0.281),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.372, -0.281), (0.365, -0.281),
+          (-0.378, -0.046), (0.368, -0.046),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.378, -0.046), (0.368, -0.046),
+          (-0.418, -0.014), (0.412, -0.014),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.418, -0.014), (0.412, -0.014),
+          (-0.827, 0.119), (0.823, 0.119),
+          (-0.687, 0.239), (0.681, 0.239),
+          (-0.687, 0.464), (0.681, 0.464),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.687, 0.464), (0.681, 0.464),
+          (-0.993, 0.495), (0.992, 0.495),
+          (-1.157, 0.530), (1.150, 0.530),
+          (-1.134, 0.632), (1.129, 0.632),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.134, 0.632), (1.129, 0.632),
+          (-1.017, 0.716), (1.007, 0.716),
+          (-0.992, 0.751), (0.985, 0.751),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.992, 0.751), (0.985, 0.751),
+          (-0.990, 0.966), (0.985, 0.966),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.990, 0.966), (0.985, 0.966),
+          (-1.013, 1.004), (1.011, 1.004),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.013, 1.004), (1.011, 1.004),
+          (-1.108, 1.036), (1.104, 1.036),
+          (-1.024, 1.068), (0.999, 1.068),
+          (-0.820, 1.099), (0.820, 1.099),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.820, 1.099), (0.820, 1.099),
+          (-0.504, 1.148), (0.514, 1.148),
+          (-0.097, 1.212), (0.108, 1.212),
+        ],
+        cornerRadius: 0.0,
+      ),
+    ],
+  ),
+  Ingredient(
+    id: 'cool_box',
+    label: 'Cool Box',
+    color: Color(0xFF6E7F5E),
+    tier: 12,
+    shape: GlassShape.jug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_cool_box.png',
+    isAlcoholic: true,
+    // Traced from the sprite PNG's alpha silhouette through
+    // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    collisionProfile: [
+      CollisionPolygon(
+        points: [
+          (-0.641, -0.813), (0.740, -0.813),
+          (-0.817, -0.777), (0.839, -0.777),
+          (-0.917, -0.743), (0.937, -0.743),
+          (-1.127, -0.323), (1.130, -0.323),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.127, -0.323), (1.130, -0.323),
+          (-1.163, -0.190), (1.160, -0.190),
+          (-1.147, -0.120), (1.147, -0.120),
+          (-1.080, 0.303), (1.070, 0.303),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.080, 0.303), (1.070, 0.303),
+          (-1.073, 0.393), (1.067, 0.393),
+          (-1.043, 0.430), (1.037, 0.430),
+          (-0.870, 0.783), (0.863, 0.783),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.870, 0.783), (0.863, 0.783),
+          (-0.837, 0.827), (0.830, 0.827),
+          (-0.751, 0.857), (0.766, 0.857),
+        ],
+        cornerRadius: 0.0,
+      ),
+    ],
+  ),
+  Ingredient(
+    id: 'spritz_pitcher',
+    label: 'Spritz Pitcher',
+    color: Color(0xFFF2C14E),
+    tier: 12,
+    shape: GlassShape.jug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_spritz_pitcher.png',
+    isAlcoholic: true,
+    // Traced from the sprite PNG's alpha silhouette through
+    // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    collisionProfile: [
+      CollisionPolygon(
+        points: [
+          (-0.704, -1.163), (-0.617, -1.163),
+          (-0.874, -1.102), (-0.428, -1.102),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.874, -1.102), (-0.428, -1.102),
+          (-0.918, -1.071), (-0.184, -1.071),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.918, -1.071), (-0.184, -1.071),
+          (-0.973, -1.023), (0.456, -1.023),
+          (-1.001, -0.985), (0.483, -0.985),
+          (-0.990, -0.941), (0.470, -0.941),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.990, -0.941), (0.470, -0.941),
+          (-0.895, -0.906), (0.463, -0.906),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.895, -0.906), (0.463, -0.906),
+          (-0.841, -0.852), (0.450, -0.852),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.841, -0.852), (0.450, -0.852),
+          (-0.819, -0.780), (0.850, -0.780),
+          (-0.805, -0.691), (0.949, -0.691),
+          (-0.799, -0.519), (1.025, -0.519),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.799, -0.519), (1.025, -0.519),
+          (-0.834, -0.362), (1.042, -0.362),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.834, -0.362), (1.042, -0.362),
+          (-0.953, -0.111), (1.025, -0.111),
+          (-1.023, 0.094), (0.963, 0.094),
+          (-1.045, 0.307), (0.850, 0.307),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.045, 0.307), (0.850, 0.307),
+          (-1.035, 0.478), (0.703, 0.478),
+          (-1.019, 0.543), (0.632, 0.543),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.019, 0.543), (0.632, 0.543),
+          (-0.939, 0.745), (0.548, 0.745),
+          (-0.748, 0.961), (0.361, 0.961),
+          (-0.709, 1.044), (0.322, 1.044),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.709, 1.044), (0.322, 1.044),
+          (-0.655, 1.085), (0.260, 1.085),
+          (-0.565, 1.116), (0.158, 1.116),
+          (-0.328, 1.153), (-0.072, 1.153),
+        ],
+        cornerRadius: 0.0,
+      ),
+    ],
+  ),
+  Ingredient(
+    id: 'tequila_barrel',
+    label: 'Tequila Barrel',
+    color: Color(0xFF8B5A2B),
+    tier: 12,
+    shape: GlassShape.jug,
+    debris: DebrisType.glass,
+    assetPath: 'assets/images/ingredient_tequila_barrel.png',
+    isAlcoholic: true,
+    // Traced from the sprite PNG's alpha silhouette through
+    // paintIngredient's transform (scratchpad gen_png), on-device approved.
+    collisionProfile: [
+      CollisionPolygon(
+        points: [
+          (-0.122, -1.163), (0.029, -1.163),
+          (-0.122, -1.077), (0.032, -1.077),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.122, -1.077), (0.032, -1.077),
+          (-0.289, -1.030), (0.289, -1.030),
+          (-0.472, -0.983), (0.466, -0.983),
+          (-0.722, -0.873), (0.725, -0.873),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.722, -0.873), (0.725, -0.873),
+          (-0.862, -0.773), (0.854, -0.773),
+          (-0.915, -0.717), (0.908, -0.717),
+          (-0.992, -0.630), (0.975, -0.630),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.992, -0.630), (0.975, -0.630),
+          (-1.038, -0.540), (1.028, -0.540),
+          (-1.118, -0.327), (1.108, -0.327),
+          (-1.138, -0.210), (1.128, -0.210),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.138, -0.210), (1.128, -0.210),
+          (-1.145, -0.087), (1.142, -0.087),
+          (-1.128, 0.053), (1.135, 0.053),
+          (-1.109, 0.130), (1.125, 0.130),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-1.109, 0.130), (1.125, 0.130),
+          (-1.058, 0.267), (1.090, 0.267),
+          (-0.962, 0.417), (1.029, 0.417),
+          (-0.932, 0.447), (1.015, 0.447),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.932, 0.447), (1.015, 0.447),
+          (-0.759, 0.597), (0.912, 0.597),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.759, 0.597), (0.912, 0.597),
+          (-0.865, 0.637), (0.878, 0.637),
+          (-0.905, 0.750), (0.755, 0.750),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.905, 0.750), (0.755, 0.750),
+          (-0.935, 0.947), (0.805, 0.947),
+          (-0.452, 1.057), (0.808, 1.057),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.452, 1.057), (0.808, 1.057),
+          (-0.458, 1.087), (-0.052, 1.087),
+        ],
+        cornerRadius: 0.0,
+      ),
+      CollisionPolygon(
+        points: [
+          (-0.458, 1.087), (-0.052, 1.087),
+          (-0.468, 1.147), (-0.158, 1.147),
+          (-0.433, 1.190), (-0.361, 1.190),
+        ],
+        cornerRadius: 0.0,
+      ),
+    ],
+  ),
+];
+
+/// Levels 6-10 are an "After Dark" second visit to each bar: existing
+/// ingredients (each keeping its own art, collision profile and display
+/// tuning) re-sorted smallest to largest by real-life size, capped by a
+/// new final item. Any earlier bar's final item (champagne, grappa,
+/// tequila) can appear here as an ordinary ingredient.
+List<Ingredient> _nightChain(List<String> ids, String capstoneId) => [
+  for (var t = 0; t < ids.length; t++) _baseIngredient(ids[t]).withTier(t),
+  kNightCapstones.firstWhere((i) => i.id == capstoneId).withTier(ids.length),
+];
+
+Ingredient _baseIngredient(String id) => [
+  ...kEvolutionChain,
+  ...kEvolutionChainLevel2,
+  ...kEvolutionChainLevel3,
+  ...kEvolutionChainLevel4,
+  ...kEvolutionChainLevel5,
+].firstWhere((i) => i.id == id);
+
+/// Beach Bar · After Dark — tiki night.
+final kEvolutionChainLevel6 = _nightChain([
+  'sugar_cube', 'cherry', 'mint', 'lime', 'blue_curacao', 'rum',
+  'cola', 'orange', 'pineapple', 'soda', 'banana', 'coconut',
+], 'tiki_punchbowl');
+
+/// Rooftop · After Dark — late-night lounge.
+final kEvolutionChainLevel7 = _nightChain([
+  'cherry', 'vodka', 'blackberry', 'lime', 'coffee_liqueur', 'lemon',
+  'gin', 'vermouth', 'whisky', 'tonic', 'prosecco', 'champagne',
+], 'champagne_tower');
+
+/// Safari · After Dark — around the campfire.
+final kEvolutionChainLevel8 = _nightChain([
+  'lime', 'vodka', 'orange_slice', 'coffee_liqueur', 'gin', 'marula_liqueur',
+  'honey', 'mango', 'tonic', 'ginger_beer', 'prosecco', 'pineapple_fruit',
+], 'cool_box');
+
+/// Piazza · After Dark — digestivo hour.
+final kEvolutionChainLevel9 = _nightChain([
+  'sugar_cube', 'vodka', 'blackcurrant', 'mint', 'lemon', 'coffee_liqueur',
+  'lemon_liqueur', 'elderflower_liqueur', 'cognac', 'tonic', 'prosecco', 'grappa',
+], 'spritz_pitcher');
+
+/// Jungle · After Dark — the grand finale.
+final kEvolutionChainLevel10 = _nightChain([
+  'sugar_cube', 'lime', 'guaro', 'rum', 'hot_sauce', 'tomato_juice',
+  'cola', 'soda', 'grapefruit', 'banana', 'coconut', 'tequila',
+], 'tequila_barrel');
+
+const kLevelCount = 10;
+
+/// The five bars, in order. Levels 1-5 visit each in daylight; levels
+/// 6-10 revisit the same bars "After Dark".
+const kBarNames = ['Beach', 'Rooftop', 'Safari', 'Piazza', 'Jungle'];
+
+/// Which bar (1-5) [level] takes place in.
+int barForLevel(int level) => (level.clamp(1, kLevelCount) - 1) % kBarNames.length + 1;
+
+/// Whether [level] is one of the "After Dark" revisits (6-10).
+bool isAfterDarkLevel(int level) => level > kBarNames.length;
+
+/// Display name for [level], e.g. "Beach" or "Beach Night".
+String levelName(int level) {
+  final bar = kBarNames[barForLevel(level) - 1];
+  return isAfterDarkLevel(level) ? '$bar Night' : bar;
+}
+
+/// Every level's chain, index 0 = Level 1.
+final List<List<Ingredient>> kEvolutionChains = [
+  kEvolutionChain,
+  kEvolutionChainLevel2,
+  kEvolutionChainLevel3,
+  kEvolutionChainLevel4,
+  kEvolutionChainLevel5,
+  kEvolutionChainLevel6,
+  kEvolutionChainLevel7,
+  kEvolutionChainLevel8,
+  kEvolutionChainLevel9,
+  kEvolutionChainLevel10,
+];
+
+/// The evolution chain for [level] (1-based, clamped to [kLevelCount]).
+List<Ingredient> evolutionChainForLevel(int level) =>
+    kEvolutionChains[level.clamp(1, kLevelCount) - 1];
 
 /// The actual throwable pool for a player whose lifetime record within
 /// this level is [highestTierUnlocked] — [kThrowableTierCount] items
@@ -3943,4 +4507,5 @@ Ingredient findIngredientById(String id) => [
   ...kEvolutionChainLevel3,
   ...kEvolutionChainLevel4,
   ...kEvolutionChainLevel5,
+  ...kNightCapstones,
 ].firstWhere((i) => i.id == id);

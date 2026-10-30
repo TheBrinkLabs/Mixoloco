@@ -5,6 +5,7 @@ import '../../../core/services/locale_provider.dart';
 import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
+import '../../../data/repositories/league_repository.dart' show highestTierFor;
 import '../../../data/services/progression_service.dart';
 import '../../game/providers/game_state_provider.dart';
 import '../info_level_data.dart';
@@ -27,24 +28,18 @@ class InfoScreen extends ConsumerWidget {
     final locale = ref.watch(localeProvider);
     final board = ref.watch(gameStateProvider);
 
-    int bucketFor(int level) => highestTierBucketForLevel(
-      level,
-      l1: board.highestTierUnlocked,
-      l2: board.highestTierUnlockedLevel2,
-      l3: board.highestTierUnlockedLevel3,
-      l4: board.highestTierUnlockedLevel4,
-      l5: board.highestTierUnlockedLevel5,
-    );
-
     var ingredientsCollected = 0, ingredientsTotal = 0;
-    var cocktailsTotal = 0;
-    var songsUnlocked = 0;
+    // Sets too — After Dark menus reuse some of their day bar's cocktails.
+    final cocktailIds = <String>{};
+    // A set, not a running count — an After Dark level replays its bar's
+    // own tracks, so the same song can be unlocked from two pages.
+    final songsUnlocked = <String>{};
     for (final level in kInfoLevels) {
-      final bucket = bucketFor(level.level);
+      final bucket = highestTierFor(board.highestTiers, level.level);
       ingredientsCollected += (bucket + 1).clamp(0, level.chain.length);
       ingredientsTotal += level.chain.length;
-      cocktailsTotal += level.recipes.length;
-      if (bucket >= 0) songsUnlocked += level.songs.length;
+      cocktailIds.addAll(level.recipes.map((r) => r.id));
+      if (bucket >= 0) songsUnlocked.addAll(level.songs);
     }
 
     return SubmenuScaffold(
@@ -78,13 +73,13 @@ class InfoScreen extends ConsumerWidget {
                 label: tr(locale, 'cocktails'),
                 subline: tr(locale, 'guide_cocktails_subline')
                     .replaceFirst('{x}', '$mixed')
-                    .replaceFirst('{y}', '$cocktailsTotal'),
+                    .replaceFirst('{y}', '${cocktailIds.length}'),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CocktailsScreen())),
               ),
               _GuideTile(
                 iconAsset: 'assets/images/icon_songs.png',
                 label: tr(locale, 'songs'),
-                subline: tr(locale, 'guide_songs_subline').replaceFirst('{x}', '$songsUnlocked'),
+                subline: tr(locale, 'guide_songs_subline').replaceFirst('{x}', '${songsUnlocked.length}'),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SongsScreen())),
               ),
               _GuideTile(
