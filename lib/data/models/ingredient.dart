@@ -4509,3 +4509,24 @@ Ingredient findIngredientById(String id) => [
   ...kEvolutionChainLevel5,
   ...kNightCapstones,
 ].firstWhere((i) => i.id == id);
+
+/// Level 5's chain order up to build 20. Saves and lifetime records from
+/// those builds store Level 5 tiers as positions in this list; the chain
+/// was then reordered smallest-to-largest. See [migrateLegacyLevel5Tier].
+const _kLegacyLevel5Order = [
+  'sugar_cube', 'hot_sauce', 'guaro', 'tomato_juice', 'lime', 'soda', 'cola',
+  'grapefruit', 'banana', 'pineapple_fruit', 'coconut', 'rum', 'tequila',
+];
+
+/// The ingredient id an old (build 20 or earlier) Level 5 [tier] meant.
+String? legacyLevel5Id(int tier) =>
+    tier >= 0 && tier < _kLegacyLevel5Order.length ? _kLegacyLevel5Order[tier] : null;
+
+/// Maps an old Level 5 [tier] to the current chain's tier for the same
+/// ingredient (unchanged for -1, "never reached").
+int migrateLegacyLevel5Tier(int tier) {
+  final id = legacyLevel5Id(tier);
+  if (id == null) return tier;
+  final i = kEvolutionChainLevel5.indexWhere((x) => x.id == id);
+  return i < 0 ? tier : i;
+}

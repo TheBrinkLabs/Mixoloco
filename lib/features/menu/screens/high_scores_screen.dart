@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
+import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/submenu_kit.dart';
+import '../../../data/models/ingredient.dart' show Ingredient, evolutionChainForLevel;
 import '../../../data/services/high_scores_service.dart';
 
 /// The "My Best" tab of RankingsScreen (design_handoff_main_menu_v3) — the
@@ -20,12 +22,18 @@ class MyBestRankingsTab extends ConsumerStatefulWidget {
 
 class _MyBestRankingsTabState extends ConsumerState<MyBestRankingsTab> {
   List<int>? _scores;
+  Map<int, HighScoreDetail> _details = const {};
 
   @override
   void initState() {
     super.initState();
-    loadHighScores().then((scores) {
-      if (mounted) setState(() => _scores = scores);
+    Future.wait([loadHighScores(), loadHighScoreDetails()]).then((r) {
+      if (mounted) {
+        setState(() {
+          _scores = r[0] as List<int>;
+          _details = r[1] as Map<int, HighScoreDetail>;
+        });
+      }
     });
   }
 
@@ -56,18 +64,28 @@ class _MyBestRankingsTabState extends ConsumerState<MyBestRankingsTab> {
               ),
             )
           else
-            InsetList(rows: [for (final (i, score) in scores.indexed) _ScoreRow(rank: i + 1, score: score, locale: locale)]),
+            InsetList(rows: [for (final (i, score) in scores.indexed) _ScoreRow(rank: i + 1, score: score, detail: _details[score], locale: locale)]),
         ],
       ),
     );
   }
 }
 
+/// The ingredient [d]'s best tier was on its level's chain.
+Ingredient _evolution(HighScoreDetail d) {
+  final chain = evolutionChainForLevel(d.level);
+  return chain[d.tier.clamp(0, chain.length - 1)];
+}
+
 class _ScoreRow extends StatelessWidget {
   final int rank;
   final int score;
+
+  /// The level the run ended on and its best evolution — null for a
+  /// score restored from the backup, which only carries the number.
+  final HighScoreDetail? detail;
   final AppLocale locale;
-  const _ScoreRow({required this.rank, required this.score, required this.locale});
+  const _ScoreRow({required this.rank, required this.score, required this.detail, required this.locale});
 
   @override
   Widget build(BuildContext context) {
@@ -92,9 +110,16 @@ class _ScoreRow extends StatelessWidget {
             child: Text('$rank', style: const TextStyle(fontFamily: 'Lilita One', fontSize: 13, color: Colors.white)),
           ),
           const SizedBox(width: 12),
+          if (detail case final d?) ...[
+            SizedBox(
+              width: 34,
+              child: Center(child: GlassVisual(ingredient: _evolution(d), size: 32, applyDisplayScale: false)),
+            ),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Text(
-              tr(locale, 'score_label'),
+              detail == null ? '' : '${tr(locale, 'level')} ${detail!.level}',
               style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: Colors.white),
             ),
           ),

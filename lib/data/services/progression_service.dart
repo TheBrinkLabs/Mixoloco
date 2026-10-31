@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/ingredient.dart' show migrateLegacyLevel5Tier;
 
 const _kCreditsKey = 'credits';
 const _kHighestTierKey = 'highest_tier_unlocked';
@@ -51,8 +52,22 @@ Future<void> saveHighestTierForLevel(int level, int tier) async {
 }
 
 /// Every level's record at once, index 0 = Level 1.
-Future<List<int>> loadHighestTiers(int levelCount) async =>
-    [for (var l = 1; l <= levelCount; l++) await loadHighestTierForLevel(l)];
+Future<List<int>> loadHighestTiers(int levelCount) async {
+  await _migrateLegacyLevel5Record();
+  return [for (var l = 1; l <= levelCount; l++) await loadHighestTierForLevel(l)];
+}
+
+const _kLevel5OrderMigratedKey = 'level5_order_v2';
+
+/// Level 5's chain was reordered after build 20, and its record is a
+/// position in the chain — remap it once so it names the same ingredient.
+Future<void> _migrateLegacyLevel5Record() async {
+  final prefs = await SharedPreferences.getInstance();
+  if (prefs.getBool(_kLevel5OrderMigratedKey) ?? false) return;
+  final old = prefs.getInt(_highestTierKey(5));
+  if (old != null) await prefs.setInt(_highestTierKey(5), migrateLegacyLevel5Tier(old));
+  await prefs.setBool(_kLevel5OrderMigratedKey, true);
+}
 
 /// The highest bar level ever reached (1 = beach, 2 = rooftop) — once
 /// this reaches 2, every new game starts there directly instead of back

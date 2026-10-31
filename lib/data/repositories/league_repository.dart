@@ -338,12 +338,23 @@ int highestTierFor(List<int> tiers, int level) =>
 String highestTierField(int level) =>
     level <= 1 ? 'highestTierUnlocked' : 'highestTierUnlockedLevel$level';
 
-Map<String, int> highestTierFields(List<int> tiers) => {
+/// Marks a document whose Level 5 record uses the current chain order —
+/// one written by build 20 or earlier is remapped on read.
+const _kLevel5OrderField = 'level5OrderV2';
+
+Map<String, Object> highestTierFields(List<int> tiers) => {
   for (var level = 1; level <= kLevelCount; level++)
     highestTierField(level): highestTierFor(tiers, level),
+  _kLevel5OrderField: true,
 };
 
-List<int> readHighestTiers(Map<String, dynamic>? data) => [
-  for (var level = 1; level <= kLevelCount; level++)
-    (data?[highestTierField(level)] as int?) ?? defaultHighestTier(level),
-];
+List<int> readHighestTiers(Map<String, dynamic>? data) {
+  final legacyLevel5 = data != null && data[_kLevel5OrderField] != true;
+  return [
+    for (var level = 1; level <= kLevelCount; level++)
+      switch ((data?[highestTierField(level)] as int?) ?? defaultHighestTier(level)) {
+        final t when level == 5 && legacyLevel5 => migrateLegacyLevel5Tier(t),
+        final t => t,
+      },
+  ];
+}

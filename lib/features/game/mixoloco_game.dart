@@ -557,8 +557,11 @@ class MixolocoGame extends Forge2DGame {
     if (!_initialItemsSpawned) {
       _initialItemsSpawned = true;
       for (final item in initialItems) {
-        final byId = item.id == null ? -1 : _chain.indexWhere((i) => i.id == item.id);
-        _spawnBody(tier: byId >= 0 ? byId : item.tier, position: Vector2(item.x, item.y), angle: item.angle);
+        final tier = item.id == null ? item.tier : _chain.indexWhere((i) => i.id == item.id);
+        // An ingredient a later update removed (or a stale tier past the
+        // chain's end) is dropped, not respawned as something else.
+        if (tier < 0 || tier >= _chain.length) continue;
+        _spawnBody(tier: tier, position: Vector2(item.x, item.y), angle: item.angle);
       }
     }
   }
@@ -831,15 +834,17 @@ class MixolocoGame extends Forge2DGame {
   }
 
   /// Pushes [b] away from [a] (and [a] back by its share) along the line
-  /// between their centres — by giving them separating *velocity*, never
-  /// by teleporting: a teleport ignores collisions, so an item pressed
-  /// against the far wall could be moved straight through it and fly off
-  /// the table. With velocity, the solver still stops it at any wall.
+  /// between their centres: separating velocity, plus a small direct step
+  /// (see [_nudge]). Velocity alone was too weak in a packed pile — the
+  /// neighbours absorbed it and the pair stayed overlapped — while a bare
+  /// teleport ignores walls and once pushed items off the table; the step
+  /// is trimmed so it can never end inside a wall.
   void _separate(
     IngredientBodyComponent a,
     IngredientBodyComponent b,
     double depth, {
     required double aShare,
+    bool kick = true,
   }) {
     final aPos = a.body.position, bPos = b.body.position;
     var dir = bPos - aPos;
@@ -849,8 +854,74 @@ class MixolocoGame extends Forge2DGame {
     }
     dir.normalize();
     final speed = (depth * _separateSpeedPerMetre).clamp(_separateMinSpeed, _separateMaxSpeed);
-    _pushAlong(b.body, dir, speed * (1 - aShare));
-    _pushAlong(a.body, -dir, speed * aShare);
+    if (kick) {
+      _pushAlong(b.body, dir, speed * (1 - aShare));
+      _pushAlong(a.body, -dir, speed * aShare);
+    }
+    final step = depth < _separateMaxStep ? depth : _separateMaxStep;
+    _nudge(b, dir * (step * (1 - aShare)));
+    _nudge(a, dir * (-step * aShare));
+  }
+
+  /// The most a single [_separate] moves a pair directly, per check.
+  static const _separateMaxStep = 0.015;
+
+  /// Moves [b] by [delta], trimmed so none of its shape ends up more than
+  /// solver slop inside any table wall.
+  void _nudge(IngredientBodyComponent b, Vector2 delta) {
+    if (delta.length2 == 0) return;
+    final pieces = b.worldCollisionPieces();
+    final move = delta.clone();
+    for (final w in _wallFrames()) {
+      final d = _wallDepth(pieces, w, move);
+      if (d > _wallSlop) move.add(w.normal * (d - _wallSlop));
+    }
+    b.body.setTransform(b.body.position + move, b.body.rotation);
+  }
+
+  static const _wallSlop = 0.005;
+
+  /// Each table wall as a start point, unit direction, length and inward
+  /// normal — rebuilt only when the table's height changes.
+  List<({Vector2 start, Vector2 dir, double len, Vector2 normal})> _wallFrames() {
+    final cached = _walls;
+    if (cached != null && _wallsHeight == _worldHeight) return cached;
+    final mid = Vector2(kWorldWidthMeters / 2, _worldHeight / 2);
+    _wallsHeight = _worldHeight;
+    return _walls = [
+      for (final (start, end) in tableWallSegments(kWorldWidthMeters, _worldHeight))
+        if ((end - start).length > 1e-6)
+          () {
+            final len = (end - start).length;
+            final dir = (end - start)..scale(1 / len);
+            var n = Vector2(-dir.y, dir.x);
+            if ((mid - start).dot(n) < 0) n = -n;
+            return (start: start, dir: dir, len: len, normal: n);
+          }(),
+    ];
+  }
+
+  List<({Vector2 start, Vector2 dir, double len, Vector2 normal})>? _walls;
+  double _wallsHeight = -1;
+
+  /// How far [pieces] (moved by [shift]) reach past wall [w]; 0 if clear.
+  static double _wallDepth(
+    List<CollisionPiece> pieces,
+    ({Vector2 start, Vector2 dir, double len, Vector2 normal}) w, [
+    Vector2? shift,
+  ]) {
+    var depth = 0.0;
+    for (final piece in pieces) {
+      for (final v in piece.core) {
+        final rel = v - w.start;
+        if (shift != null) rel.add(shift);
+        final along = rel.dot(w.dir);
+        if (along < 0 || along > w.len) continue;
+        final d = piece.radius - rel.dot(w.normal);
+        if (d > depth) depth = d;
+      }
+    }
+    return depth;
   }
 
   static const _separateSpeedPerMetre = 8.0;
@@ -878,10 +949,21 @@ class MixolocoGame extends Forge2DGame {
       final p = b.body.position;
       final outside = p.y < kTableFarInset || p.y > _worldHeight || p.x < 0 || p.x > kWorldWidthMeters;
       if (!outside) continue;
-      final r = b.contactRadius;
-      final y = p.y.clamp(kTableFarInset + r, _worldHeight - r).toDouble();
-      final x = p.x.clamp(centerX - farHalf + r, centerX + farHalf - r).toDouble();
-      b.body.setTransform(Vector2(x, y), b.body.rotation);
+      final pieces = b.worldCollisionPieces();
+      final move = Vector2.zero();
+      for (final w in _wallFrames()) {
+        final d = _wallDepth(pieces, w, move);
+        if (d > 0) move.add(w.normal * (d + 0.01));
+      }
+      if (move.length2 > 0) {
+        b.body.setTransform(p + move, b.body.rotation);
+      } else {
+        // Outside every wall's span (past a corner): nearest safe spot.
+        final r = b.contactRadius;
+        final y = p.y.clamp(kTableFarInset + r, _worldHeight - r).toDouble();
+        final x = p.x.clamp(centerX - farHalf + r, centerX + farHalf - r).toDouble();
+        b.body.setTransform(Vector2(x, y), b.body.rotation);
+      }
       b.body.linearVelocity = Vector2.zero();
       b.body.angularVelocity = 0;
     }
@@ -894,35 +976,18 @@ class MixolocoGame extends Forge2DGame {
   /// side wall's bend). Anything embedded deeper than solver slop for two
   /// checks running gets moved back inside, clear of that wall.
   void _rescueWallEmbeddedBodies() {
-    final walls = tableWallSegments(kWorldWidthMeters, _worldHeight);
-    final mid = Vector2(kWorldWidthMeters / 2, _worldHeight / 2);
     final stillEmbedded = <IngredientBodyComponent>{};
     for (final b in _liveBodies) {
       if (b.consumed || !b.isMounted) continue;
       final pieces = b.worldCollisionPieces();
-      for (final (start, end) in walls) {
-        final t = end - start;
-        final len = t.length;
-        if (len < 1e-6) continue;
-        t.scale(1 / len);
-        var n = Vector2(-t.y, t.x);
-        if ((mid - start).dot(n) < 0) n = -n;
-        var depth = 0.0;
-        for (final piece in pieces) {
-          for (final v in piece.core) {
-            final rel = v - start;
-            final along = rel.dot(t);
-            if (along < 0 || along > len) continue;
-            final d = piece.radius - rel.dot(n);
-            if (d > depth) depth = d;
-          }
-        }
+      for (final w in _wallFrames()) {
+        final depth = _wallDepth(pieces, w);
         if (depth < _wallEmbedDepth) continue;
         stillEmbedded.add(b);
         final streak = (_wallEmbedStreak[b] ?? 0) + 1;
         _wallEmbedStreak[b] = streak;
         if (streak >= 2) {
-          b.body.setTransform(b.body.position + n * (depth + 0.01), b.body.rotation);
+          b.body.setTransform(b.body.position + w.normal * (depth + 0.01), b.body.rotation);
           b.body.linearVelocity = Vector2.zero();
           b.body.angularVelocity = 0;
         }
@@ -958,7 +1023,7 @@ class MixolocoGame extends Forge2DGame {
           o.worldCollisionPieces(),
         );
         if (depth <= _popSlop) continue;
-        _separate(p, o, depth, aShare: 0.3);
+        _separate(p, o, depth, aShare: 0.3, kick: false);
       }
     }
   }

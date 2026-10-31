@@ -468,6 +468,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     'adBreakThresholdsShown': s.adBreakThresholdsShown,
     'celebratedLevel': s.celebratedLevel,
     'runHighestTier': s.runHighestTier,
+    'saveVersion': 2,
   };
 
   /// Rebuilds a full BoardState from a previous [_encodeState] — wrapped
@@ -501,6 +502,9 @@ class GameStateNotifier extends Notifier<BoardState> {
       // different one (whatever that tier is in the real chain) actually
       // spawned the moment it was thrown.
       final chain = evolutionChainForLevel(level);
+      // Level 5 was reordered after build 20; a save from then stores its
+      // tiers as positions in the old order (items carry no id).
+      final legacyLevel5 = level == 5 && (map['saveVersion'] as int?) == null;
       Ingredient resolveIngredient(String id) =>
           chain.firstWhere((i) => i.id == id, orElse: () => findIngredientById(id));
       return BoardState(
@@ -538,7 +542,7 @@ class GameStateNotifier extends Notifier<BoardState> {
                 x: (p['x'] as num).toDouble(),
                 y: (p['y'] as num).toDouble(),
                 angle: (p['angle'] as num?)?.toDouble() ?? 0,
-                id: p['id'] as String?,
+                id: p['id'] as String? ?? (legacyLevel5 ? legacyLevel5Id(p['tier'] as int) : null),
               ),
             )
             .toList(),
@@ -564,7 +568,10 @@ class GameStateNotifier extends Notifier<BoardState> {
         // Absent in a save written before this field existed — 0 (never
         // reached anything this run) is the correct read for that case,
         // same spirit as every other new-field fallback in this method.
-        runHighestTier: map['runHighestTier'] as int? ?? 0,
+        runHighestTier: switch (map['runHighestTier'] as int? ?? 0) {
+          final t when legacyLevel5 => migrateLegacyLevel5Tier(t),
+          final t => t,
+        },
       );
     } catch (_) {
       return null;
@@ -1001,7 +1008,7 @@ class GameStateNotifier extends Notifier<BoardState> {
         (previousBest.isEmpty || state.score > previousBest.first);
     state = state.copyWith(isNewHighScore: isNewHighScore);
     try {
-      await recordScore(state.score);
+      await recordScore(state.score, level: state.level, tier: state.runHighestTier);
     } catch (e, st) {
       // Unlike every neighboring call here (submitWeeklyScore's
       // catchError, _pushProgressToServer's own try/catch), this one had
