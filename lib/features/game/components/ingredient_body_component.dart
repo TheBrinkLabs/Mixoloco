@@ -703,8 +703,21 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
   /// Refreshed a few times a second from update() rather than read in
   /// render() every frame — each body.position read is a native call.
   void _refreshOutOfZone() {
-    _isOutOfZone = !consumed &&
-        (body.position.y - radius) > game.worldHeight * (1 - kGameOverLineFraction);
+    _isOutOfZone = !consumed && farthestY > game.worldHeight * (1 - kGameOverLineFraction);
+  }
+
+  /// The far-most (smallest) y of this body's real collision outline — so
+  /// the game-over line only counts it once the *whole* item is past the
+  /// line, not as soon as its nominal circle touches it.
+  double get farthestY {
+    var top = double.infinity;
+    for (final piece in worldCollisionPieces()) {
+      for (final v in piece.core) {
+        final y = v.y - piece.radius;
+        if (y < top) top = y;
+      }
+    }
+    return top;
   }
 
   /// A soft, thin red ring around the item's own circular footprint —

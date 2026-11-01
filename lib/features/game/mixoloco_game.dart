@@ -136,7 +136,12 @@ class MixolocoGame extends Forge2DGame {
         2 => _level2SizeMultiplier(tier),
         3 => kLevel3SizeMultiplier,
         _ => 1.0,
-      };
+      } *
+      _daySizeTrim(_level);
+
+  /// Levels 1-5 play a little smaller than before: 5% on Level 1, easing
+  /// off by a point per level to 1% on Level 5. Night levels unchanged.
+  static double _daySizeTrim(int level) => level >= 1 && level <= 5 ? 0.94 + level * 0.01 : 1.0;
 
   /// Items to recreate on the table as soon as the world's ready — a
   /// snapshot taken via [capturePlacedItems] the last time this screen
@@ -639,7 +644,7 @@ class MixolocoGame extends Forge2DGame {
       (c) =>
           !c.consumed &&
           c.isMounted &&
-          (c.body.position.y - c.radius) > lineY &&
+          c.farthestY > lineY &&
           c.body.linearVelocity.length < kRestSpeedThreshold &&
           (_adjacency[c]?.isNotEmpty ?? false),
     );
@@ -797,7 +802,14 @@ class MixolocoGame extends Forge2DGame {
   /// there's simply no room — so stop pushing (it only jostles the pile).
   static const _unstickMaxPushes = 5;
   double _unstickTimer = 0;
-  final Map<(IngredientBodyComponent, IngredientBodyComponent), int> _deepOverlapStreak = {};
+
+  /// Per deep pair: checks seen deep, and when last seen deep. Kept until
+  /// the pair has been clear for [_unstickForgetAfter] — a pair bouncing
+  /// in and out of "deep" used to reset its count each time and get
+  /// pushed forever, which read as items shaking for ages.
+  final Map<(IngredientBodyComponent, IngredientBodyComponent), ({int streak, double lastDeep})>
+      _deepOverlapStreak = {};
+  static const _unstickForgetAfter = 2.0;
 
   void _unstickContacts(double dt) {
     _unstickTimer -= dt;
@@ -807,7 +819,6 @@ class MixolocoGame extends Forge2DGame {
     List<CollisionPiece> piecesOf(IngredientBodyComponent c) =>
         pieces[c] ??= c.worldCollisionPieces();
     final seen = <IngredientBodyComponent>{};
-    final stillDeep = <(IngredientBodyComponent, IngredientBodyComponent)>{};
     for (final entry in _adjacency.entries) {
       final a = entry.key;
       if (a.consumed || !a.isMounted) continue;
@@ -821,16 +832,17 @@ class MixolocoGame extends Forge2DGame {
             : smaller * _unstickDepthFraction;
         if (depth <= threshold) continue;
         final key = (a, b);
-        stillDeep.add(key);
-        final streak = (_deepOverlapStreak[key] ?? 0) + 1;
-        _deepOverlapStreak[key] = streak;
+        final streak = (_deepOverlapStreak[key]?.streak ?? 0) + 1;
+        _deepOverlapStreak[key] = (streak: streak, lastDeep: _elapsed);
         if (streak >= _unstickConfirmChecks &&
             streak < _unstickConfirmChecks + _unstickMaxPushes) {
           _separate(a, b, depth, aShare: 0.5);
         }
       }
     }
-    _deepOverlapStreak.removeWhere((k, _) => !stillDeep.contains(k));
+    _deepOverlapStreak.removeWhere(
+      (k, v) => _elapsed - v.lastDeep > _unstickForgetAfter || k.$1.consumed || k.$2.consumed,
+    );
   }
 
   /// Pushes [b] away from [a] (and [a] back by its share) along the line
