@@ -1461,12 +1461,12 @@ class MixolocoGame extends Forge2DGame {
   /// version.
   void shakeTable() => _startShakeImpulses(1.0);
 
-  /// Mega-Shake — the same impulse pulses as [shakeTable] but 30%
+  /// Mega-Shake — the same impulse pulses as [shakeTable] but 50%
   /// stronger ("fly around a little bit more"), plus every live item
   /// shrinking/wobbling/flexing for the duration (see _shakeSquishBase's
   /// doc and shakeSquishScaleFor).
   void megaShakeTable() {
-    _startShakeImpulses(1.3);
+    _startShakeImpulses(1.5);
     // Guarded — a second Mega-Shake purchase fired while the first's
     // items are still settling back to size would otherwise shrink
     // already-shrunk bodies a second time.
@@ -1497,8 +1497,9 @@ class MixolocoGame extends Forge2DGame {
   /// edge and toward the game-over line, the opposite of what a shake is
   /// bought for. While a shake runs, each item gets extra pull toward the
   /// far edge in proportion to its tier: none for the smallest, up to
-  /// [_shakeSinkMax] times gravity on top for the largest. Applied as a
-  /// force every physics step, so it lasts exactly as long as the shake.
+  /// [_shakeSinkMax] times gravity on top for the largest — kept light
+  /// (at 1.0 it held the whole table still). Applied as a force every
+  /// physics step, so it lasts exactly as long as the shake.
   void _applyShakeSink() {
     final top = _chain.length - 1;
     if (top <= 0) return;
@@ -1511,7 +1512,20 @@ class MixolocoGame extends Forge2DGame {
     }
   }
 
-  static const _shakeSinkMax = 1.0;
+  static const _shakeSinkMax = 0.3;
+
+  /// How hard a shake kicks an item of [tier], relative to the base kick:
+  /// [_shakeKickSmallest] for the smallest down to [_shakeKickLargest]
+  /// for the largest — small items scatter into the gaps while big ones
+  /// still move, which is what lets the big ones settle downward.
+  double _shakeKickForTier(int tier) {
+    final top = _chain.length - 1;
+    final share = top <= 0 ? 0.0 : tier / top;
+    return _shakeKickSmallest + (_shakeKickLargest - _shakeKickSmallest) * share;
+  }
+
+  static const _shakeKickSmallest = 1.6;
+  static const _shakeKickLargest = 0.9;
 
   void _updateShake(double dt) {
     if (_shakeTimeRemaining > 0) {
@@ -1526,6 +1540,7 @@ class MixolocoGame extends Forge2DGame {
         _shakePulseTimer = _shakePulseInterval;
         for (final b in _liveBodies) {
           if (b.consumed || !b.isMounted) continue;
+          final kick = _shakeImpulseMultiplier * _shakeKickForTier(b.tier);
           // Vertical component deliberately much bigger than horizontal
           // — "make things jump up/down more" — so a pulse reads as a
           // hop along the table's depth axis (which is screen-vertical,
@@ -1535,13 +1550,13 @@ class MixolocoGame extends Forge2DGame {
           final horizontal =
               (_shakeRandom.nextDouble() - 0.5) *
               2.4 *
-              _shakeImpulseMultiplier *
+              kick *
               b.body.mass;
           final verticalSign = _shakeRandom.nextBool() ? 1.0 : -1.0;
           final vertical =
               verticalSign *
               (2.6 + _shakeRandom.nextDouble() * 2.2) *
-              _shakeImpulseMultiplier *
+              kick *
               b.body.mass;
           b.body.applyLinearImpulse(Vector2(horizontal, vertical));
         }
