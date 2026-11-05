@@ -1493,6 +1493,26 @@ class MixolocoGame extends Forge2DGame {
     }
   }
 
+  /// Shaking a mixed pile sorts big items to the top — away from the far
+  /// edge and toward the game-over line, the opposite of what a shake is
+  /// bought for. While a shake runs, each item gets extra pull toward the
+  /// far edge in proportion to its tier: none for the smallest, up to
+  /// [_shakeSinkMax] times gravity on top for the largest. Applied as a
+  /// force every physics step, so it lasts exactly as long as the shake.
+  void _applyShakeSink() {
+    final top = _chain.length - 1;
+    if (top <= 0) return;
+    final g = kGravityMagnitude * _shakeGravityMultiplier;
+    for (final b in _liveBodies) {
+      if (b.consumed || !b.isMounted) continue;
+      final share = b.tier / top;
+      if (share <= 0) continue;
+      b.body.applyForce(Vector2(0, -g * _shakeSinkMax * share * b.body.mass));
+    }
+  }
+
+  static const _shakeSinkMax = 1.0;
+
   void _updateShake(double dt) {
     if (_shakeTimeRemaining > 0) {
       _shakeTimeRemaining -= dt;
@@ -1500,6 +1520,7 @@ class MixolocoGame extends Forge2DGame {
         world.gravity = Vector2(0, -kGravityMagnitude);
         shakeActive.value = false;
       }
+      _applyShakeSink();
       _shakePulseTimer -= dt;
       if (_shakePulseTimer <= 0) {
         _shakePulseTimer = _shakePulseInterval;
@@ -1606,8 +1627,8 @@ class MixolocoGame extends Forge2DGame {
   }
 
   /// Removes every item currently on the table that's one of the Slam
-  /// Mini-Shots ingredients (see Ingredient.isMiniShot: Vodka, Melon
-  /// Liqueur, Gin, Coffee Liqueur) — the mid-game purchase, and also
+  /// Mini-Shots ingredients (see kMiniShotIds: vodka, rum, gin and the
+  /// other shot-glass drinks) — the mid-game purchase, and also
   /// [clearMiniShotsAndResume] (the ad-continue flow). Deliberately
   /// narrower than every [Ingredient.isAlcoholic] item: that used to be
   /// what the ad-continue flow cleared, but on the rooftop chain that

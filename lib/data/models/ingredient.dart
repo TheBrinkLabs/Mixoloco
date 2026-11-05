@@ -256,12 +256,9 @@ class Ingredient {
   final bool isAlcoholic;
 
   /// Whether this ingredient counts toward the Slam Mini-Shots purchase's
-  /// clear-the-table effect (see MixolocoGame.clearMiniShots) — a much
-  /// narrower list than [isAlcoholic] (just Vodka, Melon Liqueur, Gin,
-  /// Coffee Liqueur, the actual shot-glass drinks, not every alcoholic
-  /// ingredient), so it gets its own flag rather than overloading that
-  /// one.
-  final bool isMiniShot;
+  /// clear-the-table effect (see MixolocoGame.clearMiniShots) — see
+  /// [kMiniShotIds]. By id, so it's the same on every level.
+  bool get isMiniShot => kMiniShotIds.contains(id);
 
   const Ingredient({
     required this.id,
@@ -275,7 +272,6 @@ class Ingredient {
     this.displayScaleX = 1.0,
     this.sizeMultiplier = 1.0,
     this.isAlcoholic = false,
-    this.isMiniShot = false,
     this.collisionProfile,
     this.collisionCapsule,
     this.extraCircles,
@@ -295,7 +291,6 @@ class Ingredient {
     displayScaleX: displayScaleX,
     sizeMultiplier: sizeMultiplier,
     isAlcoholic: isAlcoholic,
-    isMiniShot: isMiniShot,
     collisionProfile: collisionProfile,
     collisionCapsule: collisionCapsule,
     extraCircles: extraCircles,
@@ -354,7 +349,6 @@ const kEvolutionChain = [
     displayScale: 1.044,
     displayScaleX: 1.652,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -1087,7 +1081,6 @@ const kEvolutionChainLevel2 = [
     displayScale: 1.044,
     displayScaleX: 1.652,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -1129,7 +1122,6 @@ const kEvolutionChainLevel2 = [
     displayScale: 0.893,
     displayScaleX: 1.575,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -1277,7 +1269,6 @@ const kEvolutionChainLevel2 = [
     displayScale: 0.840,
     displayScaleX: 1.517,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -1326,7 +1317,6 @@ const kEvolutionChainLevel2 = [
     // old displayScaleX stretch — same bowl/stem/foot shape category.
     displayScale: 0.992,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -1856,7 +1846,6 @@ const kEvolutionChainLevel3 = [
     displayScale: 1.044,
     displayScaleX: 1.652,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -1916,7 +1905,6 @@ const kEvolutionChainLevel3 = [
     assetPath: 'assets/images/ingredient_gin.png',
     displayScale: 0.992,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -2618,7 +2606,6 @@ const kEvolutionChainLevel4 = [
     displayScale: 1.044,
     displayScaleX: 1.652,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -2660,7 +2647,6 @@ const kEvolutionChainLevel4 = [
     displayScale: 0.924,
     displayScaleX: 1.232,
     isAlcoholic: true,
-    isMiniShot: true,
     // 10% bigger per feedback.
     sizeMultiplier: 1.10,
     // Traced from the sprite PNG's alpha silhouette through
@@ -3347,7 +3333,6 @@ const kEvolutionChainLevel5 = [
     displayScale: 0.951,
     displayScaleX: 1.313,
     isAlcoholic: true,
-    isMiniShot: true,
     // Traced from the sprite PNG's alpha silhouette through
     // paintIngredient's transform (scratchpad gen_png), on-device approved.
     collisionProfile: [
@@ -4417,8 +4402,8 @@ final kEvolutionChainLevel6 = _nightChain([
 
 /// Rooftop · After Dark — late-night lounge.
 final kEvolutionChainLevel7 = _nightChain([
-  'cherry', 'vodka', 'blackberry', 'lime', 'coffee_liqueur', 'lemon',
-  'gin', 'vermouth', 'whisky', 'tonic', 'prosecco', 'champagne',
+  'cherry', 'vodka', 'blackberry', 'lime', 'coffee_liqueur', 'gin',
+  'lemon', 'vermouth', 'whisky', 'tonic', 'prosecco', 'champagne',
 ], 'champagne_tower');
 
 /// Safari · After Dark — around the campfire.
@@ -4530,3 +4515,12 @@ int migrateLegacyLevel5Tier(int tier) {
   final i = kEvolutionChainLevel5.indexWhere((x) => x.id == id);
   return i < 0 ? tier : i;
 }
+
+/// The ingredients Slam Mini-Shots clears: the ones drawn as a shot (plus
+/// Irish cream, which always has been) — a narrower set than
+/// [Ingredient.isAlcoholic], which also takes in whisky, wine and the
+/// like. One list for every level, so a shot can't be missed on one
+/// level's copy of an ingredient (rum, once).
+const kMiniShotIds = {
+  'vodka', 'rum', 'blue_curacao', 'melon_liqueur', 'coffee_liqueur', 'gin', 'guaro', 'irish_cream',
+};
