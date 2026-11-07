@@ -882,10 +882,13 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// rather than directly from the dialog, so it fires whenever Play
   /// Billing actually reports the purchase, not just while that dialog
   /// happens to still be open.
-  void addPurchasedCredits(int amount) {
-    final newCredits = state.credits + amount;
-    state = state.copyWith(credits: newCredits);
-    saveCredits(newCredits);
+  ///
+  /// PurchaseService has already saved the new balance before announcing
+  /// it, so this re-reads the saved value rather than adding [amount]
+  /// again — the grant survives even if this listener wasn't attached yet.
+  Future<void> addPurchasedCredits(int amount) async {
+    final credits = await loadCredits();
+    state = state.copyWith(credits: credits);
     _pushProgressToServer();
   }
 
@@ -897,11 +900,12 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// run is currently in progress are all untouched — the player just
   /// gains the *option* to start a New Game at the newly-unlocked level
   /// whenever they choose, exactly as if they'd reached it by playing.
-  void unlockNextLevelFromPurchase() {
-    if (state.highestLevelReached >= kMaxLevel) return;
-    final next = state.highestLevelReached + 1;
-    state = state.copyWith(highestLevelReached: next);
-    saveHighestLevelReached(next);
+  ///
+  /// Already saved by PurchaseService (see [addPurchasedCredits]) — this
+  /// re-reads it.
+  Future<void> unlockNextLevelFromPurchase() async {
+    final reached = await loadHighestLevelReached();
+    state = state.copyWith(highestLevelReached: reached);
     _pushProgressToServer();
   }
 

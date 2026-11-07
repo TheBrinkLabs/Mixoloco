@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart' show BillingResponse;
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import '../../data/models/ingredient.dart' show kLevelCount;
 import '../../data/services/progression_service.dart';
 
 /// The four ad-removal tiers sold from the Shop.
@@ -160,14 +162,12 @@ class PurchaseService {
   /// need their subscription offer token, Forever is a plain
   /// non-consumable.
   Future<void> buy(ProductDetails details) async {
-    final isConsumable =
-        details.id == kAdFreeProductIds[AdFreeTier.oneDay] ||
-        kCreditPackProductIds.values.contains(details.id) ||
-        details.id == kUnlockLevelProductId;
-    if (isConsumable) {
+    if (_isConsumable(details.id)) {
+      // Consumed by _onPurchaseUpdate, not the plugin's autoConsume — see
+      // there for why.
       await _iap.buyConsumable(
         purchaseParam: PurchaseParam(productDetails: details),
-        autoConsume: true,
+        autoConsume: false,
       );
       return;
     }
@@ -190,17 +190,46 @@ class PurchaseService {
     );
   }
 
+  /// The rebuyable products: 1 Day, both credit packs and Unlock Next Level.
+  bool _isConsumable(String productId) =>
+      productId == kAdFreeProductIds[AdFreeTier.oneDay] ||
+      kCreditPackProductIds.values.contains(productId) ||
+      productId == kUnlockLevelProductId;
+
   void _onPurchaseUpdate(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      if (purchase.status == PurchaseStatus.purchased ||
-          purchase.status == PurchaseStatus.restored) {
-        await _applyPurchase(purchase);
+      final owned = purchase.status == PurchaseStatus.purchased ||
+          purchase.status == PurchaseStatus.restored;
+      if (_isConsumable(purchase.productID)) {
+        // A consumable stays "owned" — and can't be bought again ("you
+        // already own this item") — until it's consumed. The plugin's own
+        // autoConsume only did that for a purchase that came back in the
+        // same session it was started, and on failure marked it an error,
+        // so the player paid, got nothing, and couldn't buy again. Every
+        // owned consumable — a fresh buy, or one Play re-reports on the
+        // next refresh because it was never consumed — is consumed here,
+        // and granted only once Play confirms. A second delivery of the
+        // same purchase then fails to consume, so it's never granted twice.
+        // Consuming also acknowledges it, so completePurchase isn't needed.
+        if (owned && await _consume(purchase)) await _applyPurchase(purchase);
+        continue;
       }
+      if (owned) await _applyPurchase(purchase);
       if (purchase.pendingCompletePurchase) {
         await _iap.completePurchase(purchase);
       }
     }
     await _recomputeAdFree();
+  }
+
+  Future<bool> _consume(PurchaseDetails purchase) async {
+    try {
+      final android = _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+      final result = await android.consumePurchase(purchase);
+      return result.responseCode == BillingResponse.ok;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Serializes [_applyPurchase]'s own read-modify-write of the 1-Day
@@ -223,8 +252,8 @@ class PurchaseService {
 
   Future<void> _applyPurchaseLocked(PurchaseDetails purchase) async {
     if (purchase.productID == kAdFreeProductIds[AdFreeTier.oneDay]) {
-      // Consumable, so every event here is a fresh buy (Play won't
-      // replay an already-consumed purchase on restore) — stacks onto
+      // Consumable, so every event here is a fresh buy (only reached
+      // once _onPurchaseUpdate has consumed it) — stacks onto
       // any time already remaining rather than always resetting to
       // exactly 24h from now, so buying a second day before the first
       // runs out doesn't waste the remainder of the first.
@@ -241,16 +270,22 @@ class PurchaseService {
       await saveAdFreeSubscriptionCached(true);
     } else if (purchase.productID == kUnlockLevelProductId) {
       // Consumable, same "every event is a fresh buy" reasoning as
-      // ads_free_1_day above — no on-disk state of its own to persist
-      // here either, just announce it for GameStateNotifier to apply.
+      // ads_free_1_day above. Saved here, before announcing it — a
+      // purchase recovered at startup can arrive before GameStateNotifier
+      // is listening, or while it's still loading its save, and the
+      // player must still get what they paid for. The notifier just
+      // re-reads the saved value (see unlockNextLevelFromPurchase).
+      final reached = await loadHighestLevelReached();
+      if (reached < kLevelCount) await saveHighestLevelReached(reached + 1);
       _unlockLevelController.add(null);
     } else {
-      // Consumable, same "every event is a fresh buy" reasoning as
-      // ads_free_1_day above — no on-disk state of its own to persist
-      // here, just announce the amount for GameStateNotifier to credit.
+      // Consumable — saved first and then announced, same as Unlock Next
+      // Level above (see addPurchasedCredits).
       for (final tier in CreditPack.values) {
         if (purchase.productID == kCreditPackProductIds[tier]) {
-          _creditPackController.add(kCreditPackAmounts[tier]!);
+          final amount = kCreditPackAmounts[tier]!;
+          await saveCredits(await loadCredits() + amount);
+          _creditPackController.add(amount);
           break;
         }
       }

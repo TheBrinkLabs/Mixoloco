@@ -249,7 +249,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                   disabled: _purchasingTier != null,
                   onBuy: () => _buyAdFree(locale, AdFreeTier.oneDay),
                   locale: locale,
-                  fallbackPrice: '£0.20',
+                  fallbackPrice: '£0.19',
                 ),
                 _AdFreeRow(
                   tier: AdFreeTier.monthly,

@@ -139,9 +139,10 @@ class MixolocoGame extends Forge2DGame {
       } *
       _daySizeTrim(_level);
 
-  /// Levels 1-5 play a little smaller than before: 5% on Level 1, easing
-  /// off by a point per level to 1% on Level 5. Night levels unchanged.
-  static double _daySizeTrim(int level) => level >= 1 && level <= 5 ? 0.94 + level * 0.01 : 1.0;
+  /// Levels 1-5 play smaller, easiest first: a 5%-to-1% trim (Level 1 to
+  /// 5), then a further 10%-to-2% on top. Night levels unchanged.
+  static double _daySizeTrim(int level) =>
+      level >= 1 && level <= 5 ? (0.94 + level * 0.01) * (0.88 + level * 0.02) : 1.0;
 
   /// Items to recreate on the table as soon as the world's ready — a
   /// snapshot taken via [capturePlacedItems] the last time this screen
@@ -980,7 +981,44 @@ class MixolocoGame extends Forge2DGame {
       b.body.angularVelocity = 0;
     }
     _rescueWallEmbeddedBodies();
+    _rescueStrandedBodies();
   }
+
+  /// Gravity pulls everything toward the far edge, so an item that's
+  /// still, touching no other item, and not resting against the far edge
+  /// can only be caught on something — a wall, a corner (seen after a
+  /// drop at the very edge, and after a Mega-Shake). Once that's held for
+  /// [_strandedConfirmChecks] checks running (not during a shake), it's
+  /// moved a little inward (wall-safe, see [_nudge]) and sent on toward
+  /// the far edge.
+  void _rescueStrandedBodies() {
+    if (_shakeTimeRemaining > 0) {
+      _strandedStreak.clear();
+      return;
+    }
+    final stranded = <IngredientBodyComponent>{};
+    for (final b in _liveBodies) {
+      if (b.consumed || !b.isMounted) continue;
+      if (_adjacency[b]?.isNotEmpty ?? false) continue;
+      if (b.body.linearVelocity.length >= kRestSpeedThreshold) continue;
+      if (b.farthestY <= kTableFarInset + _strandedFarSlop) continue;
+      stranded.add(b);
+      final streak = (_strandedStreak[b] ?? 0) + 1;
+      _strandedStreak[b] = streak;
+      if (streak < _strandedConfirmChecks) continue;
+      _strandedStreak[b] = 0;
+      final inward = b.body.position.x < kWorldWidthMeters / 2 ? 1.0 : -1.0;
+      _nudge(b, Vector2(inward * 0.03, -0.03));
+      b.body.linearVelocity = Vector2(inward * 0.5, -1.5);
+      b.body.isAwake = true;
+    }
+    _strandedStreak.removeWhere((k, _) => !stranded.contains(k));
+  }
+
+  /// About a second at the rescue's 0.25s check rate.
+  static const _strandedConfirmChecks = 4;
+  static const _strandedFarSlop = 0.03;
+  final _strandedStreak = <IngredientBodyComponent, int>{};
 
   /// A body can also end up straddling a wall with its centre still
   /// inside — the check above misses that, and once a wall segment runs

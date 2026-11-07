@@ -156,7 +156,10 @@ class IngredientBodyComponent extends BodyComponent<MixolocoGame>
   /// has its own, usually narrower, true radius too. Used by
   /// MixolocoGame._sweepForMerges' safety net so that check matches the
   /// real touching distance instead of the (much larger) nominal radius.
-  double get contactRadius {
+  double get contactRadius => contactRadiusFor(ingredient, radius);
+
+  /// [contactRadius] for [ingredient] at tier radius [radius].
+  static double contactRadiusFor(Ingredient ingredient, double radius) {
     final capsule = ingredient.collisionCapsule;
     final profile = ingredient.collisionProfile;
     var maxFrac = 0.0;
