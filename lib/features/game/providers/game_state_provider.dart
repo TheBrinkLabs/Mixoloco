@@ -622,12 +622,27 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// rules as [restart], but lets the player deliberately choose a level
   /// they've already reached rather than always jumping to their highest
   /// (see the Play Game level picker, main menu).
-  void startNewGameAtLevel(int level) => state = _freshGame(
-    credits: state.credits,
-    highestTiers: state.highestTiers,
-    highestLevelReached: state.highestLevelReached,
-    level: level,
-  );
+  void startNewGameAtLevel(int level) {
+    _finalizeAbandonedRun();
+    state = _freshGame(
+      credits: state.credits,
+      highestTiers: state.highestTiers,
+      highestLevelReached: state.highestLevelReached,
+      level: level,
+    );
+  }
+
+  /// A run left unfinished — the player started a new game instead of
+  /// ending this one (or never answered the continue offer) — still
+  /// counts: its score goes to My Best and the weekly league, same as a
+  /// run that ended. One that's already been finalized (declined
+  /// continue, a second game over, a completed game) isn't counted twice.
+  void _finalizeAbandonedRun() {
+    final alreadyFinalized = state.gameOver && state.continueOfferUsed;
+    if (alreadyFinalized || state.score <= 0) return;
+    if (!state.gameOver) analyticsService.gameOver(level: state.level, score: state.score);
+    _finalizeScore(abandoned: true);
+  }
 
   /// Takes the level and its highest-tier record explicitly rather than
   /// reading `state.*` directly — this is called from [_freshGame] during
@@ -828,6 +843,8 @@ class GameStateNotifier extends Notifier<BoardState> {
       completedCocktailIds: {},
       highestLevelReached: newHighestLevelReached,
       runHighestTier: 0,
+      // The previous level's table — never restored onto this one.
+      placedItems: const [],
     );
     saveHighestLevelReached(newHighestLevelReached);
     _pushProgressToServer();
@@ -1005,14 +1022,24 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// previous best *before* recordScore overwrites it, so
   /// [BoardState.isNewHighScore] (the Game Over plaque's "PB" badge) can
   /// be set correctly.
-  Future<void> _finalizeScore() async {
+  ///
+  /// The run is read up front: for an [abandoned] run the caller replaces
+  /// [state] with a fresh game straight after calling this, so nothing
+  /// below the first await may read it — and there's no Game Over plaque
+  /// to show the "PB" badge on.
+  Future<void> _finalizeScore({bool abandoned = false}) async {
+    final score = state.score;
+    final level = state.level;
+    final runHighestTier = state.runHighestTier;
+    final highestTiers = state.highestTiers;
+    final highestLevelReached = state.highestLevelReached;
     final previousBest = await loadHighScores();
-    final isNewHighScore =
-        state.score > 0 &&
-        (previousBest.isEmpty || state.score > previousBest.first);
-    state = state.copyWith(isNewHighScore: isNewHighScore);
+    if (!abandoned) {
+      final isNewHighScore = score > 0 && (previousBest.isEmpty || score > previousBest.first);
+      state = state.copyWith(isNewHighScore: isNewHighScore);
+    }
     try {
-      await recordScore(state.score, level: state.level, tier: state.runHighestTier);
+      await recordScore(score, level: level, tier: runHighestTier);
     } catch (e, st) {
       // Unlike every neighboring call here (submitWeeklyScore's
       // catchError, _pushProgressToServer's own try/catch), this one had
@@ -1024,15 +1051,15 @@ class GameStateNotifier extends Notifier<BoardState> {
       debugPrint('High score save failed (non-fatal): $e\n$st');
     }
     final uid = authService.uid;
-    if (uid != null && state.score > 0) {
+    if (uid != null && score > 0) {
       ref
           .read(leagueRepositoryProvider)
           .submitWeeklyScore(
             uid: uid,
-            score: state.score,
-            level: state.level,
-            highestTiers: state.highestTiers,
-            highestLevelReached: state.highestLevelReached,
+            score: score,
+            level: level,
+            highestTiers: highestTiers,
+            highestLevelReached: highestLevelReached,
           )
           .catchError((e) {});
     }
@@ -1101,11 +1128,14 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// and the highest-tier/level records carry forward, since those are
   /// lifetime stats, not per-run ones. Starts back on Level 2 directly if
   /// that's the player's lifetime record, per [_freshGame].
-  void restart() => state = _freshGame(
-    credits: state.credits,
-    highestTiers: state.highestTiers,
-    highestLevelReached: state.highestLevelReached,
-  );
+  void restart() {
+    _finalizeAbandonedRun();
+    state = _freshGame(
+      credits: state.credits,
+      highestTiers: state.highestTiers,
+      highestLevelReached: state.highestLevelReached,
+    );
+  }
 
   /// Settings' "Reset Progress" — puts the evolution/level lifetime
   /// record back to a brand-new install's starting point and immediately

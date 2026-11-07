@@ -1352,6 +1352,14 @@ class MixolocoGame extends Forge2DGame {
         child.removeFromParent();
       }
     }
+    // A body spawned this same tick is only queued — Flame mounts it on
+    // the next one, so it isn't in world.children yet. The final item's
+    // reveal spawns it just before a level change clears the table, and
+    // it then turned up on the next level's table (a Rooftop champagne
+    // on Safari). Removing every tracked body too dequeues those.
+    for (final b in _liveBodies) {
+      b.removeFromParent();
+    }
     _liveBodies.clear();
     _pops.clear();
     _deepOverlapStreak.clear();
