@@ -298,9 +298,10 @@ class GameStateNotifier extends Notifier<BoardState> {
     // Play Billing can land well after whatever dialog started it has
     // closed, so crediting the player can't depend on that dialog still
     // being mounted to react to it.
+    // Each event is a grant number (see PurchaseService._grantSequence);
+    // the grant itself is already saved, so these just re-read it.
     ref.listen(creditPackPurchaseProvider, (previous, next) {
-      final amount = next.value;
-      if (amount != null) addPurchasedCredits(amount);
+      if (next.hasValue) addPurchasedCredits();
     });
     ref.listen(unlockLevelPurchaseProvider, (previous, next) {
       if (next.hasValue) unlockNextLevelFromPurchase();
@@ -901,9 +902,9 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// happens to still be open.
   ///
   /// PurchaseService has already saved the new balance before announcing
-  /// it, so this re-reads the saved value rather than adding [amount]
-  /// again — the grant survives even if this listener wasn't attached yet.
-  Future<void> addPurchasedCredits(int amount) async {
+  /// it, so this re-reads the saved value rather than adding the pack's
+  /// amount again — the grant survives even if this listener wasn't attached yet.
+  Future<void> addPurchasedCredits() async {
     final credits = await loadCredits();
     state = state.copyWith(credits: credits);
     _pushProgressToServer();

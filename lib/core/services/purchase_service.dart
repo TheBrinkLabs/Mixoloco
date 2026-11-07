@@ -77,7 +77,14 @@ class PurchaseService {
   StreamSubscription<List<PurchaseDetails>>? _sub;
   final _adFreeController = StreamController<bool>.broadcast();
   final _creditPackController = StreamController<int>.broadcast();
-  final _unlockLevelController = StreamController<void>.broadcast();
+  final _unlockLevelController = StreamController<int>.broadcast();
+
+  /// Numbers every grant announced on the two streams above. Riverpod
+  /// skips an AsyncValue equal to the one before it, so a second
+  /// identical announcement (two 1,000-credit packs, two level unlocks)
+  /// was silently dropped — the second purchase reached nobody. A fresh
+  /// number each time keeps every one distinct.
+  int _grantSequence = 0;
 
   bool _adFree = false;
   bool get isAdFree => _adFree;
@@ -96,7 +103,7 @@ class PurchaseService {
   /// Fires once per completed "Unlock Next Level" purchase — same
   /// one-shot-event shape as [creditPackPurchases], not a current-value
   /// stream.
-  Stream<void> get unlockLevelPurchases => _unlockLevelController.stream;
+  Stream<int> get unlockLevelPurchases => _unlockLevelController.stream;
 
   /// Set within a single [refresh] call as subscription purchases are
   /// seen come through the stream — reset to false at the start of each
@@ -277,7 +284,7 @@ class PurchaseService {
       // re-reads the saved value (see unlockNextLevelFromPurchase).
       final reached = await loadHighestLevelReached();
       if (reached < kLevelCount) await saveHighestLevelReached(reached + 1);
-      _unlockLevelController.add(null);
+      _unlockLevelController.add(++_grantSequence);
     } else {
       // Consumable — saved first and then announced, same as Unlock Next
       // Level above (see addPurchasedCredits).
@@ -285,7 +292,7 @@ class PurchaseService {
         if (purchase.productID == kCreditPackProductIds[tier]) {
           final amount = kCreditPackAmounts[tier]!;
           await saveCredits(await loadCredits() + amount);
-          _creditPackController.add(amount);
+          _creditPackController.add(++_grantSequence);
           break;
         }
       }
@@ -331,6 +338,6 @@ final creditPackPurchaseProvider = StreamProvider<int>(
 
 /// Each completed "Unlock Next Level" purchase, as a one-shot event —
 /// same shape/reasoning as [creditPackPurchaseProvider].
-final unlockLevelPurchaseProvider = StreamProvider<void>(
+final unlockLevelPurchaseProvider = StreamProvider<int>(
   (ref) => purchaseService.unlockLevelPurchases,
 );
