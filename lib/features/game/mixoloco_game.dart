@@ -11,6 +11,7 @@ import '../../data/models/ingredient.dart';
 import 'board_geometry.dart';
 import 'components/cocktail_reveal_component.dart';
 import 'components/game_over_line_component.dart';
+import 'components/impact_fx_components.dart';
 import 'components/ingredient_body_component.dart';
 import 'components/ingredient_sprite.dart';
 import 'components/merge_explosion_component.dart';
@@ -103,13 +104,24 @@ class MixolocoGame extends Forge2DGame {
     required this.onCocktailComplete,
     required this.onGameOver,
     required this.onGameComplete,
+    required this.onFinalMerge,
     required this.onThrowCommitted,
     required this.onTierSeen,
     this.initialItems = const [],
     this.sfxEnabled = true,
     int level = 1,
   }) : _level = level,
-       super(gravity: Vector2(0, -kGravityMagnitude));
+       super(
+         world: Forge2DWorld(
+           gravity: Vector2(0, -kGravityMagnitude),
+           // Stiffer contacts than Box2D's 30Hz default: under this game's
+           // strong gravity, a pile sank up to ~2cm into itself, reading
+           // as small glasses tucked inside big ones. Needs the extra
+           // substeps set in onLoad (Box2D caps contact stiffness at a
+           // quarter of the substep rate).
+           definition: WorldDef(contactHertz: 60),
+         ),
+       );
 
   /// Which evolution chain/cocktail list is currently active — 1 for the
   /// beach bar ([kEvolutionChain]/[kCocktailRecipes]), 2 for the rooftop
@@ -137,12 +149,18 @@ class MixolocoGame extends Forge2DGame {
         3 => kLevel3SizeMultiplier,
         _ => 1.0,
       } *
-      _daySizeTrim(_level);
+      _levelSizeTrim[(_level.clamp(1, _levelSizeTrim.length)) - 1];
 
-  /// Levels 1-5 play smaller, easiest first: a 5%-to-1% trim (Level 1 to
-  /// 5), then a further 10%-to-2% on top. Night levels unchanged.
-  static double _daySizeTrim(int level) =>
-      level >= 1 && level <= 5 ? (0.94 + level * 0.01) * (0.88 + level * 0.02) : 1.0;
+  /// A size scale per level (1 to 10), set so difficulty ramps evenly
+  /// rather than by feel: measured as how many throws of a level's usual
+  /// items (tiers 0-3, by their real collision-shape area) would fill the
+  /// table to the game-over line — 106 on Level 1, 4 fewer each level, 70
+  /// on Level 10. Before this, Level 3 was the hardest day level and
+  /// Levels 5 and 10 nearly as easy as Level 1 (small throwables: sugar,
+  /// lime, guaro). Computed by the scratchpad's difficulty.dart, which
+  /// reads the chains and these rules; rerun it after changing any item's
+  /// size, shape or chain position to keep the ramp even.
+  static const _levelSizeTrim = [0.855, 0.825, 0.760, 0.895, 0.997, 0.909, 0.841, 0.840, 1.072, 1.134];
 
   /// Items to recreate on the table as soon as the world's ready — a
   /// snapshot taken via [capturePlacedItems] the last time this screen
@@ -174,6 +192,16 @@ class MixolocoGame extends Forge2DGame {
   /// merged — there's no higher tier for them to become, so this is the
   /// actual win condition rather than a no-op (see [_tryMerge]).
   final void Function() onGameComplete;
+
+  /// Two of a level's final items merged, on a level before the last with
+  /// Cocktail Mode off — that's what levels up in that mode.
+  final void Function() onFinalMerge;
+
+  /// Cocktail Mode, kept current by GameScreen. Off, two final items
+  /// merging levels up (see [_tryMerge]); on, they're a dead end, since
+  /// the level-up there is the cocktails plus making one final item.
+  bool cocktailMode = true;
+  bool _finalMergeTriggered = false;
 
   /// A drop was actually committed to the table (spawned, not aborted by
   /// game-over) — advance the staged/upcoming ingredient queue.
@@ -437,6 +465,8 @@ class MixolocoGame extends Forge2DGame {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+    // 6 substeps at 60fps = 360Hz, so the 60Hz contacts above are honoured.
+    world.subStepCount = 6;
     await preloadIngredientArt([
       ...kEvolutionChain,
       ...kEvolutionChainLevel2,
@@ -819,13 +849,16 @@ class MixolocoGame extends Forge2DGame {
     final pieces = <IngredientBodyComponent, List<CollisionPiece>>{};
     List<CollisionPiece> piecesOf(IngredientBodyComponent c) =>
         pieces[c] ??= c.worldCollisionPieces();
-    final seen = <IngredientBodyComponent>{};
-    for (final entry in _adjacency.entries) {
-      final a = entry.key;
-      if (a.consumed || !a.isMounted) continue;
-      seen.add(a);
-      for (final b in entry.value) {
-        if (seen.contains(b) || b.consumed || !b.isMounted) continue;
+    // Every nearby pair, always: Box2D does not always report a pair with
+    // one item wholly inside the other as touching (seen: a vodka glass
+    // sat entirely inside an orange glass, never on the contact list).
+    final bodies = [for (final b in _liveBodies) if (!b.consumed && b.isMounted) b];
+    for (var i = 0; i < bodies.length; i++) {
+      final a = bodies[i];
+      for (var j = i + 1; j < bodies.length; j++) {
+        final b = bodies[j];
+        final reach = a.contactRadius + b.contactRadius;
+        if ((a.body.position - b.body.position).length2 > reach * reach) continue;
         final depth = IngredientBodyComponent.penetrationDepth(piecesOf(a), piecesOf(b));
         final smaller = a.contactRadius < b.contactRadius ? a.contactRadius : b.contactRadius;
         final threshold = _unstickMinDepth > smaller * _unstickDepthFraction
@@ -837,7 +870,25 @@ class MixolocoGame extends Forge2DGame {
         _deepOverlapStreak[key] = (streak: streak, lastDeep: _elapsed);
         if (streak >= _unstickConfirmChecks &&
             streak < _unstickConfirmChecks + _unstickMaxPushes) {
-          _separate(a, b, depth, aShare: 0.5);
+          // A smooth velocity push first; only if a couple of those
+          // haven't separated the pair does it also step them apart, and
+          // then only slightly — bigger steps read as items twitching.
+          final pushes = streak - _unstickConfirmChecks;
+          _separate(a, b, depth, aShare: 0.5, maxStep: pushes < _unstickSmoothPushes ? 0 : _unstickMaxStep);
+        } else if (streak >= _unstickConfirmChecks + _unstickMaxPushes &&
+            streak < _unstickConfirmChecks + _unstickMaxPushes + _hardOverlapMaxTries &&
+            depth > (_hardOverlapMinDepth > smaller * _hardOverlapFraction ? _hardOverlapMinDepth : smaller * _hardOverlapFraction)) {
+          // Giving up here used to leave an item sitting inside another
+          // for good (seen after a Mega-Shake: one 56cm deep).
+          final small = a.contactRadius <= b.contactRadius ? a : b;
+          final big = identical(small, a) ? b : a;
+          var dir = small.body.position - big.body.position;
+          if (dir.length2 < 1e-8) dir = Vector2(0, -1);
+          dir.normalize();
+          final step = depth + 0.01 < _hardOverlapMaxStep ? depth + 0.01 : _hardOverlapMaxStep;
+          _nudge(small, dir * step);
+          small.body.isAwake = true;
+          big.body.isAwake = true;
         }
       }
     }
@@ -847,17 +898,18 @@ class MixolocoGame extends Forge2DGame {
   }
 
   /// Pushes [b] away from [a] (and [a] back by its share) along the line
-  /// between their centres: separating velocity, plus a small direct step
-  /// (see [_nudge]). Velocity alone was too weak in a packed pile — the
-  /// neighbours absorbed it and the pair stayed overlapped — while a bare
-  /// teleport ignores walls and once pushed items off the table; the step
-  /// is trimmed so it can never end inside a wall.
+  /// between their centres: separating velocity, plus — when [maxStep] is
+  /// above zero — a direct step of at most that much (see [_nudge]).
+  /// Velocity alone can be too weak in a packed pile (the neighbours
+  /// absorb it), while a bare teleport ignores walls and once pushed items
+  /// off the table; the step is trimmed so it can never end inside a wall.
   void _separate(
     IngredientBodyComponent a,
     IngredientBodyComponent b,
     double depth, {
     required double aShare,
     bool kick = true,
+    double maxStep = 0,
   }) {
     final aPos = a.body.position, bPos = b.body.position;
     var dir = bPos - aPos;
@@ -871,13 +923,37 @@ class MixolocoGame extends Forge2DGame {
       _pushAlong(b.body, dir, speed * (1 - aShare));
       _pushAlong(a.body, -dir, speed * aShare);
     }
-    final step = depth < _separateMaxStep ? depth : _separateMaxStep;
+    if (maxStep <= 0) return;
+    final step = depth < maxStep ? depth : maxStep;
     _nudge(b, dir * (step * (1 - aShare)));
     _nudge(a, dir * (-step * aShare));
   }
 
-  /// The most a single [_separate] moves a pair directly, per check.
-  static const _separateMaxStep = 0.015;
+  /// Unstick: velocity-only pushes before any direct step is added.
+  static const _unstickSmoothPushes = 2;
+
+  /// Still this deep after the gentle pushes (6cm, or 30% of the smaller
+  /// item) means stuck inside, not crowded — far past a pile's normal
+  /// 1-2cm squeeze, so this never jostles a settled table.
+  static const _hardOverlapMinDepth = 0.06;
+  static const _hardOverlapFraction = 0.3;
+
+  /// The most a stuck item is slid out per check (every 0.1s), and how
+  /// many checks running it's tried for one pair — a pair still that deep
+  /// after that is wedged in a packed pile, and repeating would only keep
+  /// jostling it.
+  static const _hardOverlapMaxStep = 0.25;
+  static const _hardOverlapMaxTries = 3;
+
+
+  /// Unstick's direct step, per check (every 0.1s) — under a centimetre,
+  /// since 1.5cm jumps were visible as twitching after a landing.
+  static const _unstickMaxStep = 0.008;
+
+  /// A merge pop's direct step, per physics step (60 a second): under a
+  /// centimetre each frame reads as a smooth slide, not a jump, and still
+  /// separates up to ~30cm over the pop.
+  static const _popMaxStep = 0.008;
 
   /// Moves [b] by [delta], trimmed so none of its shape ends up more than
   /// solver slop inside any table wall.
@@ -997,11 +1073,17 @@ class MixolocoGame extends Forge2DGame {
       return;
     }
     final stranded = <IngredientBodyComponent>{};
+    final pieces = <IngredientBodyComponent, List<CollisionPiece>>{};
     for (final b in _liveBodies) {
       if (b.consumed || !b.isMounted) continue;
       if (_adjacency[b]?.isNotEmpty ?? false) continue;
       if (b.body.linearVelocity.length >= kRestSpeedThreshold) continue;
       if (b.farthestY <= kTableFarInset + _strandedFarSlop) continue;
+      // The contact list can go stale (a Mega-Shake rebuilds every shape),
+      // which made items resting in a pile read as stranded and get flicked
+      // over and over — so check the real shapes against other items too.
+      // Not walls: being caught on one is what strands an item.
+      if (_touchingAnotherItem(b, pieces)) continue;
       stranded.add(b);
       final streak = (_strandedStreak[b] ?? 0) + 1;
       _strandedStreak[b] = streak;
@@ -1018,6 +1100,23 @@ class MixolocoGame extends Forge2DGame {
   /// About a second at the rescue's 0.25s check rate.
   static const _strandedConfirmChecks = 4;
   static const _strandedFarSlop = 0.03;
+
+  /// Closer than this to another item counts as touching it.
+  static const _strandedTouch = 0.01;
+
+  /// Whether [b]'s real shape is within [_strandedTouch] of another item's.
+  /// [pieces] caches each body's shapes across one rescue pass.
+  bool _touchingAnotherItem(IngredientBodyComponent b, Map<IngredientBodyComponent, List<CollisionPiece>> pieces) {
+    List<CollisionPiece> piecesOf(IngredientBodyComponent c) => pieces[c] ??= c.worldCollisionPieces();
+    final pos = b.body.position;
+    for (final o in _liveBodies) {
+      if (identical(o, b) || o.consumed || !o.isMounted) continue;
+      final reach = b.contactRadius + o.contactRadius + _strandedTouch;
+      if ((o.body.position - pos).length2 > reach * reach) continue;
+      if (IngredientBodyComponent.gapBetween(piecesOf(b), piecesOf(o)) < _strandedTouch) return true;
+    }
+    return false;
+  }
   final _strandedStreak = <IngredientBodyComponent, int>{};
 
   /// A body can also end up straddling a wall with its centre still
@@ -1073,7 +1172,7 @@ class MixolocoGame extends Forge2DGame {
           o.worldCollisionPieces(),
         );
         if (depth <= _popSlop) continue;
-        _separate(p, o, depth, aShare: 0.3, kick: false);
+        _separate(p, o, depth, aShare: 0.3, kick: false, maxStep: _popMaxStep);
       }
     }
   }
@@ -1157,14 +1256,13 @@ class MixolocoGame extends Forge2DGame {
     }
     final nextTier = a.tier + 1;
     final chainExhausted = nextTier >= _chain.length;
-    // Every level before the last one treats its own capstone tier as a
-    // deliberate dead end (see kEvolutionChain's own "never appears
-    // inside a recipe" doc) — two of those touching stays a no-op, same
-    // as it's always been. Only the *final* level's capstone turns into
-    // the actual win condition below, since there's no further level
-    // for _checkLevelUp to advance into.
-    if (chainExhausted && _level < kMaxLevel) return;
-    if (chainExhausted && _gameCompleteTriggered) return;
+    // Two final items: on Levels 1-9 with Cocktail Mode off, merging them
+    // levels up (onFinalMerge); with it on they're a dead end (that mode
+    // levels up by cocktails plus one final item). On the last level they
+    // win the game (onGameComplete).
+    final finalMerge = chainExhausted && _level < kMaxLevel;
+    if (finalMerge && (cocktailMode || _finalMergeTriggered)) return;
+    if (chainExhausted && !finalMerge && _gameCompleteTriggered) return;
 
     a.consumed = true;
     b.consumed = true;
@@ -1208,7 +1306,11 @@ class MixolocoGame extends Forge2DGame {
     _removeBody(b);
     unawaited(_playMergeSound());
     _activeAnimations++;
-    if (chainExhausted) _gameCompleteTriggered = true;
+    if (finalMerge) {
+      _finalMergeTriggered = true;
+    } else if (chainExhausted) {
+      _gameCompleteTriggered = true;
+    }
     world.add(
       MergeExplosionComponent(
         position: midpoint,
@@ -1220,7 +1322,11 @@ class MixolocoGame extends Forge2DGame {
       ),
     );
     onMerge(mergedTier);
-    if (chainExhausted) onGameComplete();
+    if (finalMerge) {
+      onFinalMerge();
+    } else if (chainExhausted) {
+      onGameComplete();
+    }
   }
 
   Future<void> _playMergeSound() async {
@@ -1327,6 +1433,9 @@ class MixolocoGame extends Forge2DGame {
         onComplete: () => _activeAnimations--,
       ),
     );
+    // Stamped just above the cocktail as it appears (the reveal's pieces
+    // spend its first ~0.75s flying in and bursting).
+    world.add(StampTextComponent(text: 'COMBO!', position: center - Vector2(0, 1.55), delay: 0.75));
     onCocktailComplete(order);
   }
 
@@ -1366,6 +1475,7 @@ class MixolocoGame extends Forge2DGame {
     _adjacency.clear();
     _gameOverTriggered = false;
     _gameCompleteTriggered = false;
+    _finalMergeTriggered = false;
     _overflowStreak = 0;
     _busy = false;
     // Any merge-explosion/cocktail-reveal component just wiped above was
@@ -1534,6 +1644,9 @@ class MixolocoGame extends Forge2DGame {
     final targetId = _chain.first.id;
     for (final b in List.of(_liveBodies)) {
       if (b.ingredient.id == targetId) {
+        // A blast and a cloud of smoke where each one was — lightly
+        // staggered so a handful going off reads as a chain of bangs.
+        world.add(BlastComponent(position: b.body.position.clone(), radius: b.radius, delay: _random.nextDouble() * 0.15));
         _removeBody(b);
       }
     }
@@ -1697,10 +1810,18 @@ class MixolocoGame extends Forge2DGame {
   /// an odd thing for a "clear shots" offer to take — per feedback, this
   /// (not the broader alcoholic set) is what it should have been using.
   void clearMiniShots() {
+    var slammed = 0;
     for (final b in List.of(_liveBodies)) {
       if (b.ingredient.isMiniShot) {
+        // Each shot glass bursts into shards, and the whole table gets a
+        // "SLAM!" stamp.
+        world.add(MergeExplosionComponent(position: b.body.position.clone(), ingredient: b.ingredient, onSpawnReady: () {}));
         _removeBody(b);
+        slammed++;
       }
+    }
+    if (slammed > 0) {
+      world.add(StampTextComponent(text: 'SLAM!', position: Vector2(kWorldWidthMeters / 2, _worldHeight * 0.45), height: 0.75));
     }
   }
 

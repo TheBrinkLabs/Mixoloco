@@ -1,4 +1,4 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show Timer, unawaited;
 import 'dart:math' show cos, max, pi, sin;
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart' show ValueListenable, kDebugMode;
@@ -89,6 +89,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
       onCocktailComplete: notifier.registerCocktailComplete,
       onGameOver: notifier.registerGameOver,
       onGameComplete: notifier.registerGameComplete,
+      onFinalMerge: notifier.registerFinalMerge,
       onThrowCommitted: notifier.advanceQueue,
       onTierSeen: notifier.registerTierSeen,
       initialItems: ref.read(gameStateProvider).placedItems,
@@ -103,6 +104,22 @@ class _GameScreenState extends ConsumerState<GameScreen>
     ref
         .read(audioSettingsProvider.notifier)
         .playGameMusic(level: ref.read(gameStateProvider).level);
+    _autosave = Timer.periodic(const Duration(seconds: 20), (_) => _autosaveTable());
+  }
+
+  /// Saves the table every [_autosave] tick, so a crash or force-close
+  /// (no `paused` delivered, so nothing else saves) loses at most a few
+  /// seconds. Skipped mid level-change or ad, before the table's loaded,
+  /// mid-merge or mid-shake, and after the game's over.
+  Timer? _autosave;
+
+  void _autosaveTable() {
+    if (!mounted || _showingLevelUp || _showingAdBreak || _showingAdPlaceholder) return;
+    if (ref.read(gameStateProvider).gameOver) return;
+    // Not before the saved table has been rebuilt (it would save an empty
+    // one over it), nor mid-merge or mid-shake (items missing or squished).
+    if (!_game.isLoaded || _game.isAnimating || _game.shakeActive.value) return;
+    unawaited(ref.read(gameStateProvider.notifier).savePlacedItems(_game.capturePlacedItems()));
   }
 
   /// Home isn't the only way a run in progress can end — backgrounding
@@ -244,6 +261,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   @override
   void dispose() {
+    _autosave?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     // Same deferral as initState's own write above, and for the same
     // reason — dispose() is on Riverpod's own list of life-cycles a
@@ -388,6 +406,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     if (!geometry.isValid) return const SizedBox.shrink();
 
     _game.updateGeometry(geometry);
+    _game.cocktailMode = cocktailModeEnabled;
     _game.syncBoard(board);
 
     // Level-up takes priority — if both somehow trip on the same frame,

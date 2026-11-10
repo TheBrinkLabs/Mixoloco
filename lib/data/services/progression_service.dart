@@ -256,3 +256,17 @@ Future<void> saveAdFreeSubscriptionCached(bool active) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(_kAdFreeSubscriptionCachedKey, active);
 }
+
+const _kHowToPlaySeenKey = 'how_to_play_seen';
+
+/// Whether the How to Play walkthrough has already been offered on first
+/// launch (see MenuScreen._maybeShowGuide).
+Future<bool> loadHowToPlaySeen() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(_kHowToPlaySeenKey) ?? false;
+}
+
+Future<void> saveHowToPlaySeen() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_kHowToPlaySeenKey, true);
+}

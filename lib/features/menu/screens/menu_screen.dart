@@ -21,6 +21,10 @@ import '../../league/providers/league_provider.dart';
 import '../../league/screens/rankings_screen.dart';
 import '../../shop/screens/shop_screen.dart';
 import '../../shop/widgets/get_credits_dialog.dart';
+import '../../../data/services/high_scores_service.dart' show loadHighScores;
+import '../../../data/services/game_save_service.dart' show loadGameJson;
+import '../../../data/services/progression_service.dart' show loadHighestTierForLevel, loadHowToPlaySeen, saveHowToPlaySeen;
+import 'how_to_play_screen.dart';
 import 'info_screen.dart';
 import 'settings_screen.dart';
 
@@ -48,6 +52,21 @@ class _MenuScreenState extends ConsumerState<MenuScreen>
     // re-trigger just from returning here via _goHome; see GameScreen.
     ref.read(audioSettingsProvider.notifier).playMenuMusic();
     _maybeSyncProgress();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowGuide());
+  }
+
+  /// Opens the How to Play walkthrough once, the first time a new player
+  /// reaches the menu. A player who's already played — a recorded score,
+  /// a game in progress, or any merge on Level 1 (i.e. updating from
+  /// before the walkthrough existed) — is just marked as having seen it.
+  Future<void> _maybeShowGuide() async {
+    if (await loadHowToPlaySeen()) return;
+    final played = (await loadHighScores()).isNotEmpty ||
+        await loadGameJson() != null ||
+        await loadHighestTierForLevel(1) > 0;
+    if (!mounted) return;
+    if (!played) _push(MaterialPageRoute(builder: (_) => const HowToPlayScreen()));
+    await saveHowToPlaySeen();
   }
 
   /// Pulls down this player's Google-account progress backup (if any) and

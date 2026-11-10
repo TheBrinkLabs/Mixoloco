@@ -586,6 +586,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     int? level,
   }) {
     _ingredientBag = [];
+    _finalMerged = false;
     final resolvedLevel = level ?? highestLevelReached;
     final highestForLevel = highestTierFor(highestTiers, resolvedLevel);
     return BoardState(
@@ -784,28 +785,37 @@ class GameStateNotifier extends Notifier<BoardState> {
     }
   }
 
-  /// Every current-level cocktail recipe made at least once, plus the
-  /// Jug/capstone reached, on this run — advances to the next level.
-  /// With Cocktail Mode off (see cocktail_mode_provider.dart), the
-  /// cocktail requirement drops out entirely — reaching the capstone
-  /// (merging the two highest items) is enough on its own. A no-op once
-  /// already at [kMaxLevel] (nothing further to advance to yet). Only
-  /// flips [BoardState.level] itself; GameScreen notices that flip and
-  /// calls [enterLevel] to actually reset the table/queue/order for the
-  /// new chain once its celebration sequence has played out (see
+  /// Advances to the next level once it's earned. Cocktail Mode on (see
+  /// cocktail_mode_provider.dart): every cocktail on the menu made, and the
+  /// final item made once. Off: two final items merged (see
+  /// registerFinalMerge). A no-op once already at [kMaxLevel]. Only flips
+  /// [BoardState.level] itself; GameScreen notices that flip and calls
+  /// [enterLevel] to actually reset the table/queue/order for the new
+  /// chain once its celebration sequence has played out (see
   /// level_up_overlay.dart) — doing that heavy a reset from inside this
   /// callback, mid physics-contact-resolution, would be a bad time for
   /// the whole board to change under MixolocoGame's feet.
   void _checkLevelUp() {
     if (state.level >= kMaxLevel) return;
-    if (!state.jugReached) return;
-    final cocktailModeEnabled = ref.read(cocktailModeProvider);
-    final recipeCount = cocktailRecipesForLevel(state.level).length;
-    if (!cocktailModeEnabled ||
-        state.completedCocktailIds.length >= recipeCount) {
-      state = state.copyWith(level: state.level + 1);
-      analyticsService.levelUp(state.level);
+    if (ref.read(cocktailModeProvider)) {
+      if (!state.jugReached) return;
+      if (state.completedCocktailIds.length < cocktailRecipesForLevel(state.level).length) return;
+    } else if (!_finalMerged) {
+      return;
     }
+    _finalMerged = false;
+    state = state.copyWith(level: state.level + 1);
+    analyticsService.levelUp(state.level);
+  }
+
+  /// Two final items merged this level (Cocktail Mode off) — not saved:
+  /// the level-up it triggers happens at once.
+  bool _finalMerged = false;
+
+  /// Two of the level's final items merged (MixolocoGame.onFinalMerge).
+  void registerFinalMerge() {
+    _finalMerged = true;
+    _checkLevelUp();
   }
 
   /// Actually moves the current run onto [level]'s own chain — clears the
@@ -820,6 +830,7 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// does the equivalent reset on the physics side.
   void enterLevel(int level) {
     _ingredientBag = [];
+    _finalMerged = false;
     final highestForLevel = highestTierFor(state.highestTiers, level);
     final newCurrent = _randomIngredient(level, highestForLevel);
     final newUpcoming = List.generate(
