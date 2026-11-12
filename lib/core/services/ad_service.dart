@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:unity_levelplay_mediation/unity_levelplay_mediation.dart';
 import 'analytics_service.dart';
@@ -39,10 +42,12 @@ class AdService implements LevelPlayInitListener {
   bool _levelPlayInterstitialReady = false;
   bool _levelPlayInterstitialLoading = false;
   VoidCallback? _pendingLevelPlayInterstitialDismiss;
+  final _interstitialRetry = _LoadRetry();
 
   late final LevelPlayRewardedAd _levelPlayRewardedAd;
   bool _rewardedReady = false;
   bool _rewardedLoading = false;
+  final _rewardedRetry = _LoadRetry();
   bool _rewardEarned = false; // set in onAdRewarded, read in onAdClosed
   VoidCallback? _pendingRewardOnReward;
   VoidCallback? _pendingRewardOnDismissedWithoutReward;
@@ -133,6 +138,7 @@ class AdService implements LevelPlayInitListener {
 
   void loadLevelPlayInterstitial() {
     if (_levelPlayInterstitialReady || _levelPlayInterstitialLoading) return;
+    _interstitialRetry.cancelPending(); // loading now, so a queued retry is redundant
     _levelPlayInterstitialLoading = true;
     _levelPlayInterstitialAd.loadAd();
   }
@@ -159,12 +165,16 @@ class AdService implements LevelPlayInitListener {
     debugPrint('LevelPlay interstitial loaded');
     _levelPlayInterstitialReady = true;
     _levelPlayInterstitialLoading = false;
+    _interstitialRetry.reset();
   }
 
   void _onInterstitialLoadFailed(LevelPlayAdError error) {
     debugPrint('LevelPlay interstitial failed to load: $error');
     _levelPlayInterstitialReady = false;
     _levelPlayInterstitialLoading = false;
+    // Without this, nothing asks again until the game next wants to show
+    // one — by then it's too late and that ad opportunity is lost.
+    _interstitialRetry.schedule(loadLevelPlayInterstitial);
   }
 
   void _onInterstitialDisplayFailed(LevelPlayAdError error) {
@@ -192,6 +202,7 @@ class AdService implements LevelPlayInitListener {
 
   void loadRewardedAd(RewardedAdSlot slot) {
     if (_rewardedReady || _rewardedLoading) return;
+    _rewardedRetry.cancelPending(); // loading now, so a queued retry is redundant
     _rewardedLoading = true;
     _levelPlayRewardedAd.loadAd();
   }
@@ -239,12 +250,16 @@ class AdService implements LevelPlayInitListener {
     debugPrint('LevelPlay rewarded ad loaded');
     _rewardedReady = true;
     _rewardedLoading = false;
+    _rewardedRetry.reset();
   }
 
   void _onRewardedLoadFailed(LevelPlayAdError error) {
     debugPrint('LevelPlay rewarded ad failed to load: $error');
     _rewardedReady = false;
     _rewardedLoading = false;
+    // Keep trying in the background so the continue / free-coins offer
+    // has an ad ready when the player asks for one.
+    _rewardedRetry.schedule(() => loadRewardedAd(RewardedAdSlot.continueGame));
   }
 
   void _onRewardedDisplayFailed(LevelPlayAdError error) {
@@ -280,8 +295,43 @@ class AdService implements LevelPlayInitListener {
   }
 
   void dispose() {
-    // Both SDKs manage their own ad lifecycle internally; nothing to
-    // explicitly dispose here.
+    // Both SDKs manage their own ad lifecycle internally; only our own
+    // pending retry timers need stopping.
+    _interstitialRetry.cancelPending();
+    _rewardedRetry.cancelPending();
+  }
+}
+
+/// Retries a failed full-screen ad load with exponential backoff — 5s,
+/// 10s, 20s, 40s, then every 60s — as LevelPlay recommends, so a no-fill
+/// moment doesn't leave the slot empty until the next show attempt.
+/// Capped rather than abandoned: a player offline for a while should
+/// still get an ad once they're back, and one request a minute is cheap.
+class _LoadRetry {
+  static const _base = Duration(seconds: 5);
+  static const _max = Duration(seconds: 60);
+
+  int _attempt = 0;
+  Timer? _timer;
+
+  void schedule(VoidCallback load) {
+    _timer?.cancel();
+    final delay = Duration(milliseconds: math.min(_base.inMilliseconds << math.min(_attempt, 4), _max.inMilliseconds));
+    _attempt++;
+    _timer = Timer(delay, () {
+      _timer = null;
+      load();
+    });
+  }
+
+  void cancelPending() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void reset() {
+    cancelPending();
+    _attempt = 0;
   }
 }
 
