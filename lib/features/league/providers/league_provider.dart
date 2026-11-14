@@ -131,7 +131,7 @@ class LeagueController extends Notifier<LeagueState> {
       final roomId = playerData?['roomId'] as String?;
       final nickname = (playerData?['nickname'] as String?) ?? await loadNickname();
 
-      final leaderboard = roomId != null ? await repo.fetchRoomLeaderboard(roomId: roomId, weekId: weekId) : const <LeagueLeaderboardEntry>[];
+      final leaderboard = roomId != null ? await repo.fetchRoomLeaderboard(roomId: roomId, weekId: weekId, viewerUid: uid) : const <LeagueLeaderboardEntry>[];
       final myBest = await repo.myWeeklyBestScore(uid);
 
       // Last week's result, if the rollover job has run for it yet — a

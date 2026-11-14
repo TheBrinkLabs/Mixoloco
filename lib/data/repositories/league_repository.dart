@@ -97,6 +97,12 @@ class PlayerProgress {
 /// player's HIGHEST single run that week, not a sum across several game
 /// modes the way Capitle's trivia format needs), and no country-flag
 /// profile field (see the nickname-only setup screen).
+/// The weekly best score a player needs to be in the league: below it they
+/// aren't placed in (or kept in) a room — see tools/league-rollover's
+/// qualify.js (MIN_QUALIFYING_SCORE), which must match — and are hidden
+/// from the leaderboard. Keeps the board to people who actually played.
+const kLeagueMinScore = 1000;
+
 class LeagueRepository {
   final FirebaseFirestore _db;
   LeagueRepository(this._db);
@@ -254,7 +260,14 @@ class LeagueRepository {
   /// tops out at 19 members (see assignRooms.js's Gold bounds), so this
   /// is a small, one-shot fan-out rather than anything needing
   /// pagination or a denormalized copy.
-  Future<List<LeagueLeaderboardEntry>> fetchRoomLeaderboard({required String roomId, required String weekId}) async {
+  ///
+  /// Members under [kLeagueMinScore] this week are left out, apart from
+  /// [viewerUid] (the player looking), who always sees their own row.
+  Future<List<LeagueLeaderboardEntry>> fetchRoomLeaderboard({
+    required String roomId,
+    required String weekId,
+    String? viewerUid,
+  }) async {
     final roomSnap = await _db.collection('leagueRooms').doc(roomId).get();
     final memberUids = List<String>.from(roomSnap.data()?['memberUids'] as List? ?? const []);
     if (memberUids.isEmpty) return const [];
@@ -275,8 +288,9 @@ class LeagueRepository {
       );
     }));
 
-    entries.sort((a, b) => (b.score - a.score) != 0 ? b.score - a.score : a.uid.compareTo(b.uid));
-    return entries;
+    final shown = entries.where((e) => e.score >= kLeagueMinScore || e.uid == viewerUid).toList()
+      ..sort((a, b) => (b.score - a.score) != 0 ? b.score - a.score : a.uid.compareTo(b.uid));
+    return shown;
   }
 
   /// Writes this player's full progress snapshot to

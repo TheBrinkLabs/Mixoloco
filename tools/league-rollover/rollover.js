@@ -29,6 +29,7 @@
 const admin = require('firebase-admin');
 const { isoWeekId, currentWeekStartUtc, addDays } = require('./isoWeek');
 const { assignRoomsForTier, MIN_SIZE, TARGET_SIZE } = require('./assignRooms');
+const { MIN_QUALIFYING_SCORE, filterQualified } = require('./qualify');
 
 const TIERS = ['bronze', 'silver', 'gold'];
 
@@ -206,7 +207,8 @@ async function main() {
       const rawPromoteCount = !destTier ? 0
         : tier === 'bronze' ? boostedPromotionCount(scored.length, currentSilverCount, TARGET_SIZE)
         : boostedPromotionCount(scored.length, currentGoldCount, GOLD_ROOM_BOUNDS.target);
-      const scoredCount = scored.filter((e) => e.score > 0).length;
+      // Only qualifying scores can earn promotion places.
+      const scoredCount = scored.filter((e) => e.score >= MIN_QUALIFYING_SCORE).length;
       const cappedRawPromoteCount = Math.min(rawPromoteCount, scoredCount);
 
       roomResults.push({ roomDoc, tier, destTier, scored, cappedRawPromoteCount });
@@ -245,6 +247,7 @@ async function main() {
 
       const batch = db.batch();
       let prunedThisRoom = 0;
+      let unqualifiedThisRoom = 0;
       scored.forEach((entry, i) => {
         if (!entry.exists) return;
 
@@ -281,12 +284,23 @@ async function main() {
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           }, { merge: true });
           prunedThisRoom++;
+        } else if (entry.score < MIN_QUALIFYING_SCORE) {
+          // Didn't reach a qualifying score this week: not carried into a
+          // room for next week. Back in the queue (pendingJoin true) —
+          // assignNewJoiners.js places them in Bronze as soon as they score
+          // MIN_QUALIFYING_SCORE+ again.
+          batch.set(db.collection('players').doc(entry.uid), {
+            tier: 'bronze', roomId: null, pendingJoin: true,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+          unqualifiedThisRoom++;
         } else {
           incomingPools[nextTier].push(entry.uid);
         }
         playersProcessed++;
       });
       if (prunedThisRoom > 0) console.log(`${roomDoc.id}: pruned ${prunedThisRoom} inactive player(s)`);
+      if (unqualifiedThisRoom > 0) console.log(`${roomDoc.id}: ${unqualifiedThisRoom} player(s) under ${MIN_QUALIFYING_SCORE} back to the queue`);
       await batch.commit();
     }
 
@@ -309,9 +323,13 @@ async function main() {
     }
 
     // ── 2. New entrants join Bronze only ────────────────────────────────
+    // Only those with a qualifying score in the week now starting (at
+    // Monday 00:00, usually none — assignNewJoiners.js places the rest
+    // through the week as they qualify).
     const pendingSnap = await db.collection('players').where('pendingJoin', '==', true).get();
-    pendingSnap.forEach((doc) => incomingPools.bronze.push(doc.id));
-    console.log(`${pendingSnap.size} new entrants joining Bronze`);
+    const qualifiedPending = await filterQualified(db, pendingSnap.docs.map((d) => d.id), nextWeekId);
+    incomingPools.bronze.push(...qualifiedPending);
+    console.log(`${pendingSnap.size} pending, ${qualifiedPending.length} qualified to join Bronze`);
 
     // ── 3. Assign new rooms per tier ────────────────────────────────────
     let roomsCreated = 0;

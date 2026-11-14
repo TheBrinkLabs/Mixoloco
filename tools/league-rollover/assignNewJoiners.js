@@ -22,6 +22,7 @@
 const admin = require('firebase-admin');
 const { isoWeekId, currentWeekStartUtc } = require('./isoWeek');
 const { assignRoomsForTier, MAX_SIZE } = require('./assignRooms');
+const { MIN_QUALIFYING_SCORE, filterQualified } = require('./qualify');
 
 // Debug builds stamp isTestAccount: true at signup (see
 // LeagueRepository.ensurePlayerDocument) — dev/test devices, not real
@@ -167,8 +168,10 @@ async function main() {
   await pruneDuplicateDeviceAccounts(db);
 
   const pendingSnap = await db.collection('players').where('pendingJoin', '==', true).get();
-  const allUids = pendingSnap.docs.map((d) => d.id);
-  console.log(`${allUids.length} player(s) pending Bronze assignment`);
+  // Only players with a qualifying score this week — the rest stay
+  // pending (pendingJoin left true) and are re-checked tomorrow.
+  const allUids = await filterQualified(db, pendingSnap.docs.map((d) => d.id), weekId);
+  console.log(`${pendingSnap.size} player(s) pending, ${allUids.length} with a ${MIN_QUALIFYING_SCORE}+ score this week to place in Bronze`);
 
   if (allUids.length === 0) {
     console.log('Nothing to do.');

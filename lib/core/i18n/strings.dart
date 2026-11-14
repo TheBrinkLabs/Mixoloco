@@ -212,8 +212,7 @@ const _en = <String, String>{
   'or_label': 'OR',
   'league_connecting_error':
       "Couldn't connect to the league yet — check your connection and reopen this screen.",
-  'league_pending_join':
-      "You're queued for Bronze — check back within a day to see your room.",
+  'league_pending_join': "Score 1,000+ in a game to join Bronze — rooms are filled once a day.",
   'league_empty_room': 'No one in your room yet.',
   'league_col_name': 'NAME',
   'league_col_evo': 'EVO',
@@ -409,8 +408,7 @@ const _es = <String, String>{
   'or_label': 'O',
   'league_connecting_error':
       'No se pudo conectar a la liga todavía — comprueba tu conexión y vuelve a abrir esta pantalla.',
-  'league_pending_join':
-      'Estás en cola para Bronce — vuelve en un día para ver tu sala.',
+  'league_pending_join': "Consigue 1.000+ puntos en una partida para entrar en Bronce — las salas se llenan una vez al día.",
   'league_empty_room': 'Aún no hay nadie en tu sala.',
   'league_col_name': 'NOMBRE',
   'league_col_evo': 'EVO',
@@ -607,8 +605,7 @@ const _de = <String, String>{
   'or_label': 'ODER',
   'league_connecting_error':
       'Noch keine Verbindung zur Liga — überprüfe deine Verbindung und öffne diesen Bildschirm erneut.',
-  'league_pending_join':
-      'Du bist für Bronze vorgemerkt — schau in einem Tag wieder vorbei, um deinen Raum zu sehen.',
+  'league_pending_join': "Erziele 1.000+ Punkte in einem Spiel, um Bronze beizutreten — die Räume werden einmal täglich gefüllt.",
   'league_empty_room': 'Noch niemand in deinem Raum.',
   'league_col_name': 'NAME',
   'league_col_evo': 'EVO',
@@ -803,8 +800,7 @@ const _it = <String, String>{
   'or_label': 'OPPURE',
   'league_connecting_error':
       'Connessione alla lega non ancora riuscita — controlla la tua connessione e riapri questa schermata.',
-  'league_pending_join':
-      'Sei in coda per il Bronzo — torna tra un giorno per vedere la tua stanza.',
+  'league_pending_join': "Fai 1.000+ punti in una partita per entrare nel Bronzo — le stanze si riempiono una volta al giorno.",
   'league_empty_room': 'Ancora nessuno nella tua stanza.',
   'league_col_name': 'NOME',
   'league_col_evo': 'EVO',
@@ -986,7 +982,7 @@ const _ja = <String, String>{
   'nickname_setup_guest_note': 'Googleは後で設定から追加できます。',
   'or_label': 'または',
   'league_connecting_error': 'まだリーグに接続できません — 接続を確認し、この画面を開き直してください。',
-  'league_pending_join': 'ブロンズへの参加待ちです — 1日ほどでルームが決まります。',
+  'league_pending_join': "1回のゲームで1,000点以上取るとブロンズに参加できます — ルームは1日1回決まります。",
   'league_empty_room': 'まだこのルームには誰もいません。',
   'league_col_name': '名前',
   'league_col_evo': '進化',
@@ -1168,7 +1164,7 @@ const _ko = <String, String>{
   'nickname_setup_guest_note': 'Google은 나중에 설정에서 추가할 수 있어요.',
   'or_label': '또는',
   'league_connecting_error': '아직 리그에 연결하지 못했어요 — 연결을 확인하고 이 화면을 다시 열어 주세요.',
-  'league_pending_join': '브론즈 배정 대기 중이에요 — 하루 안에 방이 정해져요.',
+  'league_pending_join': "한 게임에서 1,000점 이상 얻으면 브론즈에 참가해요 — 방은 하루에 한 번 정해져요.",
   'league_empty_room': '아직 방에 아무도 없어요.',
   'league_col_name': '이름',
   'league_col_evo': '진화',
@@ -1360,8 +1356,7 @@ const _nl = <String, String>{
   'or_label': 'OF',
   'league_connecting_error':
       'Nog geen verbinding met de liga — controleer je verbinding en open dit scherm opnieuw.',
-  'league_pending_join':
-      'Je staat in de wachtrij voor Brons — kom over een dag terug om je kamer te zien.',
+  'league_pending_join': "Haal 1.000+ punten in één spel om bij Brons te komen — kamers worden één keer per dag gevuld.",
   'league_empty_room': 'Nog niemand in je kamer.',
   'league_col_name': 'NAAM',
   'league_col_evo': 'EVO',
@@ -1558,8 +1553,7 @@ const _fr = <String, String>{
   'or_label': 'OU',
   'league_connecting_error':
       "Connexion à la ligue impossible pour l'instant — vérifiez votre connexion et rouvrez cet écran.",
-  'league_pending_join':
-      'Vous êtes en attente pour le Bronze — revenez dans un jour pour voir votre salle.',
+  'league_pending_join': "Fais 1 000+ points en une partie pour rejoindre le Bronze — les salles sont remplies une fois par jour.",
   'league_empty_room': 'Personne dans votre salle pour le moment.',
   'league_col_name': 'NOM',
   'league_col_evo': 'ÉVO',
@@ -1755,8 +1749,7 @@ const _pt = <String, String>{
   'or_label': 'OU',
   'league_connecting_error':
       'Ainda não foi possível conectar à liga — verifique sua conexão e reabra esta tela.',
-  'league_pending_join':
-      'Você está na fila para o Bronze — volte em um dia para ver sua sala.',
+  'league_pending_join': "Faça 1.000+ pontos em uma partida para entrar no Bronze — as salas são preenchidas uma vez por dia.",
   'league_empty_room': 'Ainda ninguém na sua sala.',
   'league_col_name': 'NOME',
   'league_col_evo': 'EVO',
