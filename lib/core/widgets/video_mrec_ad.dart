@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
+import 'aluna_mrec_ad.dart';
 
 const _capitlePlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.brinklabs.capitle';
 
@@ -22,26 +23,49 @@ class VideoMrecAd extends StatefulWidget {
 }
 
 class _VideoMrecAdState extends State<VideoMrecAd> {
-  late final VideoPlayerController _controller;
+  /// Set once this device's decoder has failed on the video, so later ad
+  /// breaks go straight to the Aluna card instead of retrying it.
+  static bool _videoUnsupported = false;
+
+  VideoPlayerController? _controller;
   bool _ready = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.asset('assets/videos/mrec_fallback_ad.mp4');
-    _controller
+    if (_videoUnsupported) return;
+    final controller = VideoPlayerController.asset('assets/videos/mrec_fallback_ad.mp4');
+    _controller = controller;
+    controller.addListener(_onVideoUpdate);
+    controller
       ..setVolume(0)
       ..setLooping(true)
+      // Without this catchError a decoder failure was an unhandled async
+      // error, which main.dart reports to Crashlytics as a fatal crash.
       ..initialize().then((_) {
         if (!mounted) return;
         setState(() => _ready = true);
-        _controller.play();
+        controller.play();
+      }).catchError((Object e) {
+        debugPrint('Video MREC failed: $e');
+        _markUnsupported();
       });
+  }
+
+  // Decoder errors can also surface after initialize() succeeds.
+  void _onVideoUpdate() {
+    if (_controller?.value.hasError ?? false) _markUnsupported();
+  }
+
+  void _markUnsupported() {
+    _videoUnsupported = true;
+    if (mounted) setState(() => _ready = false);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.removeListener(_onVideoUpdate);
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -54,6 +78,10 @@ class _VideoMrecAdState extends State<VideoMrecAd> {
 
   @override
   Widget build(BuildContext context) {
+    // This device can't play the video — show the Aluna card instead of
+    // an empty black box.
+    if (_videoUnsupported) return const AlunaMrecAd();
+    final controller = _controller!;
     return GestureDetector(
       onTap: _openPlayStore,
       child: Container(
@@ -64,7 +92,7 @@ class _VideoMrecAdState extends State<VideoMrecAd> {
         child: _ready
             ? FittedBox(
                 fit: BoxFit.cover,
-                child: SizedBox(width: _controller.value.size.width, height: _controller.value.size.height, child: VideoPlayer(_controller)),
+                child: SizedBox(width: controller.value.size.width, height: controller.value.size.height, child: VideoPlayer(controller)),
               )
             : const SizedBox.shrink(),
       ),

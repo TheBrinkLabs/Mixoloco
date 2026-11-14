@@ -466,26 +466,52 @@ class _CapitleBanner extends StatefulWidget {
 }
 
 class _CapitleBannerState extends State<_CapitleBanner> {
-  late final VideoPlayerController _controller;
+  /// Set once this device's decoder has failed on the video (seen on
+  /// Xiaomi/LG Android 10 hardware with this 320x50 H.264 High-profile
+  /// clip). The rotation re-creates this widget every cycle, so without
+  /// remembering it the same doomed MediaCodec setup was retried — and
+  /// reported — over and over for the rest of the session.
+  static bool _videoUnsupported = false;
+
+  VideoPlayerController? _controller;
   bool _ready = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.asset('assets/videos/banner_fallback_capitle.mp4');
-    _controller
+    if (_videoUnsupported) return;
+    final controller = VideoPlayerController.asset('assets/videos/banner_fallback_capitle.mp4');
+    _controller = controller;
+    controller.addListener(_onVideoUpdate);
+    controller
       ..setVolume(0)
       ..setLooping(true)
+      // Without this catchError a decoder failure was an unhandled async
+      // error, which main.dart reports to Crashlytics as a fatal crash.
       ..initialize().then((_) {
         if (!mounted) return;
         setState(() => _ready = true);
-        _controller.play();
+        controller.play();
+      }).catchError((Object e) {
+        debugPrint('Capitle house banner video failed: $e');
+        _markUnsupported();
       });
+  }
+
+  // Decoder errors can also surface after initialize() succeeds.
+  void _onVideoUpdate() {
+    if (_controller?.value.hasError ?? false) _markUnsupported();
+  }
+
+  void _markUnsupported() {
+    _videoUnsupported = true;
+    if (mounted) setState(() => _ready = false);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.removeListener(_onVideoUpdate);
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -498,6 +524,10 @@ class _CapitleBannerState extends State<_CapitleBanner> {
 
   @override
   Widget build(BuildContext context) {
+    // This device can't play the video — fill the slot with the Higgins
+    // house banner instead of leaving a black strip.
+    if (_videoUnsupported) return const _HigginsBanner();
+    final controller = _controller!;
     return GestureDetector(
       onTap: _openPlayStore,
       child: Container(
@@ -508,7 +538,7 @@ class _CapitleBannerState extends State<_CapitleBanner> {
         child: _ready
             ? FittedBox(
                 fit: BoxFit.cover,
-                child: SizedBox(width: _controller.value.size.width, height: _controller.value.size.height, child: VideoPlayer(_controller)),
+                child: SizedBox(width: controller.value.size.width, height: controller.value.size.height, child: VideoPlayer(controller)),
               )
             : const SizedBox.shrink(),
       ),
