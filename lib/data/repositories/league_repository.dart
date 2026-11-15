@@ -31,6 +31,10 @@ class LeagueLeaderboardEntry {
   final List<int> highestTiers;
   final int highestLevelReached;
 
+  /// The best evolution tier reached in the game that scored [score], on
+  /// [level]'s chain. Null on score docs written before build 31.
+  final int? runTier;
+
   const LeagueLeaderboardEntry({
     required this.uid,
     required this.nickname,
@@ -38,14 +42,16 @@ class LeagueLeaderboardEntry {
     this.level = 1,
     this.highestTiers = const [],
     this.highestLevelReached = 1,
+    this.runTier,
   });
 
-  /// The ingredient to show as this entry's "Evolution" badge — same
-  /// higher-level-outranks-lower rule the main menu's own Unlocked tab
-  /// uses (see menu_screen.dart).
+  /// The ingredient to show as this entry's "Evolution" badge: the best
+  /// item made in the scoring game itself, so it always belongs to the
+  /// same level the row shows. Older score docs (no [runTier]) fall back
+  /// to the player's all-time best on that same level.
   Ingredient get evolutionIngredient {
-    final chain = evolutionChainForLevel(highestLevelReached);
-    final tier = highestTierFor(highestTiers, highestLevelReached);
+    final chain = evolutionChainForLevel(level);
+    final tier = runTier ?? highestTierFor(highestTiers, level);
     return chain[tier.clamp(0, chain.length - 1)];
   }
 }
@@ -197,6 +203,7 @@ class LeagueRepository {
     int level = 1,
     List<int> highestTiers = const [],
     int highestLevelReached = 1,
+    int? runTier,
   }) async {
     final playedAtUtc = (playedAt ?? DateTime.now()).toUtc();
     final weekId = isoWeekId(playedAtUtc);
@@ -212,6 +219,7 @@ class LeagueRepository {
         'level': level,
         ...highestTierFields(highestTiers),
         'highestLevelReached': highestLevelReached,
+        'runTier': ?runTier,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
@@ -258,6 +266,7 @@ class LeagueRepository {
         level: (data['level'] as int?) ?? 1,
         highestTiers: readHighestTiers(data),
         highestLevelReached: (data['highestLevelReached'] as int?) ?? 1,
+        runTier: data['runTier'] as int?,
       );
     }));
     return entries.whereType<LeagueLeaderboardEntry>().take(limit).toList();

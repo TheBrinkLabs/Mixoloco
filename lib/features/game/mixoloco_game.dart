@@ -1458,8 +1458,9 @@ class MixolocoGame extends Forge2DGame {
       ),
     );
     // Stamped just above the cocktail as it appears (the reveal's pieces
-    // spend its first ~0.75s flying in and bursting).
-    world.add(StampTextComponent(text: 'COMBO!', position: center - Vector2(0, 1.55), delay: 0.75));
+    // spend its first ~0.75s flying in and bursting). Capped to 70% of the
+    // table's width - the word is long, and the pop-in overshoots a little.
+    world.add(StampTextComponent(text: 'MIXOLOCO!', position: center - Vector2(0, 1.55), delay: 0.75, maxWidth: kWorldWidthMeters * 0.7));
     onCocktailComplete(order);
   }
 

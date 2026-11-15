@@ -1072,6 +1072,7 @@ class GameStateNotifier extends Notifier<BoardState> {
             level: level,
             highestTiers: highestTiers,
             highestLevelReached: highestLevelReached,
+            runTier: runHighestTier,
           )
           .catchError((e) {});
     }

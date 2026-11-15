@@ -8,10 +8,11 @@ import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/repositories/league_repository.dart';
 import '../providers/league_provider.dart';
+import '../widgets/week_result_dialog.dart';
 
 /// The "Global" tab of RankingsScreen (design_handoff_main_menu_v3) — the
 /// 10 highest scores worldwide this week (the week resets every Monday,
-/// 00:00 UTC), and a one-time banner when this player finished in last
+/// 00:00 UTC), and a one-time pop-up ([WeekResultDialog]) when this player finished in last
 /// week's top 10 (their place + the credits it paid — see rollover.js).
 /// Reads entirely from Firestore via [leagueControllerProvider]. No own
 /// Scaffold/BarBackdrop/back button —
@@ -26,14 +27,13 @@ class GlobalRankingsTab extends ConsumerStatefulWidget {
 }
 
 class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
-  bool _resultBannerDismissed = false;
+  bool _resultShown = false;
 
   @override
   void initState() {
     super.initState();
     // Same reasoning as NicknameSetupScreen — the persistent bottom
-    // banner otherwise sits on top of the leaderboard's last row/the
-    // result banner's dismiss button.
+    // banner otherwise sits on top of the leaderboard's last row.
     ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
     Future.microtask(() => ref.read(leagueControllerProvider.notifier).refresh());
   }
@@ -51,6 +51,16 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
     final screenSize = MediaQuery.sizeOf(context);
     final rowWidth = screenSize.width - 32;
 
+    // Last week's top-10 finish: pop the result up once, the moment it loads.
+    ref.listen(leagueControllerProvider, (_, next) {
+      final result = next.lastWeekResult;
+      if (_resultShown || !next.lastWeekResultIsNew || result == null) return;
+      _resultShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) WeekResultDialog.show(context, result, locale);
+      });
+    });
+
     return state.loading
         ? const Center(child: CircularProgressIndicator(color: SubmenuColors.gold))
         : state.error == 'not_signed_in'
@@ -62,12 +72,6 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
-                if (!_resultBannerDismissed && state.lastWeekResultIsNew && state.lastWeekResult != null)
-                  _WeekResultBanner(
-                    result: state.lastWeekResult!,
-                    locale: locale,
-                    onDismiss: () => setState(() => _resultBannerDismissed = true),
-                  ),
                 _buildHeader(locale),
                 const SizedBox(height: 6),
                 if (state.leaderboard.isEmpty)
@@ -134,6 +138,10 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
   }
 }
 
+/// Wide enough for a 7-digit score at full size (it used to be 76, which
+/// wrapped 1,000,000+); 8+ digits drop to a slightly smaller font.
+const _kScoreColumnWidth = 86.0;
+
 /// Column labels for [_LeaderboardRow] — plain text, not wood-plank
 /// styled, since it's a thin one-off header rather than a real board.
 class _LeaderboardHeaderRow extends StatelessWidget {
@@ -155,7 +163,7 @@ class _LeaderboardHeaderRow extends StatelessWidget {
             Expanded(child: Text(tr(locale, 'league_col_name'), style: _labelStyle)),
             SizedBox(width: 30, child: Text(tr(locale, 'league_col_evo'), style: _labelStyle, textAlign: TextAlign.center)),
             SizedBox(width: 26, child: Text(tr(locale, 'league_col_level'), style: _labelStyle, textAlign: TextAlign.center)),
-            SizedBox(width: 76, child: Text(tr(locale, 'score_label').toUpperCase(), style: _labelStyle, textAlign: TextAlign.right)),
+            SizedBox(width: _kScoreColumnWidth, child: Text(tr(locale, 'score_label').toUpperCase(), style: _labelStyle, textAlign: TextAlign.right)),
           ],
         ),
       ),
@@ -213,71 +221,22 @@ class _LeaderboardRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            // Widened from 56 — scores can reach 7 digits (the security
-            // rules cap bestScore at 5,000,000) and this was only ever
-            // comfortably fitting 5 before clipping/overlapping its
-            // neighbor.
-            width: 76,
+            width: _kScoreColumnWidth,
             child: Align(
               alignment: Alignment.centerRight,
-              child: Text('${entry.score}', style: const TextStyle(fontFamily: 'Lilita One', fontSize: 15, color: SubmenuColors.gold)),
+              // One line always: 8+ digits step the font down a little, and
+              // anything wider still shrinks to fit rather than wrapping.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${entry.score}',
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(fontFamily: 'Lilita One', fontSize: '${entry.score}'.length >= 8 ? 13 : 15, color: SubmenuColors.gold),
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WeekResultBanner extends StatelessWidget {
-  final Map<String, dynamic> result;
-  final AppLocale locale;
-  final VoidCallback onDismiss;
-  const _WeekResultBanner({required this.result, required this.locale, required this.onDismiss});
-
-  @override
-  Widget build(BuildContext context) {
-    final rank = (result['rank'] as int?) ?? 0;
-    final credits = (result['creditsAwarded'] as int?) ?? 0;
-    final isWinner = rank == 1 || ((result['isWinner'] as bool?) ?? false);
-
-    final String headline = isWinner
-        ? tr(locale, 'league_result_won')
-        : tr(locale, 'league_result_placed').replaceFirst('{n}', '$rank');
-    final String emoji = isWinner ? '🏆' : rank == 2 ? '🥈' : rank == 3 ? '🥉' : '🎉';
-    final subtitle = credits > 0 ? tr(locale, 'league_credits_earned').replaceFirst('{n}', '$credits') : '';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: SubmenuColors.goldEdge, width: 2),
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [SubmenuColors.goldTop, SubmenuColors.goldBottom],
-        ),
-      ),
-      child: Row(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 30)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(headline, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black87)),
-                ],
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: onDismiss,
-            child: const Icon(Icons.close_rounded, color: Colors.black54, size: 20),
           ),
         ],
       ),

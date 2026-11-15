@@ -217,8 +217,11 @@ const _en = <String, String>{
   'league_col_name': 'NAME',
   'league_col_evo': 'EVO',
   'league_col_level': 'LVL',
-  'league_result_won': 'You were No.1 last week!',
-  'league_result_placed': 'You finished #{n} last week!',
+  'league_result_ribbon': 'Weekly Results',
+  'league_result_won': 'World Champion!',
+  'league_result_placed': 'You finished #{n} in the world!',
+  'league_result_score': "Last week's best: {n}",
+  'league_result_collect': 'Collect',
   'league_credits_earned': '+{n} credits',
 };
 
@@ -408,8 +411,11 @@ const _es = <String, String>{
   'league_col_name': 'NOMBRE',
   'league_col_evo': 'EVO',
   'league_col_level': 'NVL',
-  'league_result_won': '¡Fuiste el n.º 1 la semana pasada!',
-  'league_result_placed': '¡Terminaste #{n} la semana pasada!',
+  'league_result_ribbon': 'Resultados semanales',
+  'league_result_won': '¡Campeón mundial!',
+  'league_result_placed': '¡Quedaste #{n} del mundo!',
+  'league_result_score': 'Tu mejor de la semana pasada: {n}',
+  'league_result_collect': 'Recoger',
   'league_credits_earned': '+{n} créditos',
 };
 
@@ -600,8 +606,11 @@ const _de = <String, String>{
   'league_col_name': 'NAME',
   'league_col_evo': 'EVO',
   'league_col_level': 'LVL',
-  'league_result_won': 'Du warst letzte Woche die Nr. 1!',
-  'league_result_placed': 'Du warst letzte Woche auf Platz {n}!',
+  'league_result_ribbon': 'Wochenergebnis',
+  'league_result_won': 'Weltmeister!',
+  'league_result_placed': 'Du bist weltweit Platz {n}!',
+  'league_result_score': 'Beste Punktzahl letzte Woche: {n}',
+  'league_result_collect': 'Einsammeln',
   'league_credits_earned': '+{n} Guthaben',
 };
 
@@ -790,8 +799,11 @@ const _it = <String, String>{
   'league_col_name': 'NOME',
   'league_col_evo': 'EVO',
   'league_col_level': 'LIV',
-  'league_result_won': 'La settimana scorsa eri il n. 1!',
-  'league_result_placed': 'La settimana scorsa sei arrivato #{n}!',
+  'league_result_ribbon': 'Risultati settimanali',
+  'league_result_won': 'Campione del mondo!',
+  'league_result_placed': 'Sei arrivato #{n} nel mondo!',
+  'league_result_score': 'Il tuo migliore della settimana scorsa: {n}',
+  'league_result_collect': 'Riscuoti',
   'league_credits_earned': '+{n} crediti',
 };
 
@@ -967,8 +979,11 @@ const _ja = <String, String>{
   'league_col_name': '名前',
   'league_col_evo': '進化',
   'league_col_level': 'Lv',
-  'league_result_won': '先週は1位でした！',
-  'league_result_placed': '先週は{n}位でした！',
+  'league_result_ribbon': '週間リザルト',
+  'league_result_won': 'ワールドチャンピオン！',
+  'league_result_placed': '世界{n}位でした！',
+  'league_result_score': '先週のベスト：{n}',
+  'league_result_collect': '受け取る',
   'league_credits_earned': '+{n} クレジット',
 };
 
@@ -1144,8 +1159,11 @@ const _ko = <String, String>{
   'league_col_name': '이름',
   'league_col_evo': '진화',
   'league_col_level': '레벨',
-  'league_result_won': '지난주 1위를 차지했어요!',
-  'league_result_placed': '지난주 {n}위를 했어요!',
+  'league_result_ribbon': '주간 결과',
+  'league_result_won': '월드 챔피언!',
+  'league_result_placed': '전 세계 {n}위를 했어요!',
+  'league_result_score': '지난주 최고 점수: {n}',
+  'league_result_collect': '받기',
   'league_credits_earned': '+{n} 크레딧',
 };
 
@@ -1331,8 +1349,11 @@ const _nl = <String, String>{
   'league_col_name': 'NAAM',
   'league_col_evo': 'EVO',
   'league_col_level': 'LVL',
-  'league_result_won': 'Je was vorige week nummer 1!',
-  'league_result_placed': 'Je eindigde vorige week als #{n}!',
+  'league_result_ribbon': 'Weekresultaat',
+  'league_result_won': 'Wereldkampioen!',
+  'league_result_placed': 'Je werd #{n} van de wereld!',
+  'league_result_score': 'Je beste van vorige week: {n}',
+  'league_result_collect': 'Ophalen',
   'league_credits_earned': '+{n} credits',
 };
 
@@ -1523,8 +1544,11 @@ const _fr = <String, String>{
   'league_col_name': 'NOM',
   'league_col_evo': 'ÉVO',
   'league_col_level': 'NIV',
-  'league_result_won': 'Tu étais n° 1 la semaine dernière !',
-  'league_result_placed': 'Tu as fini #{n} la semaine dernière !',
+  'league_result_ribbon': 'Résultats de la semaine',
+  'league_result_won': 'Champion du monde !',
+  'league_result_placed': 'Tu as fini #{n} mondial !',
+  'league_result_score': 'Ton meilleur la semaine dernière : {n}',
+  'league_result_collect': 'Récupérer',
   'league_credits_earned': '+{n} crédits',
 };
 
@@ -1714,7 +1738,10 @@ const _pt = <String, String>{
   'league_col_name': 'NOME',
   'league_col_evo': 'EVO',
   'league_col_level': 'NÍV',
-  'league_result_won': 'Você foi o nº 1 na semana passada!',
-  'league_result_placed': 'Você terminou em #{n} na semana passada!',
+  'league_result_ribbon': 'Resultados da semana',
+  'league_result_won': 'Campeão mundial!',
+  'league_result_placed': 'Você ficou em #{n} no mundo!',
+  'league_result_score': 'Sua melhor da semana passada: {n}',
+  'league_result_collect': 'Coletar',
   'league_credits_earned': '+{n} créditos',
 };

@@ -104,18 +104,20 @@ class _Puff {
   _Puff(this.offset, this.size, this.shade);
 }
 
-/// A big arcade-style word ("SLAM!", "COMBO!") stamped over the table:
+/// A big arcade-style word ("SLAM!", "MIXOLOCO!") stamped over the table:
 /// chunky white letters with a thick dark-red outline, tilted, popping in
 /// with an overshoot, with a ring and sparkles bursting behind it, then
-/// fading out. [height] is the letters' cap height in metres.
+/// fading out. [height] is the letters' cap height in metres; a word wider
+/// than [maxWidth] metres is shrunk to fit.
 class StampTextComponent extends PositionComponent {
-  StampTextComponent({required this.text, required Vector2 position, this.height = 0.6, this.tilt = -0.14, double delay = 0})
+  StampTextComponent({required this.text, required Vector2 position, this.height = 0.6, this.tilt = -0.14, this.maxWidth = double.infinity, double delay = 0})
     : _elapsed = -delay,
       super(position: position);
 
   final String text;
   final double height;
   final double tilt;
+  final double maxWidth;
   double _elapsed;
 
   static const _duration = 1.4;
@@ -158,20 +160,21 @@ class StampTextComponent extends PositionComponent {
     final pop = (_elapsed / _popDuration).clamp(0.0, 1.0);
     final scale = Curves.elasticOut.transform(pop).clamp(0.0, 1.3);
     final alpha = t < 0.75 ? 1.0 : (1 - (t - 0.75) / 0.25).clamp(0.0, 1.0);
-    final unit = height / _layoutSize;
+    final unit = min(height / _layoutSize, maxWidth / _fill.width);
+    final h = unit * _layoutSize; // effective letter height after any shrink-to-fit
     final width = _fill.width * unit;
 
     // Ring and sparkles behind the word.
     final ringT = Curves.easeOut.transform((_elapsed / 0.6).clamp(0.0, 1.0));
     final ringPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = height * 0.06
+      ..strokeWidth = h * 0.06
       ..color = const Color(0xFFFFF3C4).withValues(alpha: (1 - ringT) * 0.9);
     canvas.drawCircle(Offset.zero, width * (0.25 + ringT * 0.45), ringPaint);
     final sparklePaint = Paint()..color = const Color(0xFFFFD54F).withValues(alpha: (1 - ringT) * alpha);
     for (final a in _sparkleAngles) {
       final d = width * (0.3 + ringT * 0.5);
-      _drawSparkle(canvas, Offset(cos(a) * d, sin(a) * d), height * 0.12 * (1 - ringT * 0.5), sparklePaint);
+      _drawSparkle(canvas, Offset(cos(a) * d, sin(a) * d), h * 0.12 * (1 - ringT * 0.5), sparklePaint);
     }
 
     canvas.save();
