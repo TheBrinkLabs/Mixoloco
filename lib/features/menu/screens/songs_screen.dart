@@ -87,12 +87,16 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
   /// [_buildMinimized].
   bool _minimized = false;
 
+  /// Captured in initState — Riverpod 3 throws if ref is used in dispose().
+  late final AudioSettingsNotifier _audio;
+
   @override
   void initState() {
     super.initState();
     final board = ref.read(gameStateProvider);
     _levelIndex = (board.highestLevelReached - 1).clamp(0, kInfoLevels.length - 1);
-    ref.read(audioSettingsProvider.notifier).stopMusic();
+    _audio = ref.read(audioSettingsProvider.notifier);
+    _audio.stopMusic();
   }
 
   @override
@@ -101,7 +105,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     _durSub?.cancel();
     _completeSub?.cancel();
     _player?.stop();
-    ref.read(audioSettingsProvider.notifier).playMenuMusic();
+    _audio.playMenuMusic();
     super.dispose();
   }
 

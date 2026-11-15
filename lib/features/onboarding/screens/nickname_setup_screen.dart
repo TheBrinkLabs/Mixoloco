@@ -52,6 +52,10 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
   /// [dispose]'s own comment for why this matters.
   bool _handedOffToLeague = false;
 
+  /// Restores the bottom banner; captured in initState because Riverpod 3
+  /// throws if ref is used inside dispose().
+  late final void Function() _restoreBanner;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +66,8 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
     // the banner sitting on top of it instead. Same fix GameScreen uses
     // for the same reason.
     ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
+    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
+    _restoreBanner = () => Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
   }
 
   @override
@@ -74,7 +80,7 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
     // unconditional reset here would run second and stomp its own
     // correct "hidden" state right back to visible.
     if (!_handedOffToLeague) {
-      ref.read(bannerPositionProvider.notifier).state = BannerPosition.bottom;
+      _restoreBanner();
     }
     _controller.dispose();
     super.dispose();

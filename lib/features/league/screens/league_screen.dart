@@ -29,18 +29,25 @@ class GlobalRankingsTab extends ConsumerStatefulWidget {
 class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
   bool _resultShown = false;
 
+  /// Restores the bottom banner; captured in initState because Riverpod 3
+  /// throws if ref is used inside dispose() (which left the banner hidden
+  /// for good after leaving this screen).
+  late final void Function() _restoreBanner;
+
   @override
   void initState() {
     super.initState();
     // Same reasoning as NicknameSetupScreen — the persistent bottom
     // banner otherwise sits on top of the leaderboard's last row.
     ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
+    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
+    _restoreBanner = () => Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
     Future.microtask(() => ref.read(leagueControllerProvider.notifier).refresh());
   }
 
   @override
   void dispose() {
-    ref.read(bannerPositionProvider.notifier).state = BannerPosition.bottom;
+    _restoreBanner();
     super.dispose();
   }
 

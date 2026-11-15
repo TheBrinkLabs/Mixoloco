@@ -98,6 +98,10 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
   int _secondsRemaining = _fallbackWatchSeconds;
   Timer? _countdownTimer;
 
+  /// Restores the bottom banner; captured in initState because Riverpod 3
+  /// throws if ref is used inside dispose().
+  late final void Function() _restoreBanner;
+
   @override
   void initState() {
     super.initState();
@@ -123,6 +127,8 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
     // Hidden unconditionally on entry regardless of caller — see
     // [restoreBannerOnExit]'s doc for the exit side of this.
     ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
+    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
+    _restoreBanner = () => Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
     _controller = VideoPlayerController.asset('assets/videos/continue_fallback_capitle.mp4');
     _controller
       ..setVolume(0)
@@ -141,7 +147,7 @@ class _ContinueFallbackVideoScreenState extends ConsumerState<_ContinueFallbackV
   @override
   void dispose() {
     if (widget.restoreBannerOnExit) {
-      ref.read(bannerPositionProvider.notifier).state = BannerPosition.bottom;
+      _restoreBanner();
     }
     _countdownTimer?.cancel();
     WakelockPlus.disable();
