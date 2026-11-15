@@ -15,8 +15,16 @@ rules_version = '2';
 //   players/{uid}/weekHistory/{weekId} — frozen results + credits
 //                                         awarded, written by the
 //                                         rollover job only.
-//   leagueRooms/{roomId}               — room roster + metadata
+//   leagueRooms/{roomId}               — unused since the switch to one
+//                                         global weekly top 10 (old rooms
+//                                         may still exist; nothing reads
+//                                         or writes them now).
 //   leagueMeta/*                       — current-week pointer + rollover log
+//
+// The league is now a single global board: the top 10 bestScores for the
+// current week (collection-group query), paid out each Monday by
+// tools/league-rollover/rollover.js. tier/roomId/pendingJoin on the player
+// doc are legacy fields, still written at signup but no longer used.
 //
 // Everything that must be tamper-proof (tier, roomId, pendingJoin,
 // weekHistory, leagueRooms, leagueMeta) is written ONLY by the weekly/
@@ -129,6 +137,15 @@ service cloud.firestore {
     match /leagueMeta/{document=**} {
       allow read: if true;
       allow write: if false; // rollover job only
+    }
+
+    // The global weekly top 10 is a collection-group query over every
+    // player's scores docs (LeagueRepository.fetchWeeklyTop) — it needs
+    // its own read rule, since a collection-group query isn't covered by
+    // the nested players/{uid}/scores match above. Read-only; writes still
+    // go through that nested rule's validation.
+    match /{path=**}/scores/{weekId} {
+      allow read: if true;
     }
   }
 }

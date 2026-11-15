@@ -9,12 +9,8 @@ final leagueRepositoryProvider = Provider<LeagueRepository>((ref) {
   return LeagueRepository(FirebaseFirestore.instance);
 });
 
-/// One room member, ready for the leaderboard — a player doc's profile
-/// fields joined with their current-week score doc. Composed client-side
-/// (see [LeagueRepository.fetchRoomLeaderboard]) rather than needing a
-/// denormalized copy of the score on the room doc itself, since a room's
-/// membership only changes weekly but scores change constantly through
-/// the week.
+/// One leaderboard row — a player's current-week score doc joined with
+/// their nickname (see [LeagueRepository.fetchWeeklyTop]).
 class LeagueLeaderboardEntry {
   final String uid;
   final String nickname;
@@ -97,12 +93,6 @@ class PlayerProgress {
 /// player's HIGHEST single run that week, not a sum across several game
 /// modes the way Capitle's trivia format needs), and no country-flag
 /// profile field (see the nickname-only setup screen).
-/// The weekly best score a player needs to be in the league: below it they
-/// aren't placed in (or kept in) a room — see tools/league-rollover's
-/// qualify.js (MIN_QUALIFYING_SCORE), which must match — and are hidden
-/// from the leaderboard. Keeps the board to people who actually played.
-const kLeagueMinScore = 1000;
-
 class LeagueRepository {
   final FirebaseFirestore _db;
   LeagueRepository(this._db);
@@ -239,58 +229,38 @@ class LeagueRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
-    // A player pruned for inactivity (see rollover.js) is left "parked"
-    // — roomId: null, pendingJoin: false — deliberately NOT re-queued
-    // automatically, so the calendar ticking over doesn't undo the
-    // prune. Actually playing again (this call) is the real "welcome
-    // back" signal, so re-queue them for the next room-assignment
-    // sweep here. (firestore.rules only allows this specific
-    // false->true flip when the player is already in that exact parked
-    // state.)
-    final snap = await playerRef.get();
-    final data = snap.data();
-    if (data != null && data['roomId'] == null && data['pendingJoin'] != true) {
-      await playerRef.set({'pendingJoin': true, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
-    }
+
   }
 
-  /// Composes the current leaderboard for [roomId]: every member's
-  /// nickname (from players/{uid}) joined with their score for [weekId]
-  /// (from players/{uid}/scores/{weekId}), sorted highest-first. A room
-  /// tops out at 19 members (see assignRooms.js's Gold bounds), so this
-  /// is a small, one-shot fan-out rather than anything needing
-  /// pagination or a denormalized copy.
-  ///
-  /// Members under [kLeagueMinScore] this week are left out, apart from
-  /// [viewerUid] (the player looking), who always sees their own row.
-  Future<List<LeagueLeaderboardEntry>> fetchRoomLeaderboard({
-    required String roomId,
-    required String weekId,
-    String? viewerUid,
-  }) async {
-    final roomSnap = await _db.collection('leagueRooms').doc(roomId).get();
-    final memberUids = List<String>.from(roomSnap.data()?['memberUids'] as List? ?? const []);
-    if (memberUids.isEmpty) return const [];
-
-    final entries = await Future.wait(memberUids.map((uid) async {
-      final playerSnap = await _players.doc(uid).get();
-      final scoreSnap = await _players.doc(uid).collection('scores').doc(weekId).get();
-      final nickname = (playerSnap.data()?['nickname'] as String?) ?? 'Player';
-      final scoreData = scoreSnap.data();
-      final score = (scoreData?['bestScore'] as int?) ?? 0;
+  /// The week's top [limit] scores worldwide: every player's
+  /// players/{uid}/scores/{weekId} doc, highest bestScore first, joined
+  /// with their nickname. A collection-group query — needs the
+  /// scores(weekId ASC, bestScore DESC) index and the collection-group
+  /// read rule in firestore.rules. Debug/test accounts (isTestAccount) are
+  /// left out, so a few extra are fetched to fill their places.
+  Future<List<LeagueLeaderboardEntry>> fetchWeeklyTop({required String weekId, int limit = 10}) async {
+    final snap = await _db
+        .collectionGroup('scores')
+        .where('weekId', isEqualTo: weekId)
+        .orderBy('bestScore', descending: true)
+        .limit(limit + 10)
+        .get();
+    final entries = await Future.wait(snap.docs.map((doc) async {
+      final playerRef = doc.reference.parent.parent;
+      if (playerRef == null) return null;
+      final player = (await playerRef.get()).data();
+      if (player?['isTestAccount'] == true) return null;
+      final data = doc.data();
       return LeagueLeaderboardEntry(
-        uid: uid,
-        nickname: nickname,
-        score: score,
-        level: (scoreData?['level'] as int?) ?? 1,
-        highestTiers: readHighestTiers(scoreData),
-        highestLevelReached: (scoreData?['highestLevelReached'] as int?) ?? 1,
+        uid: playerRef.id,
+        nickname: (player?['nickname'] as String?) ?? 'Player',
+        score: (data['bestScore'] as int?) ?? 0,
+        level: (data['level'] as int?) ?? 1,
+        highestTiers: readHighestTiers(data),
+        highestLevelReached: (data['highestLevelReached'] as int?) ?? 1,
       );
     }));
-
-    final shown = entries.where((e) => e.score >= kLeagueMinScore || e.uid == viewerUid).toList()
-      ..sort((a, b) => (b.score - a.score) != 0 ? b.score - a.score : a.uid.compareTo(b.uid));
-    return shown;
+    return entries.whereType<LeagueLeaderboardEntry>().take(limit).toList();
   }
 
   /// Writes this player's full progress snapshot to

@@ -5,19 +5,16 @@ import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
 import '../../../core/widgets/banner_ad_widget.dart';
 import '../../../core/widgets/glass_visual.dart';
-import '../../../core/widgets/league_tier_badge.dart';
 import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/repositories/league_repository.dart';
 import '../providers/league_provider.dart';
 
-/// The "Global" tab of RankingsScreen (design_handoff_main_menu_v3) — this
-/// player's room (once the daily/weekly rollover has placed them in
-/// one), everyone in it ranked by this week's best score, and a one-time
-/// banner for last week's result (promoted/relegated/stayed + any
-/// credits it paid out — see rollover.js). Reads entirely from Firestore
-/// via [leagueControllerProvider]; tier/room placement itself is never
-/// decided here, only displayed — see tools/league-rollover for where
-/// that actually happens. No own Scaffold/BarBackdrop/back button —
+/// The "Global" tab of RankingsScreen (design_handoff_main_menu_v3) — the
+/// 10 highest scores worldwide this week (the week resets every Monday,
+/// 00:00 UTC), and a one-time banner when this player finished in last
+/// week's top 10 (their place + the credits it paid — see rollover.js).
+/// Reads entirely from Firestore via [leagueControllerProvider]. No own
+/// Scaffold/BarBackdrop/back button —
 /// those are RankingsScreen's job now, shared with the My Best tab,
 /// since this used to be its own standalone pushed screen (LeagueScreen)
 /// before the v3 merge.
@@ -71,11 +68,9 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
                     locale: locale,
                     onDismiss: () => setState(() => _resultBannerDismissed = true),
                   ),
-                _buildHeader(state, rowWidth, locale),
+                _buildHeader(locale),
                 const SizedBox(height: 6),
-                if (state.pendingJoin)
-                  _buildPendingJoin(locale)
-                else if (state.leaderboard.isEmpty)
+                if (state.leaderboard.isEmpty)
                   _buildEmpty(locale)
                 else ...[
                   _LeaderboardHeaderRow(width: rowWidth, locale: locale),
@@ -104,25 +99,21 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
     );
   }
 
-  Widget _buildHeader(LeagueState state, double width, AppLocale locale) {
-    // Just the tier plate, full width — nickname/score are already
-    // visible in this player's own row further down, so repeating them
-    // here was redundant.
-    return LeagueTierBadge(tier: state.tier, locale: locale, width: width);
-  }
-
-  Widget _buildPendingJoin(AppLocale locale) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: SubmenuColors.inset, borderRadius: BorderRadius.circular(18)),
+  Widget _buildHeader(AppLocale locale) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
       child: Column(
         children: [
-          const Text('⏳', style: TextStyle(fontSize: 32)),
-          const SizedBox(height: 12),
           Text(
-            tr(locale, 'league_pending_join'),
+            tr(locale, 'league_top10_title'),
             textAlign: TextAlign.center,
-            style: submenuNunito(size: 13, weight: FontWeight.w800, color: SubmenuColors.textSecondary),
+            style: const TextStyle(fontFamily: 'Lilita One', fontSize: 22, color: SubmenuColors.gold),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            tr(locale, 'league_top10_subtitle'),
+            textAlign: TextAlign.center,
+            style: submenuNunito(size: 12, weight: FontWeight.w800, color: SubmenuColors.textSecondary),
           ),
         ],
       ),
@@ -134,7 +125,8 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Center(
         child: Text(
-          tr(locale, 'league_empty_room'),
+          tr(locale, 'league_top10_empty'),
+          textAlign: TextAlign.center,
           style: submenuNunito(size: 13, weight: FontWeight.w800, color: SubmenuColors.textSecondary),
         ),
       ),
@@ -245,22 +237,15 @@ class _WeekResultBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final outcome = (result['outcome'] as String?) ?? 'stayed';
-    final tier = (result['tier'] as String?) ?? 'bronze';
+    final rank = (result['rank'] as int?) ?? 0;
     final credits = (result['creditsAwarded'] as int?) ?? 0;
-    final isWinner = (result['isWinner'] as bool?) ?? false;
+    final isWinner = rank == 1 || ((result['isWinner'] as bool?) ?? false);
 
     final String headline = isWinner
         ? tr(locale, 'league_result_won')
-        : outcome == 'promoted'
-        ? tr(locale, 'league_result_promoted')
-        : outcome == 'relegated'
-        ? tr(locale, 'league_result_relegated')
-        : tr(locale, 'league_result_week_complete');
-
-    final String emoji = isWinner ? '🏆' : outcome == 'promoted' ? '⬆️' : outcome == 'relegated' ? '⬇️' : '📊';
-    final tierLabel = labelForTier(tier, locale);
-    final subtitle = credits > 0 ? '$tierLabel · ${tr(locale, 'league_credits_earned').replaceFirst('{n}', '$credits')}' : tierLabel;
+        : tr(locale, 'league_result_placed').replaceFirst('{n}', '$rank');
+    final String emoji = isWinner ? '🏆' : rank == 2 ? '🥈' : rank == 3 ? '🥉' : '🎉';
+    final subtitle = credits > 0 ? tr(locale, 'league_credits_earned').replaceFirst('{n}', '$credits') : '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -283,8 +268,10 @@ class _WeekResultBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(headline, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black)),
-                const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black87)),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black87)),
+                ],
               ],
             ),
           ),
