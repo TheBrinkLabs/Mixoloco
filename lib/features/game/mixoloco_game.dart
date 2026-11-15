@@ -341,6 +341,7 @@ class MixolocoGame extends Forge2DGame {
     if (_purgeTimer <= 0) {
       _purgeTimer = 0.25;
       _purgeCorruptedBodies();
+      _destroyOrphanBodies();
       _rescueEscapedBodies();
     }
     _resolvePops(clampedDt);
@@ -373,6 +374,29 @@ class MixolocoGame extends Forge2DGame {
   /// causes a hang (the solver churning on an unresolvable state)
   /// instead of a clean crash. Purging it here lets the game recover on
   /// its own rather than staying stuck.
+  /// Destroys any physics body whose item is neither on the table nor on
+  /// its way there. flame_forge2d creates an item's Box2D body when the
+  /// item starts loading, but only destroys it when a *mounted* item is
+  /// removed — so an item removed before it ever mounted left its body in
+  /// the world: solid but drawn by nothing. That happened when a level
+  /// change cleared the table in the very tick the final item's reveal
+  /// spawned it (an invisible Jug on the Rooftop table that other items
+  /// came to rest against). A mounted item being removed is skipped —
+  /// its own onRemove destroys its body a tick later.
+  void _destroyOrphanBodies() {
+    List<Body>? orphans;
+    for (final body in world.bodies) {
+      final owner = body.userData;
+      if (owner is! IngredientBodyComponent) continue;
+      if (owner.isMounted || _liveBodies.contains(owner)) continue;
+      (orphans ??= []).add(body);
+    }
+    if (orphans == null) return;
+    for (final body in orphans) {
+      world.destroyBody(body);
+    }
+  }
+
   void _purgeCorruptedBodies() {
     // A read-only pass over the live set directly (no List.of() copy) —
     // this runs every single update() (60/sec), and a NaN body is rare
@@ -1470,6 +1494,11 @@ class MixolocoGame extends Forge2DGame {
       b.removeFromParent();
     }
     _liveBodies.clear();
+    // Anything just dequeued above may already have its physics body
+    // (made on load, not on mount) — the orphan sweep destroys those. Run
+    // it now as well as on its usual timer, so the new level never starts
+    // with one.
+    _destroyOrphanBodies();
     _pops.clear();
     _deepOverlapStreak.clear();
     _adjacency.clear();
