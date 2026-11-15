@@ -31,6 +31,7 @@ import '../mixoloco_game.dart';
 import '../providers/game_state_provider.dart';
 import 'game_complete_overlay.dart';
 import 'level_up_overlay.dart';
+import '../widgets/end_game_bonus_button.dart';
 
 /// Core gameplay: drag anywhere on the table to aim the staged glass,
 /// release to drop it — it falls (see MixolocoGame's gravity) toward the
@@ -60,12 +61,21 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   bool _showCocktailMenu = false;
   bool _showingAdPlaceholder = false;
+
+  /// The end-of-game +500 credits ad (see [EndGameBonusButton]): one per
+  /// game, so held here rather than in the overlay, which can rebuild.
+  bool _endBonusClaimed = false;
+  bool _endBonusWatching = false;
   bool _showingAdBreak = false;
   bool _showingLevelUp = false;
 
   /// Bumped on every Shake purchase so BarBackdrop's table image can
   /// react with its own visual shake, in step with the physics jostle.
   final ValueNotifier<int> _tableShakeSignal = ValueNotifier(0);
+
+  /// Restores the bottom banner; captured in initState because Riverpod 3
+  /// throws if ref is used inside dispose().
+  late final void Function() _restoreBanner;
 
   @override
   void initState() {
@@ -83,6 +93,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     // and only its `.state` write is deferred.
     final bannerNotifier = ref.read(bannerPositionProvider.notifier);
     Future.microtask(() => bannerNotifier.state = BannerPosition.hidden);
+    _restoreBanner = () => Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
     final notifier = ref.read(gameStateProvider.notifier);
     _game = MixolocoGame(
       onMerge: notifier.registerMerge,
@@ -266,10 +277,44 @@ class _GameScreenState extends ConsumerState<GameScreen>
     // Same deferral as initState's own write above, and for the same
     // reason — dispose() is on Riverpod's own list of life-cycles a
     // provider write isn't safe to happen synchronously inside.
-    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
-    Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
+    _restoreBanner();
     _tableShakeSignal.dispose();
     super.dispose();
+  }
+
+  Widget _endBonusButton(AppLocale locale) => EndGameBonusButton(
+    claimed: _endBonusClaimed,
+    watching: _endBonusWatching,
+    onWatch: _watchAdForEndBonus,
+    locale: locale,
+  );
+
+  void _watchAdForEndBonus() {
+    if (_endBonusClaimed || _endBonusWatching) return;
+    setState(() => _endBonusWatching = true);
+    void grant() {
+      ref.read(gameStateProvider.notifier).addAdCredits(kEndGameAdCreditReward);
+      if (mounted) setState(() { _endBonusClaimed = true; _endBonusWatching = false; });
+    }
+    adService.showRewardedAd(
+      RewardedAdSlot.shopCredits,
+      onReward: grant,
+      onDismissedWithoutReward: () {
+        if (mounted) setState(() => _endBonusWatching = false);
+      },
+      // No real ad available — the same short fallback video the Shop and
+      // the continue offer use, same reward for watching it through.
+      onNotReady: () async {
+        if (!mounted) return;
+        final watched = await showContinueFallbackVideo(context, ref.read(localeProvider), restoreBannerOnExit: false);
+        if (!mounted) return;
+        if (watched) {
+          grant();
+        } else {
+          setState(() => _endBonusWatching = false);
+        }
+      },
+    );
   }
 
   void _watchAdToContinue() {
@@ -316,7 +361,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     );
   }
 
-  /// Every [kAdBreakScoreThreshold] points, a short MREC ad break — the
+  /// Every 10,000 points (20,000 once the level's 7th evo is made), a short MREC ad break — the
   /// physics world pauses underneath while it's up so nothing keeps
   /// falling/merging out of view, then resumes once dismissed.
   ///
@@ -724,9 +769,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 ),
               if (showGameOver)
                 if (board.gameCompleted)
-                  GameCompleteOverlay(board: board, onHome: _goHome, locale: locale)
+                  GameCompleteOverlay(board: board, onHome: _goHome, locale: locale, bonus: _endBonusButton(locale))
                 else
-                  _GameOverOverlay(board: board, onHome: _goHome, locale: locale),
+                  _GameOverOverlay(board: board, onHome: _goHome, locale: locale, bonus: _endBonusButton(locale)),
               if (_showingAdPlaceholder) _AdPlaceholderOverlay(locale: locale),
               if (_showCocktailMenu)
                 _CocktailMenuOverlay(
@@ -2395,10 +2440,12 @@ class _GameOverOverlay extends StatelessWidget {
   final BoardState board;
   final VoidCallback onHome;
   final AppLocale locale;
+  final Widget bonus;
   const _GameOverOverlay({
     required this.board,
     required this.onHome,
     required this.locale,
+    required this.bonus,
   });
 
   @override
@@ -2488,6 +2535,8 @@ class _GameOverOverlay extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 16),
+                            bonus,
+                            const SizedBox(height: 10),
                             StoneButton(
                               onTap: onHome,
                               height: 50,

@@ -41,10 +41,24 @@ const kTierUnlockReward = 100;
 const kScoreCreditThreshold = 20000;
 const kScoreCreditReward = 100;
 
-/// Score interval between MREC ad breaks within a single run — every
+/// Score interval between MREC ad breaks within a single run: every
 /// [kAdBreakScoreThreshold] points, GameScreen shows showAdBreakScreen()
 /// (see BoardState.pendingAdBreak/GameStateNotifier.acknowledgeAdBreak).
+/// Until the current level's 7th evolution ([kAdBreakLateTier]) has been
+/// made, breaks come every [kAdBreakEarlyScoreThreshold] instead.
 const kAdBreakScoreThreshold = 20000;
+const kAdBreakEarlyScoreThreshold = 10000;
+const kAdBreakLateTier = 6; // tier index 6 = the 7th item in the chain
+
+/// The interval to the next ad break at this point in a run.
+int adBreakIntervalFor(int runHighestTier) =>
+    runHighestTier >= kAdBreakLateTier ? kAdBreakScoreThreshold : kAdBreakEarlyScoreThreshold;
+
+/// The first multiple of [adBreakIntervalFor] above [score].
+int nextAdBreakScoreAfter(int score, int runHighestTier) {
+  final interval = adBreakIntervalFor(runHighestTier);
+  return (score ~/ interval + 1) * interval;
+}
 
 /// Credits awarded for watching a rewarded ad from the Shop.
 const kShopAdCreditReward = 200;
@@ -146,11 +160,9 @@ class BoardState {
   /// every game.
   final int level;
 
-  /// How many [kAdBreakScoreThreshold]-point milestones this game has
-  /// already shown the MREC ad break for — same "count of thresholds
-  /// already handled" shape as [scoreCreditThresholdsAwarded], just
-  /// driving an ad break instead of a credit reward. Resets every game.
-  final int adBreakThresholdsShown;
+  /// The score at which the next MREC ad break is due (see
+  /// [nextAdBreakScoreAfter]). Resets every game.
+  final int nextAdBreakScore;
 
   /// The highest level whose level-up celebration (see
   /// level_up_screen.dart) has already been shown/handled this run —
@@ -201,17 +213,17 @@ class BoardState {
     this.completedCocktailIds = const {},
     this.jugReached = false,
     this.level = 1,
-    this.adBreakThresholdsShown = 0,
+    this.nextAdBreakScore = kAdBreakEarlyScoreThreshold,
     this.celebratedLevel = 1,
     this.runHighestTier = 0,
     this.isNewHighScore = false,
   });
 
-  /// Whether the score has crossed a new [kAdBreakScoreThreshold]
-  /// milestone that hasn't shown its ad break yet — GameScreen watches
+  /// Whether the score has reached [nextAdBreakScore] and that ad break
+  /// hasn't shown yet — GameScreen watches
   /// this and pushes [showAdBreakScreen] when it flips true.
   bool get pendingAdBreak =>
-      score ~/ kAdBreakScoreThreshold > adBreakThresholdsShown;
+      score >= nextAdBreakScore;
 
   BoardState copyWith({
     Ingredient? current,
@@ -230,7 +242,7 @@ class BoardState {
     Set<String>? completedCocktailIds,
     bool? jugReached,
     int? level,
-    int? adBreakThresholdsShown,
+    int? nextAdBreakScore,
     int? celebratedLevel,
     int? runHighestTier,
     bool? isNewHighScore,
@@ -253,8 +265,7 @@ class BoardState {
       completedCocktailIds: completedCocktailIds ?? this.completedCocktailIds,
       jugReached: jugReached ?? this.jugReached,
       level: level ?? this.level,
-      adBreakThresholdsShown:
-          adBreakThresholdsShown ?? this.adBreakThresholdsShown,
+      nextAdBreakScore: nextAdBreakScore ?? this.nextAdBreakScore,
       celebratedLevel: celebratedLevel ?? this.celebratedLevel,
       runHighestTier: runHighestTier ?? this.runHighestTier,
       isNewHighScore: isNewHighScore ?? this.isNewHighScore,
@@ -466,7 +477,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     'completedCocktailIds': s.completedCocktailIds.toList(),
     'jugReached': s.jugReached,
     'level': s.level,
-    'adBreakThresholdsShown': s.adBreakThresholdsShown,
+    'nextAdBreakScore': s.nextAdBreakScore,
     'celebratedLevel': s.celebratedLevel,
     'runHighestTier': s.runHighestTier,
     'saveVersion': 2,
@@ -552,7 +563,9 @@ class GameStateNotifier extends Notifier<BoardState> {
             .toSet(),
         jugReached: map['jugReached'] as bool,
         level: level,
-        adBreakThresholdsShown: map['adBreakThresholdsShown'] as int,
+        // Saves from before build 31 stored a count of 20,000-point breaks.
+        nextAdBreakScore: map['nextAdBreakScore'] as int? ??
+            ((map['adBreakThresholdsShown'] as int? ?? 0) + 1) * kAdBreakScoreThreshold,
         // A save from before celebratedLevel existed only ever had the
         // old one-shot bool, which (correctly, back then) only ever
         // meant "level 2's celebration has been shown" — never a
@@ -865,10 +878,11 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// Marks the current score-based ad-break milestone as shown — called
   /// once GameScreen has actually pushed showAdBreakScreen() for it, so
   /// [BoardState.pendingAdBreak] goes back to false until the next
-  /// [kAdBreakScoreThreshold] is crossed.
+  /// break is due — 10,000 points on until this level's 7th evolution,
+  /// 20,000 after (see [adBreakIntervalFor]).
   void acknowledgeAdBreak() {
     state = state.copyWith(
-      adBreakThresholdsShown: state.score ~/ kAdBreakScoreThreshold,
+      nextAdBreakScore: nextAdBreakScoreAfter(state.score, state.runHighestTier),
     );
   }
 
@@ -1094,6 +1108,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     () async {
       try {
         final highScores = await loadHighScores();
+        final highScoreDetails = await loadHighScoreDetails();
         // mixedCocktailIds is included here too — this push does a plain
         // overwrite (see LeagueRepository.pushProgress's own doc), so
         // omitting it would silently wipe the server's copy back to
@@ -1109,6 +1124,7 @@ class GameStateNotifier extends Notifier<BoardState> {
                 highestTiers: state.highestTiers,
                 highestLevelReached: state.highestLevelReached,
                 highScores: highScores,
+                highScoreDetails: highScoreDetails,
                 mixedCocktailIds: mixedCocktailIds.toList(),
               ),
             );

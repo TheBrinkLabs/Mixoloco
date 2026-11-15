@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/league_scoring.dart';
 import '../models/ingredient.dart';
+import '../services/high_scores_service.dart';
 
 final leagueRepositoryProvider = Provider<LeagueRepository>((ref) {
   return LeagueRepository(FirebaseFirestore.instance);
@@ -70,6 +71,9 @@ class PlayerProgress {
   final int highestLevelReached;
   final List<int> highScores;
 
+  /// Level + best evolution for each of [highScores] that has them.
+  final Map<int, HighScoreDetail> highScoreDetails;
+
   /// Lifetime cocktail-mixed ids (see progression_service.dart's
   /// loadMixedCocktailIds) — the Guide/Cocktails screens' own "ever
   /// mixed" set, backed up the same way every other lifetime field is.
@@ -88,6 +92,7 @@ class PlayerProgress {
     required this.highestTiers,
     required this.highestLevelReached,
     required this.highScores,
+    this.highScoreDetails = const {},
     this.mixedCocktailIds = const [],
     this.updatedAt,
   });
@@ -293,6 +298,7 @@ class LeagueRepository {
           ...highestTierFields(progress.highestTiers),
           'highestLevelReached': progress.highestLevelReached,
           'highScores': progress.highScores,
+          'highScoreDetails': highScoreDetailsToJson(progress.highScoreDetails),
           'mixedCocktailIds': progress.mixedCocktailIds,
           'updatedAt': FieldValue.serverTimestamp(),
         })
@@ -311,6 +317,7 @@ class LeagueRepository {
       highestTiers: readHighestTiers(data),
       highestLevelReached: (data['highestLevelReached'] as int?) ?? 1,
       highScores: ((data['highScores'] as List?) ?? const []).cast<int>(),
+      highScoreDetails: highScoreDetailsFromJson((data['highScoreDetails'] as Map?)?.cast<String, dynamic>()),
       mixedCocktailIds: ((data['mixedCocktailIds'] as List?) ?? const []).cast<String>(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );

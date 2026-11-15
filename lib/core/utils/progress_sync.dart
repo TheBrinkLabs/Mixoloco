@@ -81,6 +81,7 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
   final localTiers = await loadHighestTiers(kLevelCount);
   final localLevel = await loadHighestLevelReached();
   final localScores = await loadHighScores();
+  final localDetails = await loadHighScoreDetails();
   final localMixedCocktails = await loadMixedCocktailIds();
 
   int mergedCredits;
@@ -104,6 +105,9 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
 
   final mergedScores = <int>{...localScores, ...?server?.highScores}.toList()..sort((a, b) => b.compareTo(a));
   final topScores = mergedScores.take(kMaxHighScores).toList();
+  // This device's own details win over the backup's for the same score.
+  final mergedDetails = {...?server?.highScoreDetails, ...localDetails}
+    ..removeWhere((score, _) => !topScores.contains(score));
 
   // Same "only ever grows" reasoning as the tier/level fields — a union
   // rather than a max() since this is a set of distinct achievements,
@@ -115,6 +119,7 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
       !_sameList(mergedTiers, localTiers) ||
       mergedLevel != localLevel ||
       !_sameList(topScores, localScores) ||
+      mergedDetails.length != localDetails.length ||
       mergedMixedCocktails.length != localMixedCocktails.length;
 
   if (changed) {
@@ -124,6 +129,7 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
     }
     await saveHighestLevelReached(mergedLevel);
     await saveHighScores(topScores);
+    await saveHighScoreDetails(mergedDetails);
     await saveMixedCocktailIds(mergedMixedCocktails);
   }
 
@@ -134,6 +140,7 @@ Future<ProgressSyncOutcome> _syncProgressOnce(LeagueRepository leagueRepo, Strin
       highestTiers: mergedTiers,
       highestLevelReached: mergedLevel,
       highScores: topScores,
+      highScoreDetails: mergedDetails,
       mixedCocktailIds: mergedMixedCocktails.toList(),
     ),
   );

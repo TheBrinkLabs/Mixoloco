@@ -6,12 +6,36 @@ const _kHighScoreDetailsKey = 'high_score_details';
 
 /// The level a high score finished on and the best evolution tier
 /// reached there — kept locally beside the plain score list (which is
-/// what syncs to the Google backup), so a score restored from the backup
-/// simply has no details.
+/// what syncs to the Google backup). Backed up too since build 31; a
+/// score restored from an older backup simply has no details.
 class HighScoreDetail {
   final int level;
   final int tier;
   const HighScoreDetail({required this.level, required this.tier});
+}
+
+/// [details] as plain JSON-able maps: {"12345": {"level": 2, "tier": 7}}.
+/// Also the shape the Google backup stores (see LeagueRepository).
+Map<String, Object> highScoreDetailsToJson(Map<int, HighScoreDetail> details) => {
+  for (final e in details.entries) '${e.key}': {'level': e.value.level, 'tier': e.value.tier},
+};
+
+/// The reverse of [highScoreDetailsToJson]; skips anything malformed.
+Map<int, HighScoreDetail> highScoreDetailsFromJson(Map<String, dynamic>? json) {
+  final out = <int, HighScoreDetail>{};
+  for (final e in (json ?? const {}).entries) {
+    final score = int.tryParse(e.key);
+    final v = e.value;
+    if (score == null || v is! Map || v['level'] is! int || v['tier'] is! int) continue;
+    out[score] = HighScoreDetail(level: v['level'] as int, tier: v['tier'] as int);
+  }
+  return out;
+}
+
+/// Overwrites the stored details outright (progress_sync.dart's merge).
+Future<void> saveHighScoreDetails(Map<int, HighScoreDetail> details) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_kHighScoreDetailsKey, jsonEncode(highScoreDetailsToJson(details)));
 }
 
 /// Details for whichever of the saved high scores have them, by score.
@@ -20,10 +44,7 @@ Future<Map<int, HighScoreDetail>> loadHighScoreDetails() async {
   final raw = prefs.getString(_kHighScoreDetailsKey);
   if (raw == null) return {};
   try {
-    return {
-      for (final e in (jsonDecode(raw) as Map<String, dynamic>).entries)
-        int.parse(e.key): HighScoreDetail(level: e.value['level'] as int, tier: e.value['tier'] as int),
-    };
+    return highScoreDetailsFromJson(jsonDecode(raw) as Map<String, dynamic>);
   } catch (_) {
     return {};
   }
@@ -54,11 +75,7 @@ Future<List<int>> recordScore(int score, {required int level, required int tier}
     final details = await loadHighScoreDetails();
     details[score] = HighScoreDetail(level: level, tier: tier);
     details.removeWhere((s, _) => !top.contains(s));
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _kHighScoreDetailsKey,
-      jsonEncode({for (final e in details.entries) '${e.key}': {'level': e.value.level, 'tier': e.value.tier}}),
-    );
+    await saveHighScoreDetails(details);
   }
   return top;
 }

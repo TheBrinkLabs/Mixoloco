@@ -1018,17 +1018,18 @@ const kEvolutionChain = [
 ];
 
 /// Only these tiers are ever thrown/queued for the player — every higher
-/// tier only ever appears by merging up from here. One more joins the
+/// tier only ever appears by merging up from here. Five from the start on
+/// every level (was four — levels took too long to complete). One more joins the
 /// rotation (see [kExtraThrowableUnlockTier]) once the player's lifetime
 /// record reaches Cranberry — a small "the pool gets richer as you get
 /// better" reward on top of the flat one-time credit bonus every new
 /// tier already pays (see GameStateNotifier.registerTierSeen).
-const kThrowableTierCount = 4;
+const kThrowableTierCount = 5;
 
 /// Cranberry's own tier, looked up by id rather than hardcoded so this
 /// keeps tracking it if the evolution chain's order ever changes again —
 /// reaching this tier (lifetime, per-level highest-tier record) is what
-/// unlocks the 5th throwable item, see [throwableIngredientsFor].
+/// unlocks the 6th throwable item, see [throwableIngredientsFor].
 final kExtraThrowableUnlockTier = kEvolutionChain
     .firstWhere((i) => i.id == 'cranberry')
     .tier;

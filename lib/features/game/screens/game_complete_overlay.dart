@@ -22,11 +22,15 @@ class GameCompleteOverlay extends StatefulWidget {
   final BoardState board;
   final VoidCallback onHome;
   final AppLocale locale;
+
+  /// The end-of-game +500 credits ad button (see EndGameBonusButton).
+  final Widget bonus;
   const GameCompleteOverlay({
     super.key,
     required this.board,
     required this.onHome,
     required this.locale,
+    required this.bonus,
   });
 
   @override
@@ -126,6 +130,8 @@ class _GameCompleteOverlayState extends State<GameCompleteOverlay> with SingleTi
                                   ],
                                 ),
                                 const SizedBox(height: 16),
+                                widget.bonus,
+                                const SizedBox(height: 10),
                                 Row(
                                   children: [
                                     Expanded(

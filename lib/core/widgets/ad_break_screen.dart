@@ -12,7 +12,7 @@ import 'video_mrec_ad.dart';
 
 /// A short, full-screen ad break — an MREC embedded in a page we control,
 /// with our own always-visible countdown/continue button, shown every
-/// [kAdBreakScoreThreshold] points (see game_state_provider.dart).
+/// 10,000 points early in a level, then every 20,000 (see game_state_provider.dart).
 /// Modelled directly on Capitle's own "watch an ad for a clue" screen:
 /// same embedded-MREC-plus-owned-minimum-watch-timer shape, just without
 /// that screen's "this unlocks something" framing — here it's a plain

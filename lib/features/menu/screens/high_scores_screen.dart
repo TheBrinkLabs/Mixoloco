@@ -64,7 +64,10 @@ class _MyBestRankingsTabState extends ConsumerState<MyBestRankingsTab> {
               ),
             )
           else
-            InsetList(rows: [for (final (i, score) in scores.indexed) _ScoreRow(rank: i + 1, score: score, detail: _details[score], locale: locale)]),
+            ...[
+              _MyBestHeaderRow(locale: locale),
+              InsetList(rows: [for (final (i, score) in scores.indexed) _ScoreRow(rank: i + 1, score: score, detail: _details[score], locale: locale)]),
+            ],
         ],
       ),
     );
@@ -77,25 +80,58 @@ Ingredient _evolution(HighScoreDetail d) {
   return chain[d.tier.clamp(0, chain.length - 1)];
 }
 
+/// Column widths shared by [_MyBestHeaderRow] and [_ScoreRow].
+const _kRankWidth = 28.0;
+const _kEvoWidth = 40.0;
+const _kLevelWidth = 40.0;
+
+/// Column labels over the list — same wording as the Global board's.
+class _MyBestHeaderRow extends StatelessWidget {
+  final AppLocale locale;
+  const _MyBestHeaderRow({required this.locale});
+
+  static const _style = TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: SubmenuColors.textSecondary);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      child: Row(
+        children: [
+          const SizedBox(width: _kRankWidth, child: Text('#', style: _style, textAlign: TextAlign.center)),
+          const SizedBox(width: 12),
+          SizedBox(width: _kEvoWidth, child: Text(tr(locale, 'league_col_evo'), style: _style, textAlign: TextAlign.center)),
+          SizedBox(width: _kLevelWidth, child: Text(tr(locale, 'league_col_level'), style: _style, textAlign: TextAlign.center)),
+          Expanded(child: Text(tr(locale, 'score_label').toUpperCase(), style: _style, textAlign: TextAlign.right)),
+        ],
+      ),
+    );
+  }
+}
+
 class _ScoreRow extends StatelessWidget {
   final int rank;
   final int score;
 
   /// The level the run ended on and its best evolution — null for a
-  /// score restored from the backup, which only carries the number.
+  /// score saved before build 28 or restored from an older backup, which
+  /// only carries the number (shown as a dash).
   final HighScoreDetail? detail;
   final AppLocale locale;
   const _ScoreRow({required this.rank, required this.score, required this.detail, required this.locale});
 
+  static const _dash = Text('–', style: TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: SubmenuColors.textDisabled));
+
   @override
   Widget build(BuildContext context) {
+    final d = detail;
     return Container(
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
           Container(
-            width: 28,
+            width: _kRankWidth,
             height: 28,
             alignment: Alignment.center,
             decoration: BoxDecoration(
@@ -110,20 +146,25 @@ class _ScoreRow extends StatelessWidget {
             child: Text('$rank', style: const TextStyle(fontFamily: 'Lilita One', fontSize: 13, color: Colors.white)),
           ),
           const SizedBox(width: 12),
-          if (detail case final d?) ...[
-            SizedBox(
-              width: 34,
-              child: Center(child: GlassVisual(ingredient: _evolution(d), size: 32, applyDisplayScale: false)),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Text(
-              detail == null ? '' : '${tr(locale, 'level')} ${detail!.level}',
-              style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: Colors.white),
+          SizedBox(
+            width: _kEvoWidth,
+            child: Center(child: d == null ? _dash : GlassVisual(ingredient: _evolution(d), size: 32, applyDisplayScale: false)),
+          ),
+          SizedBox(
+            width: _kLevelWidth,
+            child: Center(
+              child: d == null ? _dash : Text('${d.level}', style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: Colors.white)),
             ),
           ),
-          Text('$score', style: const TextStyle(fontFamily: 'Lilita One', fontSize: 18, color: SubmenuColors.gold)),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('$score', maxLines: 1, style: const TextStyle(fontFamily: 'Lilita One', fontSize: 18, color: SubmenuColors.gold)),
+              ),
+            ),
+          ),
         ],
       ),
     );
