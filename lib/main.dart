@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/foundation.dart';
@@ -94,17 +95,21 @@ class _MixolocoAppState extends State<MixolocoApp> {
 
   Future<void> _checkConsent() async {
     final seen = await AdConsentService.hasSeenAdConsent();
-    // GDPR requires consent to be collected before ad SDKs run — only
-    // initialize LevelPlay immediately when a past choice already exists;
-    // a first-time "not yet seen" case waits for AdConsentScreen's answer
-    // (see _onAdConsentAnswered below).
-    if (seen) await AdConsentService.applyStoredConsent();
     if (mounted) setState(() => _hasSeenAdConsent = seen);
+    // GDPR requires consent to be collected before ad SDKs run — only
+    // initialize LevelPlay when a past choice already exists; a
+    // first-time "not yet seen" case waits for AdConsentScreen's answer
+    // (see _onAdConsentAnswered below). Not awaited: LevelPlay's init can
+    // take up to its 8s timeout, and the menu shouldn't wait on it — the
+    // banner shows the house ad until adService.levelPlayReady flips.
+    if (seen) unawaited(AdConsentService.applyStoredConsent());
   }
 
   Future<void> _onAdConsentAnswered(BuildContext context, bool granted) async {
-    await AdConsentService.recordAndApply(granted);
+    await AdConsentService.record(granted);
     if (mounted) setState(() => _hasSeenAdConsent = true);
+    // Same as _checkConsent: start the ad SDK after the menu's up.
+    unawaited(AdConsentService.applyStoredConsent());
   }
 
   @override

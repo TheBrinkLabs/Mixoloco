@@ -26,10 +26,16 @@ class AdConsentService {
   /// — AdService.initialize() no-ops the actual LevelPlay.init() call if
   /// already initialized, but always re-applies the consent flags first.
   static Future<void> recordAndApply(bool granted) async {
+    await record(granted);
+    await adService.initialize(consentGranted: granted);
+  }
+
+  /// Saves the player's choice without starting the ad SDK — the launch
+  /// flow (main.dart) starts it in the background once the menu is up.
+  static Future<void> record(bool granted) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_hasSeenKey, true);
     await prefs.setBool(_grantedKey, granted);
-    await adService.initialize(consentGranted: granted);
   }
 
   /// Called on a normal cold start when consent was already decided in a
