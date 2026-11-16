@@ -1,12 +1,17 @@
 import 'dart:math';
 
-const _adjectives = ['Zesty', 'Fizzy', 'Lucky', 'Salty', 'Sunny', 'Spicy', 'Frosty', 'Minty', 'Breezy', 'Shaken', 'Stirred', 'Golden', 'Tropic', 'Velvet', 'Cosmic', 'Smooth'];
-const _nouns = ['Mojito', 'Lime', 'Cherry', 'Mango', 'Coconut', 'Shaker', 'Spritz', 'Colada', 'Martini', 'Lemon', 'Bellini', 'Punch', 'Peach', 'Melon', 'Julep', 'Fizz'];
+/// Longest nickname allowed — fits the Global board's name column at full
+/// size. (firestore.rules still allow 20, so names saved before this
+/// limit keep working; the board shrinks those to fit.)
+const kMaxNicknameLength = 12;
 
-/// A fun default nickname, e.g. "ZestyMojito42" (at most 17 characters,
-/// under the 20 the rules allow). Every player gets one automatically with
-/// their first score (see LeagueRepository.ensureProfileWithDefaultName)
-/// and can change it from the Global tab or Settings.
+// Five letters at most each, so adjective + noun + two digits <= 12.
+const _adjectives = ['Zesty', 'Fizzy', 'Lucky', 'Salty', 'Sunny', 'Spicy', 'Minty', 'Juicy', 'Tangy', 'Sweet', 'Icy', 'Cool', 'Wild', 'Sour', 'Hot', 'Bold'];
+const _nouns = ['Lime', 'Mango', 'Peach', 'Lemon', 'Melon', 'Fizz', 'Punch', 'Julep', 'Mint', 'Kiwi', 'Berry', 'Olive', 'Cola', 'Mojo', 'Shake', 'Sip'];
+
+/// A fun default nickname, e.g. "ZestyMango42" — every new player is
+/// offered one on first launch (see NicknameSetupScreen) and can keep it
+/// or type their own.
 String generateFallbackNickname() => _nameFrom(Random());
 
 /// The same style of name, but always the same one for [uid] — shown for

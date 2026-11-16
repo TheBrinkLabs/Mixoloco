@@ -221,6 +221,9 @@ class SubmenuScaffold extends StatelessWidget {
   /// An "After Dark" level's evening grade on that photo — see
   /// [BarBackdrop.night].
   final bool night;
+
+  /// False on the first-launch name screen, which is the app's root.
+  final bool showBack;
   const SubmenuScaffold({
     super.key,
     required this.title,
@@ -231,6 +234,7 @@ class SubmenuScaffold extends StatelessWidget {
     this.aboveRibbon = const [],
     this.backgroundAssetPath = 'assets/images/beach_background.webp',
     this.night = false,
+    this.showBack = true,
   });
 
   @override
@@ -251,7 +255,7 @@ class SubmenuScaffold extends StatelessWidget {
             Positioned(
               left: 20,
               top: 10 + topInset,
-              child: SubmenuBackButton(onTap: () => Navigator.of(context).pop()),
+              child: showBack ? SubmenuBackButton(onTap: () => Navigator.of(context).pop()) : const SizedBox.shrink(),
             ),
             ...aboveRibbon,
             Positioned(

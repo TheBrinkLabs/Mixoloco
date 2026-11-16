@@ -1119,10 +1119,13 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// global board and get paid if they make the weekly top 10.
   Future<void> _ensureLeagueProfile(String uid) async {
     try {
+      // A name picked on the first-launch screen while offline is only
+      // saved locally — use it, rather than a new generated one.
+      final local = await loadNickname();
       final nickname = await ref
           .read(leagueRepositoryProvider)
-          .ensureProfileWithDefaultName(uid: uid, deviceId: await deviceIdService.getDeviceId());
-      if (nickname != null && (await loadNickname()) == null) await saveNickname(nickname);
+          .ensureProfileWithDefaultName(uid: uid, deviceId: await deviceIdService.getDeviceId(), preferredName: local);
+      if (nickname != null && local == null) await saveNickname(nickname);
     } catch (e) {
       debugPrint('League profile setup failed (non-fatal): $e');
     }

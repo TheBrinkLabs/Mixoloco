@@ -16,6 +16,8 @@ import 'core/widgets/banner_ad_widget.dart';
 import 'core/widgets/bar_backdrop.dart';
 import 'features/menu/screens/ad_consent_screen.dart';
 import 'features/menu/screens/menu_screen.dart';
+import 'features/onboarding/screens/nickname_setup_screen.dart';
+import 'data/services/league_local_service.dart' show loadNickname;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -87,6 +89,10 @@ class _MixolocoAppState extends State<MixolocoApp> {
   // a normal launch flicker rather than a real loading screen.
   bool? _hasSeenAdConsent;
 
+  /// True until the player has a nickname — first launch shows the name
+  /// screen (after consent) before the menu.
+  bool _needsName = false;
+
   @override
   void initState() {
     super.initState();
@@ -95,7 +101,13 @@ class _MixolocoAppState extends State<MixolocoApp> {
 
   Future<void> _checkConsent() async {
     final seen = await AdConsentService.hasSeenAdConsent();
-    if (mounted) setState(() => _hasSeenAdConsent = seen);
+    final nickname = await loadNickname();
+    if (mounted) {
+      setState(() {
+        _hasSeenAdConsent = seen;
+        _needsName = nickname == null || nickname.isEmpty;
+      });
+    }
     // GDPR requires consent to be collected before ad SDKs run — only
     // initialize LevelPlay when a past choice already exists; a
     // first-time "not yet seen" case waits for AdConsentScreen's answer
@@ -127,7 +139,9 @@ class _MixolocoAppState extends State<MixolocoApp> {
       home: switch (_hasSeenAdConsent) {
         null => const Scaffold(body: BarBackdrop(showTable: false, child: SizedBox.shrink())),
         false => AdConsentScreen(onAnswered: _onAdConsentAnswered),
-        true => const MenuScreen(),
+        true => _needsName
+            ? NicknameSetupScreen(onDone: () => setState(() => _needsName = false))
+            : const MenuScreen(),
       },
     );
   }

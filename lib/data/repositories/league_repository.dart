@@ -156,11 +156,11 @@ class LeagueRepository {
   /// both need a profile, and most players never open the Global tab
   /// (where the nickname used to be set up), so they showed as "Player"
   /// and weren't paid.
-  Future<String?> ensureProfileWithDefaultName({required String uid, String? deviceId}) async {
+  Future<String?> ensureProfileWithDefaultName({required String uid, String? deviceId, String? preferredName}) async {
     final snap = await getPlayer(uid);
     final existing = snap.data()?['nickname'] as String?;
     if (snap.exists) return existing;
-    final nickname = generateFallbackNickname();
+    final nickname = (preferredName != null && preferredName.isNotEmpty) ? preferredName : generateFallbackNickname();
     await ensurePlayerDocument(uid: uid, nickname: nickname, deviceId: deviceId);
     return nickname;
   }

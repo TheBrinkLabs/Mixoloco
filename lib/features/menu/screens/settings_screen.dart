@@ -386,7 +386,7 @@ class _NicknameEditDialogState extends State<_NicknameEditDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _controller,
-              maxLength: 20,
+              maxLength: kMaxNicknameLength,
               autofocus: true,
               textAlign: TextAlign.center,
               onSubmitted: (_) => _submit(),

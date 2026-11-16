@@ -36,7 +36,13 @@ import '../../league/screens/rankings_screen.dart';
 /// rather than during any app-launch flow, since Mixoloco has no
 /// first-launch onboarding carousel to hook into.
 class NicknameSetupScreen extends ConsumerStatefulWidget {
-  const NicknameSetupScreen({super.key});
+  /// Set when shown on first launch (see main.dart): the player is offered
+  /// a generated name to keep or change before reaching the menu, and this
+  /// is called when they continue instead of opening Rankings. Never
+  /// blocks play — offline, the name is kept locally and the profile is
+  /// created with it on the first score.
+  final VoidCallback? onDone;
+  const NicknameSetupScreen({super.key, this.onDone});
 
   @override
   ConsumerState<NicknameSetupScreen> createState() => _NicknameSetupScreenState();
@@ -60,6 +66,7 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: generateFallbackNickname());
+    if (widget.onDone != null) _prefillExistingName();
     // The persistent bottom banner (see banner_ad_widget.dart) otherwise
     // overlaps this screen's own bottom-anchored Continue button — found
     // by hand on-device: the button visually renders but taps land on
@@ -68,6 +75,18 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
     ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
     final bannerNotifier = ref.read(bannerPositionProvider.notifier);
     _restoreBanner = () => Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
+  }
+
+  /// A player who already has a profile (e.g. updating from an older
+  /// version) keeps their name rather than being offered a new one.
+  Future<void> _prefillExistingName() async {
+    try {
+      final uid = authService.uid;
+      if (uid == null) return;
+      final snap = await ref.read(leagueRepositoryProvider).getPlayer(uid);
+      final existing = snap.data()?['nickname'] as String?;
+      if (existing != null && existing.isNotEmpty && mounted) _controller.text = existing;
+    } catch (_) {}
   }
 
   @override
@@ -112,17 +131,28 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
       }
 
       final repo = ref.read(leagueRepositoryProvider);
+      // First launch: keep the name locally first, so it's used even if
+      // the save below fails (offline) — see onDone's doc.
+      if (widget.onDone != null) await saveNickname(nickname);
       await repo.ensurePlayerDocument(uid: uid, nickname: nickname, deviceId: await deviceIdService.getDeviceId());
       await repo.syncNickname(uid: uid, nickname: nickname);
       await saveNickname(nickname);
 
       if (!mounted) return;
+      if (widget.onDone != null) {
+        widget.onDone!();
+        return;
+      }
       _handedOffToLeague = true;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const RankingsScreen(initialTab: RankingsTab.global)),
       );
     } catch (e) {
       if (!mounted) return;
+      if (widget.onDone != null) {
+        widget.onDone!(); // offline etc. — carry on; see onDone's doc
+        return;
+      }
       setState(() {
         _saving = false;
         _error = tr(locale, 'nickname_setup_generic_error');
@@ -199,7 +229,8 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
     final busy = _saving || _restoring;
 
     return SubmenuScaffold(
-      title: tr(locale, 'league_profile_title'),
+      title: tr(locale, widget.onDone != null ? 'nickname_first_title' : 'league_profile_title'),
+      showBack: widget.onDone == null,
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -285,7 +316,7 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   child: TextField(
                     controller: _controller,
-                    maxLength: 20,
+                    maxLength: kMaxNicknameLength,
                     style: const TextStyle(fontFamily: 'Lilita One', fontSize: 18, color: Colors.white),
                     decoration: InputDecoration(
                       isDense: true,
@@ -302,7 +333,7 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Text(
-                tr(locale, 'nickname_setup_subtitle'),
+                tr(locale, widget.onDone != null ? 'nickname_first_subtitle' : 'nickname_setup_subtitle'),
                 style: submenuNunito(size: 12, weight: FontWeight.w700, color: SubmenuColors.textSecondary),
               ),
             ),
