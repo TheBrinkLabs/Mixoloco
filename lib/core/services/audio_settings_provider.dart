@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flame_audio/flame_audio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/ingredient.dart' show barForLevel, isAfterDarkLevel;
 import '../../data/services/progression_service.dart';
@@ -230,7 +231,19 @@ class AudioSettingsNotifier extends Notifier<AudioSettings> {
     }
     _playlistActive = true;
     try {
-      _completeSub ??= FlameAudio.bgm.audioPlayer.onPlayerComplete.listen((_) => _playNextTrack());
+      _completeSub ??= FlameAudio.bgm.audioPlayer.onPlayerComplete.listen(
+        (_) => _playNextTrack(),
+        // audioplayers forwards native player errors (e.g. Android
+        // MEDIA_ERROR -38 on older devices) to every listener of this
+        // stream. Unhandled here, they reached main.dart's global handler
+        // and were recorded as fatal crashes (build 30). Music is
+        // decorative — drop it and let the next playMenuMusic()/
+        // playGameMusic() call restart the playlist.
+        onError: (Object e) {
+          debugPrint('Music player error: $e');
+          _playlistActive = false;
+        },
+      );
       await _playTrack(_trackIndex);
     } catch (_) {
       // Soft failure, same as above.
