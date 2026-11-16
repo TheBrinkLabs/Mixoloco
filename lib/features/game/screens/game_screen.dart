@@ -421,14 +421,21 @@ class _GameScreenState extends ConsumerState<GameScreen>
       if (!mounted) return;
     }
     _game.pauseEngine();
-    // Both sides of the reset happen now, while the celebration overlay
-    // is about to cover the whole screen — by the time it's dismissed,
-    // the table's already cleared and reconfigured for the new level
-    // rather than the player seeing it happen.
-    ref.read(gameStateProvider.notifier).enterLevel(level);
-    _game.switchToLevel(level);
-    ref.read(audioSettingsProvider.notifier).playGameMusic(level: level);
-    await showLevelUpOverlay(context, locale, level: level);
+    // Celebrate the level just finished over its own table, then the ad,
+    // then switch: the table/state reset runs once the ad's done, behind
+    // the "ready" beat's full-screen photo of the new level.
+    final completedLevel = ref.read(gameStateProvider).celebratedLevel;
+    await showLevelUpOverlay(
+      context,
+      locale,
+      completedLevel: completedLevel,
+      level: level,
+      onSwitchLevel: () {
+        ref.read(gameStateProvider.notifier).enterLevel(level);
+        _game.switchToLevel(level);
+        ref.read(audioSettingsProvider.notifier).playGameMusic(level: level);
+      },
+    );
     if (!mounted) return;
     ref.read(gameStateProvider.notifier).acknowledgeLevelUpCelebration();
     _game.resumeEngine();
@@ -437,7 +444,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   @override
   Widget build(BuildContext context) {
-    final board = ref.watch(gameStateProvider);
+    final liveBoard = ref.watch(gameStateProvider);
+    // The level ticks over the moment its last goal is met, but the
+    // finished level stays on screen (table art, HUD, tabs) until the
+    // level-up sequence swaps it — see _runLevelUp.
+    final board = liveBoard.level > liveBoard.celebratedLevel ? liveBoard.copyWith(level: liveBoard.celebratedLevel) : liveBoard;
     final locale = ref.watch(localeProvider);
     final cocktailModeEnabled = ref.watch(cocktailModeProvider);
     final screenSize = MediaQuery.sizeOf(context);
@@ -460,9 +471,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
     // `>` (not a single bool latch) so every transition re-fires this,
     // not just the first — see BoardState.celebratedLevel's doc for the
     // bug a one-shot flag caused here.
-    if (board.level > board.celebratedLevel && !_showingLevelUp) {
+    if (liveBoard.level > liveBoard.celebratedLevel && !_showingLevelUp) {
       _showingLevelUp = true;
-      final targetLevel = board.level;
+      final targetLevel = liveBoard.level;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _runLevelUp(locale, targetLevel),
       );

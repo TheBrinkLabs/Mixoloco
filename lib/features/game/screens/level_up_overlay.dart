@@ -25,22 +25,35 @@ enum _Step { celebrate, ad, ready }
 /// rather than a Stack overlay so Navigator handles "on top of
 /// everything, blocks input beneath" for free instead of this screen
 /// having to thread another blockInput flag through its own layout.
-Future<void> showLevelUpOverlay(BuildContext context, AppLocale locale, {required int level}) {
+/// [completedLevel] is the level just finished (shown on the celebrate
+/// beat); [level] the one starting. [onSwitchLevel] runs once the ad is
+/// done, just before the "ready" beat's full-screen photo covers the
+/// table — that's when GameScreen swaps the table over to [level], so
+/// the finished level stays on screen behind the celebration.
+Future<void> showLevelUpOverlay(
+  BuildContext context,
+  AppLocale locale, {
+  required int completedLevel,
+  required int level,
+  required VoidCallback onSwitchLevel,
+}) {
   return Navigator.of(context).push<void>(
     PageRouteBuilder(
       opaque: false,
       barrierColor: Colors.transparent,
       transitionDuration: Duration.zero,
       reverseTransitionDuration: Duration.zero,
-      pageBuilder: (_, _, _) => LevelUpOverlay(locale: locale, level: level),
+      pageBuilder: (_, _, _) => LevelUpOverlay(locale: locale, completedLevel: completedLevel, level: level, onSwitchLevel: onSwitchLevel),
     ),
   );
 }
 
 class LevelUpOverlay extends StatefulWidget {
   final AppLocale locale;
+  final int completedLevel;
   final int level;
-  const LevelUpOverlay({super.key, required this.locale, required this.level});
+  final VoidCallback onSwitchLevel;
+  const LevelUpOverlay({super.key, required this.locale, required this.completedLevel, required this.level, required this.onSwitchLevel});
 
   @override
   State<LevelUpOverlay> createState() => _LevelUpOverlayState();
@@ -89,8 +102,14 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
     );
   }
 
+  bool _switched = false;
+
   void _showReady() {
     if (!mounted) return;
+    if (!_switched) {
+      _switched = true;
+      widget.onSwitchLevel();
+    }
     setState(() => _step = _Step.ready);
   }
 
@@ -157,6 +176,15 @@ class _LevelUpOverlayState extends State<LevelUpOverlay> with SingleTickerProvid
       key: const ValueKey('celebrate'),
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Which level was just finished, above the "Level Complete!" plaque.
+        OutlinedLabel(
+          text: '${tr(widget.locale, 'level')} ${widget.completedLevel}'.toUpperCase(),
+          fontSize: 28,
+          fill: SubmenuColors.gold,
+          stroke: SubmenuColors.goldEdge,
+          strokeWidth: 5,
+        ),
+        const SizedBox(height: 10),
         TweenAnimationBuilder<double>(
           tween: Tween(begin: 0.4, end: 1.0),
           duration: const Duration(milliseconds: 550),

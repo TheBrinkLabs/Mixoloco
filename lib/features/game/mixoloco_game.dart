@@ -1,6 +1,6 @@
 import 'dart:async' show unawaited;
 import 'dart:math' show Random, cos, pi, sin;
-import 'package:flame/components.dart' show Anchor;
+import 'package:flame/components.dart' show Anchor, Component;
 import 'package:flame_audio/flame_audio.dart';
 import 'package:flame_forge2d/flame_forge2d.dart';
 import 'package:flutter/material.dart'
@@ -254,8 +254,15 @@ class MixolocoGame extends Forge2DGame {
   /// mid-flight — GameScreen's ad-break trigger waits for this to hit zero
   /// before pausing the engine, so a score-threshold crossing mid-burst
   /// doesn't freeze the table on a half-played explosion.
-  int _activeAnimations = 0;
-  bool get isAnimating => _activeAnimations > 0;
+  /// The merge explosions / cocktail reveals still playing. A set of the
+  /// components themselves rather than a counter: a counter reset by
+  /// clearBoard while an animation added that same tick was still queued
+  /// (Flame mounts on the next tick, so clearBoard couldn't see it) went
+  /// to -1 when that animation later finished on the next level — after
+  /// which every reveal read as "not animating", and the next level-up
+  /// switched levels under a cocktail reveal that was still playing.
+  final Set<Component> _animations = {};
+  bool get isAnimating => _animations.isNotEmpty;
 
   final Set<IngredientBodyComponent> _liveBodies = {};
   final Map<IngredientBodyComponent, Set<IngredientBodyComponent>> _adjacency =
@@ -1311,40 +1318,42 @@ class MixolocoGame extends Forge2DGame {
       _removeBody(b);
       final center = Vector2(kWorldWidthMeters / 2, _worldHeight / 2);
       unawaited(_playCocktailSound());
-      _activeAnimations++;
-      world.add(
-        CocktailRevealComponent(
-          pieces: captured,
-          center: center,
-          cocktailAssetPath: _chain[nextTier].assetPath ?? '',
-          onComplete: () {
-            _startPop(_spawnBody(tier: nextTier, position: center));
-            _activeAnimations--;
-          },
-        ),
+      late final CocktailRevealComponent reveal;
+      reveal = CocktailRevealComponent(
+        pieces: captured,
+        center: center,
+        cocktailAssetPath: _chain[nextTier].assetPath ?? '',
+        onComplete: () {
+          if (!_animations.remove(reveal)) return; // cleared with the table
+          _startPop(_spawnBody(tier: nextTier, position: center));
+        },
       );
+      _animations.add(reveal);
+      world.add(reveal);
       onMerge(mergedTier);
       return;
     }
     _removeBody(a);
     _removeBody(b);
     unawaited(_playMergeSound());
-    _activeAnimations++;
     if (finalMerge) {
       _finalMergeTriggered = true;
     } else if (chainExhausted) {
       _gameCompleteTriggered = true;
     }
-    world.add(
-      MergeExplosionComponent(
-        position: midpoint,
-        ingredient: ingredient,
-        onSpawnReady: chainExhausted
-            ? () {}
-            : () => _startPop(_spawnBody(tier: nextTier, position: midpoint)),
-        onFinished: () => _activeAnimations--,
-      ),
+    late final MergeExplosionComponent explosion;
+    explosion = MergeExplosionComponent(
+      position: midpoint,
+      ingredient: ingredient,
+      onSpawnReady: chainExhausted
+          ? () {}
+          : () {
+              if (_animations.contains(explosion)) _startPop(_spawnBody(tier: nextTier, position: midpoint));
+            },
+      onFinished: () => _animations.remove(explosion),
     );
+    _animations.add(explosion);
+    world.add(explosion);
     onMerge(mergedTier);
     if (finalMerge) {
       onFinalMerge();
@@ -1448,15 +1457,15 @@ class MixolocoGame extends Forge2DGame {
     }
     final center = Vector2(kWorldWidthMeters / 2, _worldHeight / 2);
     unawaited(_playCocktailSound());
-    _activeAnimations++;
-    world.add(
-      CocktailRevealComponent(
-        pieces: captured,
-        center: center,
-        cocktailAssetPath: order.assetPath,
-        onComplete: () => _activeAnimations--,
-      ),
+    late final CocktailRevealComponent reveal;
+    reveal = CocktailRevealComponent(
+      pieces: captured,
+      center: center,
+      cocktailAssetPath: order.assetPath,
+      onComplete: () => _animations.remove(reveal),
     );
+    _animations.add(reveal);
+    world.add(reveal);
     // Stamped just above the cocktail as it appears (the reveal's pieces
     // spend its first ~0.75s flying in and bursting). Capped to 70% of the
     // table's width - the word is long, and the pop-in overshoots a little.
@@ -1508,12 +1517,13 @@ class MixolocoGame extends Forge2DGame {
     _finalMergeTriggered = false;
     _overflowStreak = 0;
     _busy = false;
-    // Any merge-explosion/cocktail-reveal component just wiped above was
-    // removed directly, not through its own onFinished/onComplete — reset
-    // this alongside everything else rather than leaving it stuck above
-    // zero forever (which would hang GameScreen's ad-break wait, which
-    // polls isAnimating, indefinitely).
-    _activeAnimations = 0;
+    // Animations too: one added this same tick is still queued, not in
+    // world.children, so the loop above missed it — removing it directly
+    // dequeues it, rather than letting it play out on the next level.
+    for (final a in _animations) {
+      a.removeFromParent();
+    }
+    _animations.clear();
     // Every body a mid-flight shake's squish was tracking is gone now
     // (bodies removed above) — drop that state too rather than let a
     // restore loop over an empty/stale _liveBodies do nothing useful,

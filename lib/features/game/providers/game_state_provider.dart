@@ -817,7 +817,12 @@ class GameStateNotifier extends Notifier<BoardState> {
       return;
     }
     _finalMerged = false;
-    state = state.copyWith(level: state.level + 1);
+    // The level's closing score (a cocktail, the final merge) shouldn't
+    // also trigger an MREC break — the level-up has its own ad.
+    state = state.copyWith(
+      level: state.level + 1,
+      nextAdBreakScore: nextAdBreakScoreAfter(state.score, 0),
+    );
     analyticsService.levelUp(state.level);
   }
 
@@ -868,6 +873,9 @@ class GameStateNotifier extends Notifier<BoardState> {
       completedCocktailIds: {},
       highestLevelReached: newHighestLevelReached,
       runHighestTier: 0,
+      // Same as _checkLevelUp: whatever scored while the level-up was
+      // pending doesn't queue an MREC on the new level's first throw.
+      nextAdBreakScore: nextAdBreakScoreAfter(state.score, 0),
       // The previous level's table — never restored onto this one.
       placedItems: const [],
     );
