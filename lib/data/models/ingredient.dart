@@ -841,7 +841,7 @@ const kEvolutionChain = [
     tier: 12,
     shape: GlassShape.jug,
     debris: DebrisType.glass,
-    assetPath: 'assets/images/game/c_cocktail_jug.png',
+    assetPath: 'assets/images/game/c_cocktail_jug.webp',
     displayScale: 1.060,
     displayScaleX: 1.729,
     // 15% bigger per feedback — matches the same bump already applied to

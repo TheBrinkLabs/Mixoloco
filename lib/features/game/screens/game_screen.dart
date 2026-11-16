@@ -582,7 +582,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                         GestureDetector(
                           onTap: _goHome,
                           child: Image.asset(
-                            'assets/images/menu_logo_sticker.png',
+                            'assets/images/menu_logo_sticker.webp',
                             height: 44,
                             // See GlassVisual's matching comment.
                             cacheHeight: (44 * MediaQuery.devicePixelRatioOf(context)).round(),
@@ -657,7 +657,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 left: actionRowLeft + (actionTileSize + actionTileGap),
                 top: iconRowCenterY - actionTileSize / 2,
                 child: _PowerUpTile(
-                  asset: 'assets/images/game/p_shaker.png',
+                  asset: 'assets/images/game/p_shaker.webp',
                   size: actionTileSize,
                   label: tr(locale, 'shake_label'),
                   cost: kShakerCost,
@@ -670,7 +670,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 left: actionRowLeft + (actionTileSize + actionTileGap) * 2,
                 top: iconRowCenterY - actionTileSize / 2,
                 child: _PowerUpTile(
-                  asset: 'assets/images/game/p_shaker.png',
+                  asset: 'assets/images/game/p_shaker.webp',
                   size: actionTileSize,
                   label: tr(locale, 'mega_shake_label'),
                   cost: kMegaShakeCost,
@@ -697,7 +697,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 left: actionRowLeft + (actionTileSize + actionTileGap) * 4,
                 top: iconRowCenterY - actionTileSize / 2,
                 child: _PowerUpTile(
-                  asset: 'assets/images/game/p_cosmopolitan.png',
+                  asset: 'assets/images/game/p_cosmopolitan.webp',
                   size: actionTileSize,
                   label: tr(locale, 'menu_label'),
                   // Disabled whenever an order (the free starter counts)
@@ -941,7 +941,7 @@ class _GameCreditsPill extends StatelessWidget {
           // actually filling the badge.
           child: ClipOval(
             child: Image.asset(
-              'assets/images/coins.png',
+              'assets/images/coins.webp',
               width: double.infinity,
               height: double.infinity,
               fit: BoxFit.cover,
@@ -1008,7 +1008,7 @@ class _GameScorePill extends StatelessWidget {
       badgeLeft: -10,
       badgeTop: -12,
       badge: ShadowedAsset(
-        path: 'assets/images/icon_best_scores.png',
+        path: 'assets/images/icon_best_scores.webp',
         width: 50,
         shadows: [
           SpriteShadow(
@@ -1061,7 +1061,7 @@ class _SoundToggleButton extends StatelessWidget {
               alignment: Alignment.center,
               children: [
                 ShadowedAsset(
-                  path: 'assets/images/sound.png',
+                  path: 'assets/images/sound.webp',
                   width: 24,
                   shadows: [
                     SpriteShadow(offset: const Offset(0, 2), blur: 2, color: Colors.black.withValues(alpha: 0.4)),

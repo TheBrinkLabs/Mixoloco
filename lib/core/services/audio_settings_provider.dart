@@ -11,7 +11,7 @@ import '../../data/services/progression_service.dart';
 /// 'assets/audio/' prefix. Playback starts on a random track each app
 /// launch (see AudioSettingsNotifier._trackIndex's initializer) rather
 /// than always opening on the first one.
-const kMusicTracks = ['Mixoloco_Theme_Tune.mp3', 'Rendezvous_Bay.mp3', 'Pitons_in_the_Mist.mp3', 'Midday_at_the_Cabana.mp3'];
+const kMusicTracks = ['Mixoloco_Theme_Tune.ogg', 'Rendezvous_Bay.ogg', 'Pitons_in_the_Mist.ogg', 'Midday_at_the_Cabana.ogg'];
 
 /// The rooftop bar's own playlist (Level 2) — swapped in by
 /// [AudioSettingsNotifier.playGameMusic]'s `rooftop` flag once
@@ -19,19 +19,19 @@ const kMusicTracks = ['Mixoloco_Theme_Tune.mp3', 'Rendezvous_Bay.mp3', 'Pitons_i
 /// Menu music stays on [kMusicTracks] regardless of lifetime level
 /// reached — the home screen's own visuals (sign, sand, boards) never
 /// change, only the in-game table does.
-const kMusicTracksLevel2 = ['Amber_Terrace.mp3', 'Velvet_Boulevard.mp3', 'Velvet_Strings_at_Dusk.mp3', 'Golden_Hour_Motion.mp3'];
+const kMusicTracksLevel2 = ['Amber_Terrace.ogg', 'Velvet_Boulevard.ogg', 'Velvet_Strings_at_Dusk.ogg', 'Golden_Hour_Motion.ogg'];
 
 /// The safari bar's own playlist (Level 3) — see [kMusicTracksLevel2]'s
 /// doc for how [musicTracksForLevel] picks between the four.
-const kMusicTracksLevel3 = ['Furaha_Iko_Hapa.mp3', 'Furaha_Iko_Mixoloco.mp3', 'Haya_Heya_Ho.mp3', 'Karibu_Mixo_loco.mp3'];
+const kMusicTracksLevel3 = ['Furaha_Iko_Hapa.ogg', 'Furaha_Iko_Mixoloco.ogg', 'Haya_Heya_Ho.ogg', 'Karibu_Mixo_loco.ogg'];
 
 /// The piazza bar's own playlist (Level 4) — see [kMusicTracksLevel2]'s
 /// doc for how [musicTracksForLevel] picks between the four.
-const kMusicTracksLevel4 = ['Afternoon_in_the_Piazza.mp3', 'Midday_in_the_Piazza.mp3', 'Plaza_Aperitivo.mp3', 'Two_Glasses_on_the_Marble.mp3'];
+const kMusicTracksLevel4 = ['Afternoon_in_the_Piazza.ogg', 'Midday_in_the_Piazza.ogg', 'Plaza_Aperitivo.ogg', 'Two_Glasses_on_the_Marble.ogg'];
 
 /// The jungle bar's own playlist (Level 5) — see [kMusicTracksLevel2]'s
 /// doc for how [musicTracksForLevel] picks between the four.
-const kMusicTracksLevel5 = ['noon_in_the_canopy.mp3', 'Rainforest_Morning_Mist.mp3', 'canopy_ritual.mp3', 'Mixoloco_en_Costa_Rica.mp3'];
+const kMusicTracksLevel5 = ['noon_in_the_canopy.ogg', 'Rainforest_Morning_Mist.ogg', 'canopy_ritual.ogg', 'Mixoloco_en_Costa_Rica.ogg'];
 
 /// Each bar's four songs, index 0 = Beach.
 const kBarMusicTracks = [kMusicTracks, kMusicTracksLevel2, kMusicTracksLevel3, kMusicTracksLevel4, kMusicTracksLevel5];

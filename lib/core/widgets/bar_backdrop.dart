@@ -29,11 +29,11 @@ const kTableScale = 1.26;
 /// table), LevelUpOverlay and the Guide's per-level pages, so they always
 /// agree on which photo a given level shows.
 String backgroundAssetPathForLevel(int level) => const [
-  'assets/images/beach_background.png',
-  'assets/images/rooftop_background.png',
-  'assets/images/safari_background.png',
-  'assets/images/piazza_background.png',
-  'assets/images/jungle_background.png',
+  'assets/images/beach_background.webp',
+  'assets/images/rooftop_background.webp',
+  'assets/images/safari_background.webp',
+  'assets/images/piazza_background.webp',
+  'assets/images/jungle_background.webp',
 ][barForLevel(level) - 1];
 
 /// The evening colour grade for an "After Dark" level's background, or
@@ -231,7 +231,7 @@ ColorFilter? colorFilterForTableFinish(TableFinish finish) {
 }
 
 /// The tropical sunset beach-bar scene behind the menu/game screens — a
-/// real photo background (assets/images/beach_background.png) with the
+/// real photo background (assets/images/beach_background.webp) with the
 /// real table asset layered on top, positioned so its own base lines up
 /// with the true bottom of the screen (kTableNearFraction = 1.0) — no
 /// separate tray strip below it; the table's own front face is the
@@ -275,7 +275,7 @@ class BarBackdrop extends StatelessWidget {
     this.child,
     this.shakeTrigger,
     this.showTable = true,
-    this.backgroundAssetPath = 'assets/images/beach_background.png',
+    this.backgroundAssetPath = 'assets/images/beach_background.webp',
     this.rooftop = false,
     this.tableFinish = TableFinish.natural,
     this.night = false,
@@ -373,7 +373,7 @@ class _TableGeometry {
   });
 }
 
-/// assets/images/beach_table.png — 768x1365 raw canvas. Content doesn't
+/// assets/images/beach_table.webp — 768x1365 raw canvas. Content doesn't
 /// fill that canvas edge to edge — measured precisely by scanning the
 /// PNG's own alpha channel (not eyeballed): opaque content runs from
 /// y=480 to y=1364 (fractions 0.3516 to 0.9993 of height) and x=28 to
@@ -386,13 +386,13 @@ class _TableGeometry {
 /// taper's widest lip, right before the apron's straight-sided block
 /// begins): that happens right at y=1199, fraction 0.878.
 const _beachTableGeometry = _TableGeometry(
-  assetPath: 'assets/images/beach_table.png',
+  assetPath: 'assets/images/beach_table.webp',
   imageAspect: 768 / 1365,
   baseFraction: 0.9993,
   surfaceNearFraction: 0.878,
 );
 
-/// assets/images/bar_table.png — 1080x1920 raw canvas, same measurement
+/// assets/images/bar_table.webp — 1080x1920 raw canvas, same measurement
 /// method as [_beachTableGeometry]: opaque content runs y=650-1855
 /// (fractions 0.3385-0.9661), the front-lip/apron transition (scanned
 /// visually against a zoomed crop, since this asset's apron doesn't
@@ -400,7 +400,7 @@ const _beachTableGeometry = _TableGeometry(
 /// from a slightly different angle) sits at fraction 0.878 — remarkably,
 /// the exact same fraction as the beach table's own.
 const _barTableGeometry = _TableGeometry(
-  assetPath: 'assets/images/bar_table.png',
+  assetPath: 'assets/images/bar_table.webp',
   imageAspect: 1080 / 1920,
   baseFraction: 0.9661,
   surfaceNearFraction: 0.878,

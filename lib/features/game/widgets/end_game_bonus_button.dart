@@ -57,7 +57,7 @@ class EndGameBonusButton extends StatelessWidget {
         ),
         child: Row(
           children: [
-            ClipOval(child: Image.asset('assets/images/coins.png', width: 36, height: 36, fit: BoxFit.cover)),
+            ClipOval(child: Image.asset('assets/images/coins.webp', width: 36, height: 36, fit: BoxFit.cover)),
             const SizedBox(width: 10),
             Expanded(
               child: watching

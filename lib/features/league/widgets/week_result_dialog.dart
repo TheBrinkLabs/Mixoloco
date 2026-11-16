@@ -205,7 +205,7 @@ class _CreditsPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ClipOval(
-            child: Image.asset('assets/images/coins.png', width: 34, height: 34, fit: BoxFit.cover),
+            child: Image.asset('assets/images/coins.webp', width: 34, height: 34, fit: BoxFit.cover),
           ),
           const SizedBox(width: 10),
           OutlinedLabel(text: text, fontSize: 22, fill: SubmenuColors.gold, stroke: SubmenuColors.ring, strokeWidth: 4),

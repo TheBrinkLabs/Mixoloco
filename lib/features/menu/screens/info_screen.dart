@@ -77,13 +77,13 @@ class InfoScreen extends ConsumerWidget {
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CocktailsScreen())),
               ),
               _GuideTile(
-                iconAsset: 'assets/images/icon_songs.png',
+                iconAsset: 'assets/images/icon_songs.webp',
                 label: tr(locale, 'songs'),
                 subline: tr(locale, 'guide_songs_subline').replaceFirst('{x}', '${songsUnlocked.length}'),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SongsScreen())),
               ),
               _GuideTile(
-                iconAsset: 'assets/images/icon_guide.png',
+                iconAsset: 'assets/images/icon_guide.webp',
                 label: tr(locale, 'how_to_play'),
                 subline: tr(locale, 'how_to_play_subline'),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HowToPlayScreen())),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// The "Mixoloco" wordmark — the real logo art (assets/images/mixoloco.jpg,
+/// The "Mixoloco" wordmark — the real logo art (assets/images/mixoloco.webp,
 /// trimmed and background-stripped by tools/process_logo.dart into
 /// mixoloco_logo.png), sized by [height] with width following its own
 /// aspect ratio.
@@ -11,7 +11,7 @@ class GameLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/images/mixoloco_logo.png',
+      'assets/images/mixoloco_logo.webp',
       height: height,
       fit: BoxFit.contain,
       // See GlassVisual's matching comment.

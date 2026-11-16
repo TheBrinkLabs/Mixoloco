@@ -529,7 +529,7 @@ class _HudRow extends StatelessWidget {
               // BoxFit.contain left it tiny.
               child: ClipOval(
                 child: Image.asset(
-                  'assets/images/coins.png',
+                  'assets/images/coins.webp',
                   width: double.infinity,
                   height: double.infinity,
                   fit: BoxFit.cover,
@@ -783,7 +783,7 @@ class _FloatingLogoState extends State<_FloatingLogo>
     final s = widget.scale;
     final width = 350 * s;
     final logo = ShadowedAsset(
-      path: 'assets/images/menu_logo_sticker.png',
+      path: 'assets/images/menu_logo_sticker.webp',
       width: width,
       shadows: [
         SpriteShadow(
@@ -843,20 +843,20 @@ class _TileRow extends StatelessWidget {
         _MenuTile(
           scale: s,
           label: tr(locale, 'shop'),
-          iconAsset: 'assets/images/icon_shop.png',
+          iconAsset: 'assets/images/icon_shop.webp',
           onTap: onShop,
         ),
         _MenuTile(
           scale: s,
           label: tr(locale, 'rankings'),
-          iconAsset: 'assets/images/icon_rankings.png',
+          iconAsset: 'assets/images/icon_rankings.webp',
           onTap: onRankings,
           showCountDot: rankingsUnseen,
         ),
         _MenuTile(
           scale: s,
           label: tr(locale, 'guide'),
-          iconAsset: 'assets/images/icon_guide.png',
+          iconAsset: 'assets/images/icon_guide.webp',
           onTap: onGuide,
         ),
       ],
@@ -1114,7 +1114,7 @@ class _SettingsButtonState extends State<_SettingsButton> {
             child: Center(
               child: ShadowedAsset(
                 // 26 (was 34) — smaller gear within the same 42*s circle.
-                path: 'assets/images/icon_settings.png',
+                path: 'assets/images/icon_settings.webp',
                 width: 26 * s,
                 shadows: [
                   SpriteShadow(
@@ -1328,7 +1328,7 @@ class _PlayButtonState extends State<_PlayButton> {
                     left: -11.2 * s,
                     top: -19.2 * s,
                     child: ShadowedAsset(
-                      path: 'assets/images/icon_play.png',
+                      path: 'assets/images/icon_play.webp',
                       width: 94.4 * s,
                       rotation: -8 * math.pi / 180,
                       shadows: [

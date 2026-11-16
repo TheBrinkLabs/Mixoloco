@@ -229,7 +229,7 @@ class SubmenuScaffold extends StatelessWidget {
     this.ribbonTop = 122,
     this.panelBottom,
     this.aboveRibbon = const [],
-    this.backgroundAssetPath = 'assets/images/beach_background.png',
+    this.backgroundAssetPath = 'assets/images/beach_background.webp',
     this.night = false,
   });
 
