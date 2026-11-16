@@ -40,8 +40,10 @@ async function weeklyTop(db, weekId) {
     if (!playerRef) continue;
     const score = doc.data().bestScore || 0;
     if (score <= 0) continue;
+    // No profile doc is fine — players on older app versions never got
+    // one unless they opened the Global tab; they're still paid.
     const player = await playerRef.get();
-    if (!player.exists || player.data().isTestAccount === true) continue;
+    if (player.exists && player.data().isTestAccount === true) continue;
     rows.push({ uid: playerRef.id, score });
   }
   rows.sort((a, b) => (b.score - a.score) || a.uid.localeCompare(b.uid));

@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,8 @@ import '../../../core/services/purchase_service.dart';
 import '../../../data/models/cocktail_recipe.dart';
 import '../../../data/models/ingredient.dart';
 import '../../../data/repositories/league_repository.dart';
+import '../../../data/services/league_local_service.dart' show loadNickname, saveNickname;
+import '../../../core/utils/device_id_service.dart';
 import '../../../data/services/game_save_service.dart';
 import '../../../data/services/high_scores_service.dart';
 import '../../../data/services/progression_service.dart';
@@ -1086,6 +1089,7 @@ class GameStateNotifier extends Notifier<BoardState> {
     }
     final uid = authService.uid;
     if (uid != null && score > 0) {
+      unawaited(_ensureLeagueProfile(uid));
       ref
           .read(leagueRepositoryProvider)
           .submitWeeklyScore(
@@ -1110,6 +1114,20 @@ class GameStateNotifier extends Notifier<BoardState> {
   /// this is a background backup, never something gameplay should block
   /// or visibly fail on. Called after every point above that already
   /// calls a local save* function — see each call site.
+  /// Gives a player with no league profile one (with a generated
+  /// nickname) the first time they score, so they show by name on the
+  /// global board and get paid if they make the weekly top 10.
+  Future<void> _ensureLeagueProfile(String uid) async {
+    try {
+      final nickname = await ref
+          .read(leagueRepositoryProvider)
+          .ensureProfileWithDefaultName(uid: uid, deviceId: await deviceIdService.getDeviceId());
+      if (nickname != null && (await loadNickname()) == null) await saveNickname(nickname);
+    } catch (e) {
+      debugPrint('League profile setup failed (non-fatal): $e');
+    }
+  }
+
   void _pushProgressToServer() {
     final uid = authService.uid;
     if (uid == null) return;

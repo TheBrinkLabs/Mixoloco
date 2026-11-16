@@ -284,30 +284,8 @@ class _NicknameRowState extends ConsumerState<_NicknameRow> {
   }
 
   Future<void> _edit() async {
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => _NicknameEditDialog(
-        locale: widget.locale,
-        initialText: _nickname ?? generateFallbackNickname(),
-      ),
-    );
-    if (result == null || !mounted) return;
-
-    try {
-      await authService.ensureSignedIn();
-      final uid = authService.uid;
-      if (uid == null) throw Exception('not signed in');
-      final repo = ref.read(leagueRepositoryProvider);
-      await repo.ensurePlayerDocument(uid: uid, nickname: result, deviceId: await deviceIdService.getDeviceId());
-      await repo.syncNickname(uid: uid, nickname: result);
-      await saveNickname(result);
-      if (!mounted) return;
-      setState(() => _nickname = result);
-    } catch (e, st) {
-      debugPrint('Nickname save failed: $e\n$st');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(widget.locale, 'edit_nickname_failed'))));
-    }
+    final result = await editNickname(context, ref, widget.locale, current: _nickname);
+    if (result != null && mounted) setState(() => _nickname = result);
   }
 
   // Plain Text has no issue wrapping/overflowing like the old
@@ -333,6 +311,34 @@ class _NicknameRowState extends ConsumerState<_NicknameRow> {
 /// [_NicknameRowState._edit] since a TextField needs its own
 /// StatefulWidget to manage focus/rebuilds on every keystroke without
 /// rebuilding the whole Settings screen underneath it.
+/// Opens the nickname dialog and saves the result (profile, Firestore,
+/// local cache) — shared by Settings and the Global rankings tab. Returns
+/// the new nickname, or null if cancelled or the save failed (a snackbar
+/// says so).
+Future<String?> editNickname(BuildContext context, WidgetRef ref, AppLocale locale, {String? current}) async {
+  final result = await showDialog<String>(
+    context: context,
+    builder: (context) => _NicknameEditDialog(locale: locale, initialText: current ?? generateFallbackNickname()),
+  );
+  if (result == null || !context.mounted) return null;
+  try {
+    await authService.ensureSignedIn();
+    final uid = authService.uid;
+    if (uid == null) throw Exception('not signed in');
+    final repo = ref.read(leagueRepositoryProvider);
+    await repo.ensurePlayerDocument(uid: uid, nickname: result, deviceId: await deviceIdService.getDeviceId());
+    await repo.syncNickname(uid: uid, nickname: result);
+    await saveNickname(result);
+    return result;
+  } catch (e, st) {
+    debugPrint('Nickname save failed: $e\n$st');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(locale, 'edit_nickname_failed'))));
+    }
+    return null;
+  }
+}
+
 class _NicknameEditDialog extends StatefulWidget {
   final AppLocale locale;
   final String initialText;

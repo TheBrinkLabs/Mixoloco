@@ -9,6 +9,7 @@ import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/repositories/league_repository.dart';
 import '../providers/league_provider.dart';
 import '../widgets/week_result_dialog.dart';
+import '../../menu/screens/settings_screen.dart' show editNickname;
 
 /// The "Global" tab of RankingsScreen (design_handoff_main_menu_v3) — the
 /// 10 highest scores worldwide this week (the week resets every Monday,
@@ -80,7 +81,9 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
                 _buildHeader(locale),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
+                _buildPlayingAs(state, locale),
+                const SizedBox(height: 8),
                 if (state.leaderboard.isEmpty)
                   _buildEmpty(locale)
                 else ...[
@@ -125,6 +128,38 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
             tr(locale, 'league_top10_subtitle'),
             textAlign: TextAlign.center,
             style: submenuNunito(size: 12, weight: FontWeight.w800, color: SubmenuColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Who this player shows up as on the board, with a one-tap way to
+  /// change it — before this the only ways in were a one-time setup
+  /// screen and a Settings row.
+  Widget _buildPlayingAs(LeagueState state, AppLocale locale) {
+    final name = state.nickname;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+      decoration: BoxDecoration(color: SubmenuColors.inset, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Text(tr(locale, 'league_playing_as'), style: submenuNunito(size: 12, weight: FontWeight.w800, color: SubmenuColors.textSecondary)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              name ?? '–',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: Colors.white),
+            ),
+          ),
+          SubmenuGoldButton(
+            label: tr(locale, 'league_change_name'),
+            onTap: () async {
+              final result = await editNickname(context, ref, locale, current: name);
+              if (result != null && mounted) await ref.read(leagueControllerProvider.notifier).refresh();
+            },
           ),
         ],
       ),
@@ -213,11 +248,17 @@ class _LeaderboardRow extends StatelessWidget {
             child: Text('$rank', style: const TextStyle(fontFamily: 'Lilita One', fontSize: 15, color: Colors.white)),
           ),
           Expanded(
-            child: Text(
-              entry.nickname,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontFamily: 'Lilita One', fontSize: 14, color: Colors.white),
+            // Never cut off: a long name (up to 20 characters) shrinks a
+            // little to fit instead.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                entry.nickname,
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(fontFamily: 'Lilita One', fontSize: 14, color: Colors.white),
+              ),
             ),
           ),
           SizedBox(width: 30, child: Center(child: GlassVisual(ingredient: entry.evolutionIngredient, size: 28, applyDisplayScale: false))),

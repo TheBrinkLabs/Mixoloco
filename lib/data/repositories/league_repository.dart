@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/utils/league_scoring.dart';
 import '../models/ingredient.dart';
 import '../services/high_scores_service.dart';
+import '../../core/utils/nickname_generator.dart';
 
 final leagueRepositoryProvider = Provider<LeagueRepository>((ref) {
   return LeagueRepository(FirebaseFirestore.instance);
@@ -149,6 +150,21 @@ class LeagueRepository {
         .timeout(timeout);
   }
 
+  /// Makes sure [uid] has a players/{uid} profile, creating one with a
+  /// generated nickname if not, and returns the nickname in effect. Called
+  /// with every score submission: the global board and the Monday payout
+  /// both need a profile, and most players never open the Global tab
+  /// (where the nickname used to be set up), so they showed as "Player"
+  /// and weren't paid.
+  Future<String?> ensureProfileWithDefaultName({required String uid, String? deviceId}) async {
+    final snap = await getPlayer(uid);
+    final existing = snap.data()?['nickname'] as String?;
+    if (snap.exists) return existing;
+    final nickname = generateFallbackNickname();
+    await ensurePlayerDocument(uid: uid, nickname: nickname, deviceId: deviceId);
+    return nickname;
+  }
+
   Future<void> syncNickname({required String uid, required String nickname}) async {
     await _players
         .doc(uid)
@@ -266,7 +282,7 @@ class LeagueRepository {
       final data = doc.data();
       return LeagueLeaderboardEntry(
         uid: playerRef.id,
-        nickname: (player?['nickname'] as String?) ?? 'Player',
+        nickname: (player?['nickname'] as String?) ?? nicknameForUid(playerRef.id),
         score: (data['bestScore'] as int?) ?? 0,
         level: (data['level'] as int?) ?? 1,
         highestTiers: readHighestTiers(data),
