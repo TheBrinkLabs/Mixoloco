@@ -73,10 +73,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
   /// react with its own visual shake, in step with the physics jostle.
   final ValueNotifier<int> _tableShakeSignal = ValueNotifier(0);
 
-  /// Restores the bottom banner; captured in initState because Riverpod 3
-  /// throws if ref is used inside dispose().
-  late final void Function() _restoreBanner;
-
   @override
   void initState() {
     super.initState();
@@ -91,9 +87,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     // too, not introduced by the gameplay redesign. The notifier itself
     // is captured now (safe — it's independent of this widget's ref)
     // and only its `.state` write is deferred.
-    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
-    Future.microtask(() => bannerNotifier.state = BannerPosition.hidden);
-    _restoreBanner = () => Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
+    blockBanner();
     final notifier = ref.read(gameStateProvider.notifier);
     _game = MixolocoGame(
       onMerge: notifier.registerMerge,
@@ -277,7 +271,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     // Same deferral as initState's own write above, and for the same
     // reason — dispose() is on Riverpod's own list of life-cycles a
     // provider write isn't safe to happen synchronously inside.
-    _restoreBanner();
+    unblockBanner();
     _tableShakeSignal.dispose();
     super.dispose();
   }
@@ -306,7 +300,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
       // the continue offer use, same reward for watching it through.
       onNotReady: () async {
         if (!mounted) return;
-        final watched = await showContinueFallbackVideo(context, ref.read(localeProvider), restoreBannerOnExit: false);
+        final watched = await showContinueFallbackVideo(context, ref.read(localeProvider));
         if (!mounted) return;
         if (watched) {
           grant();
@@ -345,10 +339,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
         final watched = await showContinueFallbackVideo(
           context,
           ref.read(localeProvider),
-          // This screen hides the banner for its own entire lifetime
-          // (initState) and only its own dispose should bring it back
-          // — see showContinueFallbackVideo's doc.
-          restoreBannerOnExit: false,
         );
         if (!mounted) return;
         if (watched) {

@@ -54,13 +54,8 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
   bool _restoring = false;
   String? _error;
 
-  /// Set right before handing off to RankingsScreen on success — see
-  /// [dispose]'s own comment for why this matters.
-  bool _handedOffToLeague = false;
+  void _finishFirstRun() => widget.onDone!();
 
-  /// Restores the bottom banner; captured in initState because Riverpod 3
-  /// throws if ref is used inside dispose().
-  late final void Function() _restoreBanner;
 
   @override
   void initState() {
@@ -72,9 +67,7 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
     // by hand on-device: the button visually renders but taps land on
     // the banner sitting on top of it instead. Same fix GameScreen uses
     // for the same reason.
-    ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
-    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
-    _restoreBanner = () => Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
+    blockBanner();
   }
 
   /// A player who already has a profile (e.g. updating from an older
@@ -91,16 +84,7 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
 
   @override
   void dispose() {
-    // Only restore the banner here when this screen is going away WITHOUT
-    // handing off to RankingsScreen (e.g. the player backed out) — pushing
-    // RankingsScreen's Global tab already hides it itself (that tab's own
-    // initState), but Navigator.pushReplacement mounts the new route and
-    // runs its initState *before* disposing this one, not after, so an
-    // unconditional reset here would run second and stomp its own
-    // correct "hidden" state right back to visible.
-    if (!_handedOffToLeague) {
-      _restoreBanner();
-    }
+    unblockBanner();
     _controller.dispose();
     super.dispose();
   }
@@ -140,17 +124,16 @@ class _NicknameSetupScreenState extends ConsumerState<NicknameSetupScreen> {
 
       if (!mounted) return;
       if (widget.onDone != null) {
-        widget.onDone!();
+        _finishFirstRun();
         return;
       }
-      _handedOffToLeague = true;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const RankingsScreen(initialTab: RankingsTab.global)),
       );
     } catch (e) {
       if (!mounted) return;
       if (widget.onDone != null) {
-        widget.onDone!(); // offline etc. — carry on; see onDone's doc
+        _finishFirstRun(); // offline etc. — carry on; see onDone's doc
         return;
       }
       setState(() {

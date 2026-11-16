@@ -84,7 +84,11 @@ class SubmenuToneGradient extends StatelessWidget {
 /// screen — replaces [PlankBackButton] on this screen family.
 class SubmenuBackButton extends StatefulWidget {
   final VoidCallback onTap;
-  const SubmenuBackButton({super.key, required this.onTap});
+
+  /// Defaults to the back chevron; the How to Play guide uses a close (×)
+  /// since on first launch there's nothing to go "back" to.
+  final IconData icon;
+  const SubmenuBackButton({super.key, required this.onTap, this.icon = Icons.chevron_left_rounded});
 
   @override
   State<SubmenuBackButton> createState() => _SubmenuBackButtonState();
@@ -117,8 +121,8 @@ class _SubmenuBackButtonState extends State<SubmenuBackButton> {
             ),
             boxShadow: [BoxShadow(color: SubmenuColors.ring, offset: const Offset(0, 4))],
           ),
-          child: const Center(
-            child: Icon(Icons.chevron_left_rounded, color: Colors.white, size: 30),
+          child: Center(
+            child: Icon(widget.icon, color: Colors.white, size: widget.icon == Icons.chevron_left_rounded ? 30 : 26),
           ),
         ),
       ),

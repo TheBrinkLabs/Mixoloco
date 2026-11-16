@@ -19,6 +19,24 @@ enum BannerPosition { bottom, hidden }
 
 final bannerPositionProvider = StateProvider<BannerPosition>((ref) => BannerPosition.bottom);
 
+/// How many open screens want the banner hidden (gameplay, the guide,
+/// the Global board, the name screen, the continue video). Each adds one
+/// on open and removes one on close via [blockBanner]/[unblockBanner].
+/// A count rather than a shared shown/hidden flag: with a flag, one
+/// screen's deferred "show" could land after the next screen's "hide"
+/// (seen after the first-launch flow — banner over the guide and the
+/// Global board). Increments and decrements give the same total in any
+/// order, so that can't happen.
+final bannerBlockers = ValueNotifier<int>(0);
+
+/// Call from initState of a screen that hides the banner. Deferred a
+/// microtask — changing it mid-build would rebuild the banner during the
+/// build — and safe to defer because the count doesn't depend on order.
+void blockBanner() => Future.microtask(() => bannerBlockers.value++);
+
+/// The matching call from that screen's dispose.
+void unblockBanner() => Future.microtask(() => bannerBlockers.value--);
+
 /// The ONE instance of [BannerAdWidget] for the whole app, injected above
 /// the Navigator via MaterialApp.builder (see main.dart) so it's never
 /// unmounted by screen navigation. Screens never create their own
@@ -37,9 +55,14 @@ class PersistentBannerAd extends ConsumerWidget {
     // own refreshing ad view kept running unseen behind the table — wasted
     // CPU/GPU, and invisible ad refreshes break ad-network policy.
     if (hidden) return const SizedBox.shrink();
-    return const Align(
-      alignment: Alignment.bottomCenter,
-      child: BannerAdWidget(),
+    return ValueListenableBuilder<int>(
+      valueListenable: bannerBlockers,
+      builder: (context, blockers, _) => blockers > 0
+          ? const SizedBox.shrink()
+          : const Align(
+              alignment: Alignment.bottomCenter,
+              child: BannerAdWidget(),
+            ),
     );
   }
 }

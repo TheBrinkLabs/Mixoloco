@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart' show StateController;
 import 'package:video_player/video_player.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../core/services/locale_provider.dart';
-import '../../../core/widgets/banner_ad_widget.dart' show BannerPosition, bannerPositionProvider;
+import '../../../core/widgets/banner_ad_widget.dart' show blockBanner, unblockBanner;
 import '../../../core/widgets/glass_visual.dart';
 import '../../../core/widgets/submenu_kit.dart';
 import '../../../data/models/ingredient.dart';
@@ -48,9 +47,7 @@ class _HowToPlayScreenState extends ConsumerState<HowToPlayScreen> with SingleTi
     // the walkthrough made it stall, and the banner covered the screen's
     // bottom. Deferred, as GameScreen does — a provider write isn't safe
     // inside initState/dispose.
-    final banner = ref.read(bannerPositionProvider.notifier);
-    _banner = banner;
-    Future.microtask(() => banner.state = BannerPosition.hidden);
+    blockBanner();
     _video.setVolume(0);
     _video.initialize().then((_) {
       if (!mounted) return;
@@ -64,12 +61,9 @@ class _HowToPlayScreenState extends ConsumerState<HowToPlayScreen> with SingleTi
     });
   }
 
-  late final StateController<BannerPosition> _banner;
-
   @override
   void dispose() {
-    final banner = _banner;
-    Future.microtask(() => banner.state = BannerPosition.bottom);
+    unblockBanner();
     _ticker.dispose();
     _video.dispose();
     _time.dispose();
@@ -146,7 +140,7 @@ class _HowToPlayScreenState extends ConsumerState<HowToPlayScreen> with SingleTi
             Row(
               children: [
                 const SizedBox(width: 8),
-                SubmenuBackButton(onTap: () => Navigator.of(context).maybePop()),
+                SubmenuBackButton(icon: Icons.close_rounded, onTap: () => Navigator.of(context).maybePop()),
                 Expanded(
                   child: Text(
                     tr(locale, 'how_to_play'),

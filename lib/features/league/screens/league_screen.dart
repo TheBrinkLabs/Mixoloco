@@ -30,25 +30,18 @@ class GlobalRankingsTab extends ConsumerStatefulWidget {
 class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
   bool _resultShown = false;
 
-  /// Restores the bottom banner; captured in initState because Riverpod 3
-  /// throws if ref is used inside dispose() (which left the banner hidden
-  /// for good after leaving this screen).
-  late final void Function() _restoreBanner;
-
   @override
   void initState() {
     super.initState();
     // Same reasoning as NicknameSetupScreen — the persistent bottom
     // banner otherwise sits on top of the leaderboard's last row.
-    ref.read(bannerPositionProvider.notifier).state = BannerPosition.hidden;
-    final bannerNotifier = ref.read(bannerPositionProvider.notifier);
-    _restoreBanner = () => Future.microtask(() => bannerNotifier.state = BannerPosition.bottom);
+    blockBanner();
     Future.microtask(() => ref.read(leagueControllerProvider.notifier).refresh());
   }
 
   @override
   void dispose() {
-    _restoreBanner();
+    unblockBanner();
     super.dispose();
   }
 
@@ -147,11 +140,16 @@ class _GlobalRankingsTabState extends ConsumerState<GlobalRankingsTab> {
           Text(tr(locale, 'league_playing_as'), style: submenuNunito(size: 12, weight: FontWeight.w800, color: SubmenuColors.textSecondary)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              name ?? '–',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: Colors.white),
+            // Shrinks to fit rather than cutting the name off.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                name ?? '–',
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(fontFamily: 'Lilita One', fontSize: 16, color: Colors.white),
+              ),
             ),
           ),
           SubmenuGoldButton(
